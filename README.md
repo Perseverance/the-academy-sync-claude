@@ -186,7 +186,7 @@ The system automatically detects the environment using the following priority:
 ### Configuration Loading
 
 - **Local/Development** (`APP_ENV=local`, `development`, or `dev`): Loads from `.env` file and environment variables
-- **Production/Staging** (`APP_ENV=production` or `staging`): Loads from environment variables (with future Google Secret Manager support)
+- **Production/Staging** (`APP_ENV=production` or `staging`): Loads from environment variables with Google Secret Manager integration (requires Go 1.19+)
 
 ### Required Environment Variables
 
@@ -224,7 +224,7 @@ The system automatically detects the environment using the following priority:
 - `FROM_EMAIL` - From email address
 
 #### Google Cloud Configuration
-- `GCP_PROJECT_ID` - Google Cloud Project ID (for Secret Manager)
+- `GCP_PROJECT_ID` - Google Cloud Project ID (for Secret Manager integration)
 
 ### Local Development Setup
 
@@ -244,6 +244,22 @@ The system performs validation on startup:
 - JWT secret is required in production environments
 - Port must be a valid number
 - Service will fail to start if validation fails
+
+### Google Secret Manager Integration
+
+The configuration system is designed to support Google Secret Manager for production deployments:
+
+- **Current State**: Requires Go 1.19+ for full Secret Manager client library support
+- **Fallback Behavior**: When `GCP_PROJECT_ID` is set but Secret Manager is unavailable, the system gracefully falls back to environment variables
+- **Future Enhancement**: Full Secret Manager integration will be available when the project upgrades to Go 1.19+
+
+**Secret Naming Convention** (for future implementation):
+- `database-url` - Complete database connection string
+- `redis-url` - Complete Redis connection string  
+- `google-client-id` / `google-client-secret` - OAuth credentials
+- `strava-client-id` / `strava-client-secret` - OAuth credentials
+- `jwt-secret` - JWT signing secret
+- `smtp-username` / `smtp-password` - Email credentials
 
 ### Common Development Commands
 

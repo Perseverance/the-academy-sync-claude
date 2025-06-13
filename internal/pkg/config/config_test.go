@@ -316,3 +316,153 @@ func TestGetEnv(t *testing.T) {
 	}
 }
 
+func TestGetValueOrEnv(t *testing.T) {
+	// Save original value
+	originalValue := os.Getenv("TEST_VAR")
+	defer func() {
+		if originalValue != "" {
+			os.Setenv("TEST_VAR", originalValue)
+		} else {
+			os.Unsetenv("TEST_VAR")
+		}
+	}()
+
+	os.Setenv("TEST_VAR", "env_value")
+
+	// Test with secret value available
+	secretValue := "secret_value"
+	result := getValueOrEnv(&secretValue, "TEST_VAR", "default")
+	if result != "secret_value" {
+		t.Errorf("Expected 'secret_value', got '%s'", result)
+	}
+
+	// Test with empty secret value, should fall back to env
+	emptySecret := ""
+	result = getValueOrEnv(&emptySecret, "TEST_VAR", "default")
+	if result != "env_value" {
+		t.Errorf("Expected 'env_value', got '%s'", result)
+	}
+
+	// Test with nil secret value, should fall back to env
+	result = getValueOrEnv(nil, "TEST_VAR", "default")
+	if result != "env_value" {
+		t.Errorf("Expected 'env_value', got '%s'", result)
+	}
+
+	// Test with no secret and no env, should use default
+	os.Unsetenv("TEST_VAR")
+	result = getValueOrEnv(nil, "TEST_VAR", "default")
+	if result != "default" {
+		t.Errorf("Expected 'default', got '%s'", result)
+	}
+}
+
+func TestLoadFromEnvForProduction(t *testing.T) {
+	// Save original environment
+	originalEnv := make(map[string]string)
+	testEnvVars := []string{
+		"APP_ENV", "PORT", "DATABASE_URL", "JWT_SECRET",
+	}
+
+	for _, key := range testEnvVars {
+		originalEnv[key] = os.Getenv(key)
+	}
+
+	// Clean up after test
+	defer func() {
+		for _, key := range testEnvVars {
+			if originalValue, exists := originalEnv[key]; exists {
+				os.Setenv(key, originalValue)
+			} else {
+				os.Unsetenv(key)
+			}
+		}
+	}()
+
+	// Set test environment variables
+	testValues := map[string]string{
+		"APP_ENV":      "production",
+		"PORT":         "9090",
+		"DATABASE_URL": "postgres://test:test@localhost:5432/test",
+		"JWT_SECRET":   "production-secret",
+	}
+
+	for key, value := range testValues {
+		os.Setenv(key, value)
+	}
+
+	// Test loading configuration
+	config, err := loadFromEnvForProduction()
+	if err != nil {
+		t.Fatalf("loadFromEnvForProduction() failed: %v", err)
+	}
+
+	// Verify configuration values
+	if config.Environment != "production" {
+		t.Errorf("Expected Environment to be 'production', got '%s'", config.Environment)
+	}
+
+	if config.DatabaseURL != "postgres://test:test@localhost:5432/test" {
+		t.Errorf("Expected DatabaseURL to be set correctly, got '%s'", config.DatabaseURL)
+	}
+
+	if config.JWTSecret != "production-secret" {
+		t.Errorf("Expected JWTSecret to be 'production-secret', got '%s'", config.JWTSecret)
+	}
+}
+
+func TestLoadFromSecretManagerFallback(t *testing.T) {
+	// Save original environment
+	originalGCPProject := os.Getenv("GCP_PROJECT_ID")
+	originalAppEnv := os.Getenv("APP_ENV")
+	originalJWT := os.Getenv("JWT_SECRET")
+
+	// Clean up after test
+	defer func() {
+		if originalGCPProject != "" {
+			os.Setenv("GCP_PROJECT_ID", originalGCPProject)
+		} else {
+			os.Unsetenv("GCP_PROJECT_ID")
+		}
+		if originalAppEnv != "" {
+			os.Setenv("APP_ENV", originalAppEnv)
+		} else {
+			os.Unsetenv("APP_ENV")
+		}
+		if originalJWT != "" {
+			os.Setenv("JWT_SECRET", originalJWT)
+		} else {
+			os.Unsetenv("JWT_SECRET")
+		}
+	}()
+
+	// Test case 1: Missing GCP_PROJECT_ID should return error
+	os.Unsetenv("GCP_PROJECT_ID")
+	_, err := loadFromSecretManager()
+	if err == nil {
+		t.Error("Expected error when GCP_PROJECT_ID is missing")
+	}
+	if !strings.Contains(err.Error(), "GCP_PROJECT_ID environment variable is required") {
+		t.Errorf("Expected specific error message, got: %v", err)
+	}
+
+	// Test case 2: With GCP_PROJECT_ID set, should attempt Secret Manager
+	// (but will fall back to env vars since we don't have real GCP credentials)
+	os.Setenv("GCP_PROJECT_ID", "test-project")
+	os.Setenv("APP_ENV", "production")
+	os.Setenv("JWT_SECRET", "fallback-secret")
+
+	config, err := loadFromSecretManager()
+	if err != nil {
+		t.Fatalf("loadFromSecretManager() should not fail with fallback: %v", err)
+	}
+
+	if config.GCPProjectID != "test-project" {
+		t.Errorf("Expected GCPProjectID to be 'test-project', got '%s'", config.GCPProjectID)
+	}
+
+	if config.JWTSecret != "fallback-secret" {
+		t.Errorf("Expected JWTSecret fallback to work, got '%s'", config.JWTSecret)
+	}
+}
+
