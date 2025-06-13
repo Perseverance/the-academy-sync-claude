@@ -186,7 +186,7 @@ The system automatically detects the environment using the following priority:
 ### Configuration Loading
 
 - **Local/Development** (`APP_ENV=local`, `development`, or `dev`): Loads from `.env` file and environment variables
-- **Production/Staging** (`APP_ENV=production` or `staging`): Loads from environment variables with Google Secret Manager integration (requires Go 1.19+)
+- **Production/Staging** (`APP_ENV=production` or `staging`): Loads from Google Secret Manager with environment variable fallback
 
 ### Required Environment Variables
 
@@ -247,19 +247,35 @@ The system performs validation on startup:
 
 ### Google Secret Manager Integration
 
-The configuration system is designed to support Google Secret Manager for production deployments:
+The configuration system includes full Google Secret Manager support for production deployments:
 
-- **Current State**: Requires Go 1.19+ for full Secret Manager client library support
-- **Fallback Behavior**: When `GCP_PROJECT_ID` is set but Secret Manager is unavailable, the system gracefully falls back to environment variables
-- **Future Enhancement**: Full Secret Manager integration will be available when the project upgrades to Go 1.19+
+- **Production Mode**: When `APP_ENV=production` and `GCP_PROJECT_ID` is set, the system loads secrets from Google Secret Manager
+- **Fallback Behavior**: If Secret Manager is unavailable (no credentials, network issues, etc.), the system gracefully falls back to environment variables
+- **Authentication**: Uses Application Default Credentials (ADC) - see [GCP Authentication docs](https://cloud.google.com/docs/authentication/external/set-up-adc)
+- **Logging**: Provides clear feedback about Secret Manager connection status and number of secrets loaded
 
-**Secret Naming Convention** (for future implementation):
+**Secret Naming Convention**:
 - `database-url` - Complete database connection string
+- `database-password` - Database password (for URL construction)
 - `redis-url` - Complete Redis connection string  
 - `google-client-id` / `google-client-secret` - OAuth credentials
 - `strava-client-id` / `strava-client-secret` - OAuth credentials
 - `jwt-secret` - JWT signing secret
 - `smtp-username` / `smtp-password` - Email credentials
+- `from-email` - Email sender address
+
+**Example GCP Setup**:
+```bash
+# Set up Application Default Credentials
+gcloud auth application-default login
+
+# Set project for Secret Manager
+export GCP_PROJECT_ID=your-project-id
+export APP_ENV=production
+
+# Service will now load secrets from Secret Manager
+./backend-api
+```
 
 ### Common Development Commands
 

@@ -3,11 +3,14 @@
 package config
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"strconv"
 	"strings"
 
+	secretmanager "cloud.google.com/go/secretmanager/apiv1"
+	"cloud.google.com/go/secretmanager/apiv1/secretmanagerpb"
 	"github.com/joho/godotenv"
 )
 
@@ -134,21 +137,130 @@ func loadFromEnv() (*Config, error) {
 }
 
 // loadFromSecretManager loads configuration from Google Secret Manager.
-// NOTE: Full Secret Manager integration requires Go 1.19+ due to dependency constraints.
-// For now, this implementation falls back to environment variables with a clear path
-// for future Secret Manager integration when the Go version is upgraded.
 func loadFromSecretManager() (*Config, error) {
+	ctx := context.Background()
+	
 	projectID := getEnv("GCP_PROJECT_ID", "")
 	if projectID == "" {
 		return nil, fmt.Errorf("GCP_PROJECT_ID environment variable is required for Secret Manager")
 	}
 
-	// TODO: Implement full Google Secret Manager integration
-	// This requires upgrading to Go 1.19+ to support the latest Secret Manager client library
-	// For now, we fall back to environment variables but maintain the Secret Manager API structure
-	
-	fmt.Printf("Info: Secret Manager integration requires Go 1.19+. Using environment variable fallback for project: %s\n", projectID)
-	return loadFromEnvForProduction()
+	// Try to create Secret Manager client
+	client, err := secretmanager.NewClient(ctx)
+	if err != nil {
+		// If Secret Manager is not available, fall back to environment variables
+		// This allows graceful degradation in environments without Secret Manager access
+		fmt.Printf("Warning: Could not create Secret Manager client (%v), falling back to environment variables\n", err)
+		return loadFromEnvForProduction()
+	}
+	defer client.Close()
+
+	fmt.Printf("Info: Loading configuration from Google Secret Manager for project: %s\n", projectID)
+
+	// Define secrets to fetch from Secret Manager
+	secrets := map[string]*string{
+		"database-url":           new(string),
+		"redis-url":              new(string),
+		"google-client-id":       new(string),
+		"google-client-secret":   new(string),
+		"strava-client-id":       new(string),
+		"strava-client-secret":   new(string),
+		"jwt-secret":             new(string),
+		"smtp-username":          new(string),
+		"smtp-password":          new(string),
+		"from-email":             new(string),
+		"database-password":      new(string),
+	}
+
+	// Fetch each secret
+	secretsLoaded := 0
+	for secretName, value := range secrets {
+		secretValue, err := getSecret(ctx, client, projectID, secretName)
+		if err != nil {
+			// Log warning but don't fail for optional secrets
+			fmt.Printf("Warning: failed to get secret %s: %v\n", secretName, err)
+			continue
+		}
+		*value = secretValue
+		secretsLoaded++
+	}
+
+	fmt.Printf("Info: Successfully loaded %d secrets from Secret Manager\n", secretsLoaded)
+
+	config := &Config{
+		Environment: getEnv("APP_ENV", "production"),
+		Port:        getEnv("PORT", "8080"),
+
+		// Use secrets if available, otherwise fall back to env vars
+		DatabaseURL:        getValueOrEnv(secrets["database-url"], "DATABASE_URL", ""),
+		RedisURL:           getValueOrEnv(secrets["redis-url"], "REDIS_URL", ""),
+		GoogleClientID:     getValueOrEnv(secrets["google-client-id"], "GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: getValueOrEnv(secrets["google-client-secret"], "GOOGLE_CLIENT_SECRET", ""),
+		StravaClientID:     getValueOrEnv(secrets["strava-client-id"], "STRAVA_CLIENT_ID", ""),
+		StravaClientSecret: getValueOrEnv(secrets["strava-client-secret"], "STRAVA_CLIENT_SECRET", ""),
+		JWTSecret:          getValueOrEnv(secrets["jwt-secret"], "JWT_SECRET", ""),
+		SMTPUsername:       getValueOrEnv(secrets["smtp-username"], "SMTP_USERNAME", ""),
+		SMTPPassword:       getValueOrEnv(secrets["smtp-password"], "SMTP_PASSWORD", ""),
+		FromEmail:          getValueOrEnv(secrets["from-email"], "FROM_EMAIL", ""),
+
+		// These typically come from environment in GCP
+		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
+		SMTPPort:     getEnv("SMTP_PORT", "587"),
+		GCPProjectID: projectID,
+
+		// Database components (for URL construction if needed)
+		PostgresDB:   getEnv("POSTGRES_DB", "academy_sync"),
+		PostgresUser: getEnv("POSTGRES_USER", "postgres"),
+		PostgresHost: getEnv("POSTGRES_HOST", "localhost"),
+		PostgresPort: getEnv("POSTGRES_PORT", "5432"),
+
+		// Redis components (for URL construction if needed)
+		RedisHost: getEnv("REDIS_HOST", "localhost"),
+		RedisPort: getEnv("REDIS_PORT", "6379"),
+	}
+
+	// Build database URL if not provided from secrets
+	if config.DatabaseURL == "" {
+		// Try to get database password from secrets or env
+		dbPassword := getValueOrEnv(secrets["database-password"], "POSTGRES_PASSWORD", "")
+		if dbPassword != "" {
+			config.PostgresPassword = dbPassword
+			config.DatabaseURL = fmt.Sprintf(
+				"postgres://%s:%s@%s:%s/%s?sslmode=disable",
+				config.PostgresUser,
+				config.PostgresPassword,
+				config.PostgresHost,
+				config.PostgresPort,
+				config.PostgresDB,
+			)
+		}
+	}
+
+	// Build Redis URL if not provided from secrets
+	if config.RedisURL == "" && config.RedisHost != "" {
+		config.RedisURL = fmt.Sprintf("redis://%s:%s", config.RedisHost, config.RedisPort)
+	}
+
+	// Validate required configuration
+	if err := config.validate(); err != nil {
+		return nil, fmt.Errorf("configuration validation failed: %w", err)
+	}
+
+	return config, nil
+}
+
+// getSecret retrieves a secret from Google Secret Manager.
+func getSecret(ctx context.Context, client *secretmanager.Client, projectID, secretName string) (string, error) {
+	req := &secretmanagerpb.AccessSecretVersionRequest{
+		Name: fmt.Sprintf("projects/%s/secrets/%s/versions/latest", projectID, secretName),
+	}
+
+	result, err := client.AccessSecretVersion(ctx, req)
+	if err != nil {
+		return "", fmt.Errorf("failed to access secret %s: %w", secretName, err)
+	}
+
+	return string(result.Payload.Data), nil
 }
 
 // loadFromEnvForProduction loads configuration from environment variables for production.
