@@ -49,25 +49,27 @@ The system follows a microservices architecture deployed on Google Cloud Platfor
 │   ├── backend-api/
 │   ├── automation-engine/
 │   └── notification-service/
-├── internal/                 # Shared private Go packages
+├── internal/                 # Shared private Go packages (TBD)
 │   └── pkg/
 │       ├── database/         # Shared DB Repository
 │       └── queue/            # Shared Queue Client
-├── web/                      # React frontend application
-├── terraform/                # Infrastructure as Code
-├── .github/                  # CI/CD workflows
+├── web/                      # React frontend application (TBD)
+├── terraform/                # Infrastructure as Code (TBD)
+├── .github/                  # CI/CD workflows (TBD)
 ├── docs/                     # Project documentation
 │   ├── BRD.md               # Business Requirements Document
 │   └── SDD.md               # System Design Document
-├── Dockerfile.go             # Go services Dockerfile
-└── docker-compose.yml        # Local development setup
+├── Dockerfile                # Multi-stage Dockerfile for Go services
+├── docker-compose.yml        # Local development setup (TBD)
+├── go.mod                    # Go module definition
+└── go.sum                    # Go module checksums
 ```
 
 ## Development Setup
 
 ### Prerequisites
 
-- Go 1.21+
+- Go 1.22+
 - Node.js 18+
 - Docker & Docker Compose
 - PostgreSQL (for local development)
@@ -80,10 +82,25 @@ The system follows a microservices architecture deployed on Google Cloud Platfor
 3. Start local infrastructure: `docker-compose up -d`
 4. Install dependencies and start services (commands TBD)
 
-### Common Commands
+### Building Docker Images
 
-- `go build` - Build the Go applications
-- `go run .` or `go run main.go` - Run applications directly
+Build container images for each service using the multi-stage Dockerfile:
+
+```bash
+# Backend API
+docker build --build-arg SERVICE_NAME=backend-api -t the-academy-sync-backend-api .
+
+# Automation Engine
+docker build --build-arg SERVICE_NAME=automation-engine -t the-academy-sync-automation-engine .
+
+# Notification Service
+docker build --build-arg SERVICE_NAME=notification-service -t the-academy-sync-notification-service .
+```
+
+### Common Development Commands
+
+- `go build ./cmd/<service-name>` - Build specific Go application
+- `go run ./cmd/<service-name>` - Run application directly
 - `go test ./...` - Run all tests
 - `go test -v ./...` - Run tests with verbose output
 - `go test -cover ./...` - Run tests with coverage
