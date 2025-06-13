@@ -6,7 +6,7 @@ FROM golang:1.22-alpine AS builder
 
 # Install git for Go module downloads and air for live reloading
 RUN apk add --no-cache git && \
-    go install github.com/cosmtrek/air@latest
+    go install github.com/cosmtrek/air@v1.49.0
 
 # Set working directory
 WORKDIR /app
@@ -43,7 +43,7 @@ FROM golang:1.22-alpine AS development
 
 # Install git and air
 RUN apk add --no-cache git && \
-    go install github.com/cosmtrek/air@latest
+    go install github.com/cosmtrek/air@v1.49.0
 
 # Set working directory
 WORKDIR /app
