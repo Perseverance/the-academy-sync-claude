@@ -1,0 +1,108 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 220 13% 96%; /* #F3F4F6 */
+    --foreground: 220 13% 20%; /* #333333 */
+    --card: 0 0% 100%; /* white */
+    --card-foreground: 220 13% 20%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 220 13% 20%;
+    --primary: 150 38% 26%; /* #2a5b3e Academy Green */
+    --primary-foreground: 0 0% 100%; /* white */
+    --primary-hover: 150 38% 20%; /* #1e422d Darker Academy Green */
+    --secondary: 0 0% 100%; /* white for background */
+    --secondary-foreground: 150 38% 26%; /* Academy Green for text/border */
+    --secondary-hover-bg: 210 40% 96.1%; /* #eaf2ed Light green for secondary hover bg */
+    --accent: 200 70% 51%; /* #2D9CDB Vibrant Teal */
+    --accent-foreground: 0 0% 100%;
+    --muted: 220 13% 90%;
+    --muted-foreground: 220 13% 45%; /* Darker muted text */
+    --destructive: 0 84% 60%; /* Standard red */
+    --destructive-foreground: 0 0% 100%;
+    --warning: 38 92% 50%; /* Standard yellow/orange for warnings */
+    --warning-foreground: 220 13% 20%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --border: 220 13% 85%; /* gray-300 equivalent */
+    --input: 220 13% 85%;
+    --input-background: 0 0% 100%;
+    --ring: 200 70% 51%; /* Vibrant Teal for focus */
+    --radius: 0.5rem;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground font-body;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    @apply font-brand text-primary; /* Exo 2, Academy Green */
+  }
+}
+
+@layer components {
+  .btn-primary-main {
+    @apply bg-primary text-primary-foreground font-semibold py-2 px-6 rounded-lg transition-colors duration-200 ease-in-out flex items-center justify-center gap-2 whitespace-nowrap;
+  }
+  .btn-primary-main:hover:not(:disabled) {
+    background-color: hsl(var(--primary-hover));
+  }
+  .btn-primary-main:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  .btn-primary-main:disabled {
+    @apply bg-primary/50 cursor-not-allowed;
+  }
+
+  .btn-secondary-main {
+    @apply bg-secondary border-2 border-primary text-secondary-foreground font-semibold py-2 px-5 rounded-lg transition-colors duration-200 ease-in-out flex items-center justify-center gap-2 whitespace-nowrap;
+  }
+  .btn-secondary-main:hover:not(:disabled) {
+    background-color: hsl(var(--secondary-hover-bg));
+  }
+  .btn-secondary-main:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  .btn-secondary-main:disabled {
+    @apply border-primary/50 text-primary/50 cursor-not-allowed;
+  }
+
+  .btn-destructive-main {
+    @apply bg-destructive text-destructive-foreground font-semibold py-2 px-5 rounded-lg transition-colors duration-200 ease-in-out flex items-center justify-center gap-2 whitespace-nowrap;
+  }
+  .btn-destructive-main:hover:not(:disabled) {
+    @apply bg-destructive/90;
+  }
+  .btn-destructive-main:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+  .btn-destructive-main:disabled {
+    @apply bg-destructive/50 cursor-not-allowed;
+  }
+
+  .input-main {
+    @apply w-full px-4 py-2 border border-input rounded-lg bg-input-background text-foreground placeholder-muted-foreground;
+  }
+  .input-main:focus {
+    @apply outline-none ring-2 ring-ring border-transparent;
+  }
+  .input-main:disabled {
+    @apply bg-muted/50 cursor-not-allowed;
+  }
+
+  .link-main {
+    @apply text-accent font-semibold hover:underline;
+  }
+}

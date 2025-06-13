@@ -53,7 +53,7 @@ The system follows a microservices architecture deployed on Google Cloud Platfor
 │   └── pkg/
 │       ├── database/         # Shared DB Repository
 │       └── queue/            # Shared Queue Client
-├── web/                      # React frontend application (TBD)
+├── web/                      # React frontend application (Next.js)
 ├── terraform/                # Infrastructure as Code (TBD)
 ├── .github/                  # CI/CD workflows (TBD)
 ├── docs/                     # Project documentation
@@ -84,7 +84,10 @@ The system follows a microservices architecture deployed on Google Cloud Platfor
 
 ### Building Docker Images
 
-Build container images for each service using the multi-stage Dockerfile:
+Build container images for each service:
+
+#### Go Services
+Use the multi-stage Dockerfile for Go services:
 
 ```bash
 # Backend API
@@ -97,8 +100,23 @@ docker build --build-arg SERVICE_NAME=automation-engine -t the-academy-sync-auto
 docker build --build-arg SERVICE_NAME=notification-service -t the-academy-sync-notification-service .
 ```
 
+#### React Web UI
+Build and run the React frontend:
+
+```bash
+# Build the web application
+cd web
+docker build -t academy-sync-web .
+
+# Run the web application
+docker run -p 8080:8080 academy-sync-web
+```
+
+The web application will be available at `http://localhost:8080`.
+
 ### Common Development Commands
 
+#### Go Services
 - `go build ./cmd/<service-name>` - Build specific Go application
 - `go run ./cmd/<service-name>` - Run application directly
 - `go test ./...` - Run all tests
@@ -106,6 +124,33 @@ docker build --build-arg SERVICE_NAME=notification-service -t the-academy-sync-n
 - `go test -cover ./...` - Run tests with coverage
 - `go fmt ./...` - Format Go source files
 - `go vet ./...` - Run static analysis
+
+#### React Web UI
+```bash
+cd web
+
+# Install dependencies
+npm install
+# or
+pnpm install
+
+# Start development server
+npm run dev
+# or
+pnpm run dev
+
+# Build for production
+npm run build
+# or
+pnpm run build
+
+# Start production server
+npm run start
+# or
+pnpm run start
+```
+
+The development server runs on `http://localhost:3000` by default.
 
 ## Documentation
 
