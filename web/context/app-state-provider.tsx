@@ -32,12 +32,12 @@ interface AppState {
 interface AppActions {
   signIn: () => Promise<void>
   signOut: () => void
-  connectStrava: () => void
-  disconnectStrava: () => void
-  reauthorizeStrava: () => void
-  saveSpreadsheet: (url: string) => void
+  connectStrava: () => Promise<void>
+  disconnectStrava: () => Promise<void>
+  reauthorizeStrava: () => Promise<void>
+  saveSpreadsheet: (url: string) => Promise<void>
   changeSpreadsheet: () => void
-  triggerManualSync: () => void
+  triggerManualSync: () => Promise<void>
   setGoogleStatus: (status: ServiceStatus) => void // For external updates if needed
 }
 

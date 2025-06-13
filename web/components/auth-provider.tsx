@@ -28,7 +28,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const storedUser = localStorage.getItem("stravaLoggerUser")
     if (storedUser) {
-      setUser(JSON.parse(storedUser))
+      try {
+        setUser(JSON.parse(storedUser))
+      } catch (error) {
+        // Clear malformed data to prevent repeated crashes
+        localStorage.removeItem("stravaLoggerUser")
+        console.warn("Failed to parse stored user data, clearing localStorage")
+      }
     }
     setIsLoading(false)
   }, [])

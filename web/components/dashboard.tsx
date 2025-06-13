@@ -80,7 +80,16 @@ export function Dashboard() {
   }, [user])
 
   const initiateStravaAuth = (isReauth = false) => {
-    const stravaClientId = "YOUR_STRAVA_CLIENT_ID"
+    const stravaClientId = process.env.NEXT_PUBLIC_STRAVA_CLIENT_ID
+    if (!stravaClientId) {
+      console.error("NEXT_PUBLIC_STRAVA_CLIENT_ID environment variable is not set")
+      toast({
+        title: "Configuration Error",
+        description: "Strava client ID is not configured. Please contact support.",
+        variant: "destructive",
+      })
+      return
+    }
     const frontendCallbackUrl = `${window.location.origin}/auth/strava/callback`
     const scopes = "activity:read_all,profile:read_all"
     localStorage.setItem("stravaOAuthRedirect", "/dashboard")

@@ -38,7 +38,7 @@ export function ManualSyncCard({ status, onSync }: ManualSyncCardProps) {
         {isDisabled ? (
           <TooltipProvider>
             <Tooltip delayDuration={100}>
-              <TooltipTrigger className="w-full">{renderButton()}</TooltipTrigger>
+              <TooltipTrigger asChild className="w-full">{renderButton()}</TooltipTrigger>
               <TooltipContent className="bg-foreground text-background">
                 <p>{disabledTooltipText}</p>
               </TooltipContent>
