@@ -111,4 +111,6 @@ All infrastructure is managed via Terraform in the `terraform/` directory.
 
 ## License
 
-[License TBD]
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+The MIT License is a permissive open-source license that allows you to freely use, modify, and distribute this software, provided that the original copyright notice and license are included in all copies or substantial portions of the software.
