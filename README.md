@@ -277,6 +277,120 @@ export APP_ENV=production
 ./backend-api
 ```
 
+## Database Migrations
+
+The Academy Sync uses `golang-migrate/migrate` for database schema management. All migration files are stored in `internal/pkg/database/migrations/`.
+
+### Migration File Naming
+
+Migration files follow the pattern: `NNNNNN_description.up.sql` and `NNNNNN_description.down.sql` where:
+- `NNNNNN` is a 6-digit sequence number (e.g., `000001`)
+- `description` is a brief description of the migration
+- `.up.sql` contains the forward migration (creating/altering tables)
+- `.down.sql` contains the rollback migration (undoing the changes)
+
+### Running Migrations
+
+#### Prerequisites
+
+Install the migrate CLI tool:
+
+```bash
+# Install migrate CLI
+go install -tags 'postgres' github.com/golang-migrate/migrate/v4/cmd/migrate@latest
+```
+
+#### Database URL Format
+
+The migration commands require a PostgreSQL database URL:
+
+```bash
+# Local development (using docker-compose)
+export DATABASE_URL="postgres://postgres:password@localhost:5433/academy_sync?sslmode=disable"
+
+# Or for production
+export DATABASE_URL="postgres://username:password@host:port/database?sslmode=require"
+```
+
+#### Apply Migrations (Up)
+
+```bash
+# Apply all pending migrations
+migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" up
+
+# Apply a specific number of migrations
+migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" up 1
+```
+
+#### Rollback Migrations (Down)
+
+```bash
+# Rollback the last migration
+migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" down 1
+
+# Rollback all migrations (WARNING: This will drop all tables)
+migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" down
+```
+
+#### Check Migration Status
+
+```bash
+# Show current migration version
+migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" version
+
+# Check if database is up to date
+migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" up
+```
+
+#### Force Migration Version (Recovery)
+
+If migrations get into a bad state:
+
+```bash
+# Force set the migration version (use with caution)
+migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" force VERSION_NUMBER
+```
+
+### Creating New Migrations
+
+To create a new migration:
+
+```bash
+# Create new migration files
+migrate create -ext sql -dir internal/pkg/database/migrations -seq description_of_change
+
+# This creates:
+# internal/pkg/database/migrations/NNNNNN_description_of_change.up.sql
+# internal/pkg/database/migrations/NNNNNN_description_of_change.down.sql
+```
+
+### Migration Best Practices
+
+1. **Always test both up and down migrations** in a development environment
+2. **Keep migrations small and focused** on a single logical change
+3. **Never edit existing migration files** after they've been applied in production
+4. **Use transactions** when possible to ensure atomic operations
+5. **Add appropriate indexes** for performance
+6. **Include rollback logic** in every down migration
+
+### Docker Compose Integration
+
+When using Docker Compose for local development, the database is automatically created. You can run migrations by:
+
+1. **Start the database:**
+   ```bash
+   docker-compose up -d postgres
+   ```
+
+2. **Wait for database to be ready, then run migrations:**
+   ```bash
+   # Set the local database URL
+   export DATABASE_URL="postgres://postgres:password@localhost:5433/academy_sync?sslmode=disable"
+   
+   # Apply migrations
+   migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" up
+   ```
+
 ### Common Development Commands
 
 #### Go Services
