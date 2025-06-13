@@ -76,6 +76,9 @@ export function Dashboard() {
         setIsFetchingData(false)
       }
       fetchData()
+    } else {
+      // Set loading to false when user is not authenticated
+      setIsFetchingData(false)
     }
   }, [user])
 
