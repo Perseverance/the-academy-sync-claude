@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>The Academy - Style Guide</title>
+        <script src="https://cdn.tailwindcss.com"></script>
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <!-- Updated font selection for better readability. Includes Cyrillic subset for future use -->
+        <link
+            href="https://fonts.googleapis.com/css2?family=Exo+2:wght@700&family=Inter:wght@400;600;700&display=swap&subset=cyrillic"
+            rel="stylesheet">
+        <style>
+            /* Updated font-brand to Exo 2 */
+            .font-brand {
+                font-family: 'Exo 2', sans-serif;
+            }
+
+            .font-body {
+                font-family: 'Inter', sans-serif;
+            }
+
+            .swatch {
+                width: 100%;
+                height: 100px;
+                border-radius: 0.5rem;
+                border: 1px solid rgba(0, 0, 0, 0.1);
+            }
+
+            .logo-display {
+                border-radius: 0.5rem;
+                height: 150px;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+            }
+
+            .btn {
+                /* Simplified transition for color/background changes */
+                transition: background-color 0.2s ease-in-out, color 0.2s ease-in-out, border-color 0.2s ease-in-out;
+            }
+
+            .misuse-example {
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                height: 120px;
+                width: 120px;
+                background-color: #f3f4f6;
+                border-radius: 0.5rem;
+                position: relative;
+            }
+
+            .misuse-example svg {
+                max-width: 80%;
+                max-height: 80%;
+            }
+
+            .cross {
+                position: absolute;
+                color: #d92323;
+                font-size: 100px;
+                font-weight: bold;
+                line-height: 1;
+                opacity: 0.7;
+            }
+
+            .do-dont-list li {
+                padding-left: 1.5em;
+                position: relative;
+            }
+
+            .do-dont-list li::before {
+                position: absolute;
+                left: 0;
+                top: 0.1em;
+            }
+
+            .do-dont-list .do::before {
+                content: '✓';
+                color: #2a5b3e;
+                font-weight: bold;
+            }
+
+            .do-dont-list .dont::before {
+                content: '✗';
+                color: #d92323;
+                font-weight: bold;
+            }
+        </style>
+    </head>
+
+    <body class="bg-gray-100 font-body text-gray-800">
+
+        <header class="bg-white shadow-sm">
+            <div class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+                <h1 class="text-4xl font-bold text-gray-900 font-brand">The Academy</h1>
+                <p class="mt-1 text-lg text-gray-600">Design Style Guide</p>
+            </div>
+        </header>
+
+        <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-10">
+
+            <section id="colors" class="mb-12">
+                <h2 class="text-3xl font-bold border-b border-gray-300 pb-2 mb-6 font-brand">1. Color Palette</h2>
+                <div class="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div>
+                        <div class="swatch bg-[#2a5b3e]"></div>
+                        <h3 class="mt-2 text-lg font-semibold">Academy Green</h3>
+                        <p class="text-gray-600">#2a5b3e</p>
+                    </div>
+                    <div>
+                        <div class="swatch bg-[#2D9CDB]"></div>
+                        <h3 class="mt-2 text-lg font-semibold">Vibrant Teal</h3>
+                        <p class="text-gray-600">#2D9CDB</p>
+                    </div>
+                    <div>
+                        <div class="swatch bg-[#333333]"></div>
+                        <h3 class="mt-2 text-lg font-semibold">Primary Text</h3>
+                        <p class="text-gray-600">#333333</p>
+                    </div>
+                    <div>
+                        <div class="swatch bg-gray-100"></div>
+                        <h3 class="mt-2 text-lg font-semibold">Background</h3>
+                        <p class="text-gray-600">#F3F4F6</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="logo_versions" class="mb-12">
+                <h2 class="text-3xl font-bold border-b border-gray-300 pb-2 mb-6 font-brand">2. Logo</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 class="text-xl font-semibold mb-4 text-center">Primary Usage</h3>
+                        <div class="p-6 bg-white logo-display shadow-sm"><svg width="100" height="100"
+                                viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M50 5L5 95H20L35 65H65L80 95H95L50 5ZM40 50L50 25L60 50H40Z" fill="#2a5b3e" />
+                            </svg></div>
+                    </div>
+                    <div>
+                        <h3 class="text-xl font-semibold mb-4 text-center">Reversed</h3>
+                        <div class="p-6 bg-[#2a5b3e] logo-display shadow-sm"><svg width="100" height="100"
+                                viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+                                <path d="M50 5L5 95H20L35 65H65L80 95H95L50 5ZM40 50L50 25L60 50H40Z" fill="white" />
+                            </svg></div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="logo-usage" class="mb-12">
+                <h3 class="text-xl font-semibold mb-4">Logo Usage</h3>
+                <div class="p-8 bg-white rounded-lg shadow-sm">
+                    <h4 class="font-semibold">Clear Space:</h4>
+                    <p class="text-gray-600 mb-4">Maintain a minimum clear space around the logo equal to half its
+                        height.</p>
+                    <h4 class="font-semibold">Minimum Size:</h4>
+                    <p class="text-gray-600 mb-4">40px for digital, 15mm for print.</p>
+                    <h4 class="font-semibold">Misuse:</h4>
+                    <p class="text-gray-600">Do not stretch, distort, rotate, change the color, or add effects to the
+                        logo.</p>
+                </div>
+            </section>
+
+            <section id="typography" class="mb-12">
+                <h2 class="text-3xl font-bold border-b border-gray-300 pb-2 mb-6 font-brand">3. Typography</h2>
+                <div class="p-6 bg-white rounded-lg shadow-sm space-y-4">
+                    <div>
+                        <p class="text-xs text-gray-500 font-mono">H1 - Exo 2 Bold</p>
+                        <p class="text-5xl font-brand font-bold text-[#2a5b3e]">Main Headline</p>
+                    </div>
+                    <hr>
+                    <div>
+                        <p class="text-xs text-gray-500 font-mono">H2 - Exo 2 Bold</p>
+                        <p class="text-4xl font-brand font-bold text-[#2a5b3e]">Sub-headline</p>
+                    </div>
+                    <hr>
+                    <div>
+                        <p class="text-xs text-gray-500 font-mono">Body - Inter Regular</p>
+                        <p class="text-base">This is an example paragraph. The quick brown fox jumps over the lazy dog.
+                            This text is chosen for its high readability.</p>
+                    </div>
+                </div>
+            </section>
+
+            <section id="ui-components" class="mb-12">
+                <h2 class="text-3xl font-bold border-b border-gray-300 pb-2 mb-6 font-brand">4. UI Components &
+                    Interactions</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div class="p-8 bg-white rounded-lg shadow-sm">
+                        <h3 class="text-xl font-semibold mb-4">Buttons</h3>
+                        <div class="space-y-4">
+                            <button
+                                class="btn bg-[#2a5b3e] text-white font-semibold py-2 px-6 rounded-lg hover:bg-[#1e422d]">Primary</button>
+                            <button
+                                class="btn bg-transparent border-2 border-[#2a5b3e] text-[#2a5b3e] font-semibold py-2 px-6 rounded-lg hover:bg-[#eaf2ed]">Secondary</button>
+                            <a href="#" class="text-[#2D9CDB] font-semibold hover:underline">Text Link</a>
+                        </div>
+                    </div>
+                    <div class="p-8 bg-white rounded-lg shadow-sm">
+                        <h3 class="text-xl font-semibold mb-4">Form Elements</h3>
+                        <div>
+                            <label for="name" class="block text-sm font-semibold text-gray-700 mb-1">Name</label>
+                            <input type="text" id="name" placeholder="Enter your name..."
+                                class="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2D9CDB]">
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section id="voice-tone" class="mb-12">
+                <h2 class="text-3xl font-bold border-b border-gray-300 pb-2 mb-6 font-brand">5. Voice & Tone</h2>
+                <div class="p-8 bg-white rounded-lg shadow-sm">
+                    <p class="text-gray-600 mb-6">Our brand voice is direct, confident, and authoritative. It's like a
+                        tough but fair coach: knowledgeable, encouraging, and always pushing you to be better.</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div>
+                            <h3 class="text-xl font-semibold mb-4">Principles</h3>
+                            <ul class="space-y-2 text-gray-700">
+                                <li><strong class="font-semibold text-gray-900">Direct & Confident:</strong> Use strong,
+                                    clear language. Get to the point.</li>
+                                <li><strong class="font-semibold text-gray-900">Authoritative:</strong> Write as an
+                                    expert. Be declarative and informative.</li>
+                                <li><strong class="font-semibold text-gray-900">Tough but Fair:</strong> Acknowledge
+                                    challenges. Motivate, don't coddle.</li>
+                                <li><strong class="font-semibold text-gray-900">Concise:</strong> Avoid jargon and
+                                    filler words. Every word has a purpose.</li>
+                            </ul>
+                        </div>
+                        <div>
+                            <h3 class="text-xl font-semibold mb-4">Examples</h3>
+                            <ul class="do-dont-list space-y-3">
+                                <li class="dont">"You might want to maybe consider trying the next lesson if you have
+                                    time."</li>
+                                <li class="do">"Mastered this? Advance to the next challenge."</li>
+                                <li class="dont">"It looks like you might have gotten this answer wrong. That's okay!"
+                                </li>
+                                <li class="do">"Incorrect. Analyze your mistake and try again."</li>
+                            </ul>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+
+    </body>
+
+</html>
