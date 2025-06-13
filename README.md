@@ -171,6 +171,112 @@ docker run -p 8080:8080 academy-sync-web
 
 The web application will be available at `http://localhost:8080`.
 
+## Configuration Management
+
+The Academy Sync uses a hybrid configuration loading strategy that supports both local development and production environments.
+
+### Environment Detection
+
+The system automatically detects the environment using the following priority:
+
+1. `APP_ENV` environment variable
+2. `GO_ENV` environment variable (fallback)
+3. Default to `local`
+
+### Configuration Loading
+
+- **Local/Development** (`APP_ENV=local`, `development`, or `dev`): Loads from `.env` file and environment variables
+- **Production/Staging** (`APP_ENV=production` or `staging`): Loads from Google Secret Manager with environment variable fallback
+
+### Required Environment Variables
+
+#### Core Configuration
+- `APP_ENV` - Environment name (`local`, `development`, `production`, etc.)
+- `PORT` - Service port (default: 8080)
+
+#### Database Configuration
+- `DATABASE_URL` - Complete PostgreSQL connection string (auto-generated if not provided)
+- `POSTGRES_DB` - Database name (default: academy_sync)
+- `POSTGRES_USER` - Database username (default: postgres)
+- `POSTGRES_PASSWORD` - Database password (required in production)
+- `POSTGRES_HOST` - Database host (default: localhost)
+- `POSTGRES_PORT` - Database port (default: 5433 for local, 5432 for production)
+
+#### Redis Configuration
+- `REDIS_URL` - Complete Redis connection string (auto-generated if not provided)
+- `REDIS_HOST` - Redis host (default: localhost)
+- `REDIS_PORT` - Redis port (default: 6380 for local, 6379 for production)
+
+#### OAuth Configuration
+- `GOOGLE_CLIENT_ID` - Google OAuth client ID
+- `GOOGLE_CLIENT_SECRET` - Google OAuth client secret
+- `STRAVA_CLIENT_ID` - Strava OAuth client ID
+- `STRAVA_CLIENT_SECRET` - Strava OAuth client secret
+
+#### Security Configuration
+- `JWT_SECRET` - JWT signing secret (required in production)
+
+#### SMTP Configuration (for notifications)
+- `SMTP_HOST` - SMTP server host (default: smtp.gmail.com)
+- `SMTP_PORT` - SMTP server port (default: 587)
+- `SMTP_USERNAME` - SMTP username
+- `SMTP_PASSWORD` - SMTP password
+- `FROM_EMAIL` - From email address
+
+#### Google Cloud Configuration
+- `GCP_PROJECT_ID` - Google Cloud Project ID (for Secret Manager integration)
+
+### Local Development Setup
+
+1. Copy the example environment file:
+   ```bash
+   cp .env.example .env
+   ```
+
+2. Edit `.env` with your configuration values
+
+3. The configuration will be automatically loaded when starting any service
+
+### Configuration Validation
+
+The system performs validation on startup:
+- Critical fields must be present
+- JWT secret is required in production environments
+- Port must be a valid number
+- Service will fail to start if validation fails
+
+### Google Secret Manager Integration
+
+The configuration system includes full Google Secret Manager support for production deployments:
+
+- **Production Mode**: When `APP_ENV=production` and `GCP_PROJECT_ID` is set, the system loads secrets from Google Secret Manager
+- **Fallback Behavior**: If Secret Manager is unavailable (no credentials, network issues, etc.), the system gracefully falls back to environment variables
+- **Authentication**: Uses Application Default Credentials (ADC) - see [GCP Authentication docs](https://cloud.google.com/docs/authentication/external/set-up-adc)
+- **Logging**: Provides clear feedback about Secret Manager connection status and number of secrets loaded
+
+**Secret Naming Convention**:
+- `database-url` - Complete database connection string
+- `database-password` - Database password (for URL construction)
+- `redis-url` - Complete Redis connection string  
+- `google-client-id` / `google-client-secret` - OAuth credentials
+- `strava-client-id` / `strava-client-secret` - OAuth credentials
+- `jwt-secret` - JWT signing secret
+- `smtp-username` / `smtp-password` - Email credentials
+- `from-email` - Email sender address
+
+**Example GCP Setup**:
+```bash
+# Set up Application Default Credentials
+gcloud auth application-default login
+
+# Set project for Secret Manager
+export GCP_PROJECT_ID=your-project-id
+export APP_ENV=production
+
+# Service will now load secrets from Secret Manager
+./backend-api
+```
+
 ### Common Development Commands
 
 #### Go Services
@@ -181,6 +287,7 @@ The web application will be available at `http://localhost:8080`.
 - `go test -cover ./...` - Run tests with coverage
 - `go fmt ./...` - Format Go source files
 - `go vet ./...` - Run static analysis
+- `go test ./internal/pkg/config -v` - Test configuration package specifically
 
 #### React Web UI
 ```bash

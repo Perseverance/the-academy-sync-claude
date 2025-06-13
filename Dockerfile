@@ -2,11 +2,11 @@
 # Usage: docker build --build-arg SERVICE_NAME=<service-name> -t <image-name> .
 
 # Stage 1: Build stage
-FROM golang:1.22-alpine AS builder
+FROM golang:1.23-alpine AS builder
 
 # Install git for Go module downloads and air for live reloading
 RUN apk add --no-cache git && \
-    go install github.com/cosmtrek/air@latest
+    go install github.com/cosmtrek/air@v1.49.0
 
 # Set working directory
 WORKDIR /app
@@ -39,11 +39,11 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     ./cmd/${SERVICE_NAME}
 
 # Stage 2: Development image with air for live reloading
-FROM golang:1.22-alpine AS development
+FROM golang:1.23-alpine AS development
 
 # Install git and air
 RUN apk add --no-cache git && \
-    go install github.com/cosmtrek/air@latest
+    go install github.com/cosmtrek/air@v1.49.0
 
 # Set working directory
 WORKDIR /app
