@@ -1,0 +1,58 @@
+# Air configuration for live reloading Go services
+# This configuration uses the SERVICE_NAME environment variable to build the correct service
+
+root = "."
+testdata_dir = "testdata"
+tmp_dir = "tmp"
+
+[build]
+  # Args to pass to the build command
+  args_bin = []
+  # Build command - uses SERVICE_NAME environment variable
+  cmd = "go build -o ./tmp/main ./cmd/${SERVICE_NAME}"
+  # Delay after each file change before rebuild
+  delay = 1000
+  # Directories to exclude from watching
+  exclude_dir = ["assets", "tmp", "vendor", "testdata", "web", "docs"]
+  # File extensions to exclude from watching
+  exclude_file = []
+  # Directories to exclude with their subdirectories
+  exclude_regex = ["_test.go"]
+  # Stop running old binary when build errors occur
+  exclude_unchanged = false
+  # Follow symlinks before watching
+  follow_symlink = false
+  # This log file places in your tmp_dir
+  full_bin = ""
+  # Include directories to watch
+  include_dir = []
+  # Include file extensions to watch
+  include_ext = ["go", "tpl", "tmpl", "html"]
+  # Kill delay if binary has killed the child process
+  kill_delay = "0s"
+  # Add log time
+  log = "build-errors.log"
+  # Send interrupt signal before SIGKILL (windows does not support this feature)
+  send_interrupt = false
+  # Stop old binary before build
+  stop_on_root = false
+
+[color]
+  # Customize the color of the log
+  app = ""
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  # Show log time
+  time = false
+
+[misc]
+  # Delete tmp directory on exit
+  clean_on_exit = false
+
+[screen]
+  # Clear the screen before executing the command
+  clear_on_rebuild = false

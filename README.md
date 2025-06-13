@@ -60,7 +60,7 @@ The system follows a microservices architecture deployed on Google Cloud Platfor
 │   ├── BRD.md               # Business Requirements Document
 │   └── SDD.md               # System Design Document
 ├── Dockerfile                # Multi-stage Dockerfile for Go services
-├── docker-compose.yml        # Local development setup (TBD)
+├── docker-compose.yml        # Local development setup
 ├── go.mod                    # Go module definition
 └── go.sum                    # Go module checksums
 ```
@@ -75,12 +75,69 @@ The system follows a microservices architecture deployed on Google Cloud Platfor
 - PostgreSQL (for local development)
 - Redis (for local development)
 
-### Local Development
+### Local Development with Docker Compose
 
-1. Clone the repository
-2. Copy `.env.example` to `.env` and configure local settings
-3. Start local infrastructure: `docker-compose up -d`
-4. Install dependencies and start services (commands TBD)
+**Quick Start:**
+
+1. **Clone the repository:**
+   ```bash
+   git clone https://github.com/Perseverance/the-academy-sync-claude.git
+   cd the-academy-sync-claude
+   ```
+
+2. **Configure environment:**
+   ```bash
+   cp .env.example .env
+   # Edit .env with your configuration
+   ```
+
+3. **Start the entire application stack:**
+   ```bash
+   docker-compose up --build
+   ```
+
+4. **Access the applications:**
+   - Web UI: http://localhost:3000
+   - Backend API: http://localhost:8080
+   - PostgreSQL: localhost:5433
+   - Redis: localhost:6380
+
+**Development Commands:**
+
+```bash
+# Start all services in the background
+docker-compose up -d
+
+# View logs from all services
+docker-compose logs -f
+
+# View logs from a specific service
+docker-compose logs -f backend-api
+
+# Stop all services
+docker-compose down
+
+# Stop and remove volumes (data will be lost)
+docker-compose down -v
+
+# Rebuild and restart all services
+docker-compose up --build
+
+# Restart a specific service
+docker-compose restart backend-api
+```
+
+**Live Reloading:**
+
+The Go services are configured with Air for automatic live reloading during development. When you modify Go source files, the affected service will automatically rebuild and restart.
+
+**Database Persistence:**
+
+PostgreSQL data is persisted in a Docker volume. Your data will survive container restarts but will be lost if you run `docker-compose down -v`.
+
+### Manual Development Setup
+
+Alternatively, you can run services individually for development:
 
 ### Building Docker Images
 

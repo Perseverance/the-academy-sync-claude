@@ -4,8 +4,9 @@
 # Stage 1: Build stage
 FROM golang:1.22-alpine AS builder
 
-# Install git for Go module downloads
-RUN apk add --no-cache git
+# Install git for Go module downloads and air for live reloading
+RUN apk add --no-cache git && \
+    go install github.com/cosmtrek/air@latest
 
 # Set working directory
 WORKDIR /app
@@ -37,8 +38,27 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build \
     -o /app/service \
     ./cmd/${SERVICE_NAME}
 
-# Stage 2: Final minimal image
-FROM gcr.io/distroless/static-debian12
+# Stage 2: Development image with air for live reloading
+FROM golang:1.22-alpine AS development
+
+# Install git and air
+RUN apk add --no-cache git && \
+    go install github.com/cosmtrek/air@latest
+
+# Set working directory
+WORKDIR /app
+
+# Copy go.mod and go.sum
+COPY go.mod go.sum ./
+
+# Download dependencies
+RUN go mod download
+
+# Default command for development (can be overridden)
+CMD ["air"]
+
+# Stage 3: Final minimal production image
+FROM gcr.io/distroless/static-debian12 AS production
 
 # Copy only the compiled binary from builder stage
 COPY --from=builder /app/service /service

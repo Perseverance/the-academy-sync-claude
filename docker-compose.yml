@@ -1,0 +1,168 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:15-alpine
+    container_name: academy-sync-postgres
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-academy_sync}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-academy_sync}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - academy-sync-network
+
+  # Redis Cache
+  redis:
+    image: redis:7-alpine
+    container_name: academy-sync-redis
+    ports:
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - academy-sync-network
+
+  # Backend API Service
+  backend-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      args:
+        SERVICE_NAME: backend-api
+    container_name: academy-sync-backend-api
+    environment:
+      SERVICE_NAME: backend-api
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-academy_sync}?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      PORT: ${BACKEND_API_PORT:-8080}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+    ports:
+      - "${BACKEND_API_PORT:-8080}:8080"
+    volumes:
+      - .:/app
+      - /app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - academy-sync-network
+    restart: unless-stopped
+
+  # Automation Engine Service
+  automation-engine:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      args:
+        SERVICE_NAME: automation-engine
+    container_name: academy-sync-automation-engine
+    environment:
+      SERVICE_NAME: automation-engine
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-academy_sync}?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      BACKEND_API_URL: http://backend-api:8080
+      STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID}
+      STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+    volumes:
+      - .:/app
+      - /app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend-api:
+        condition: service_started
+    networks:
+      - academy-sync-network
+    restart: unless-stopped
+
+  # Notification Service
+  notification-service:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+      args:
+        SERVICE_NAME: notification-service
+    container_name: academy-sync-notification-service
+    environment:
+      SERVICE_NAME: notification-service
+      DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-academy_sync}?sslmode=disable
+      REDIS_URL: redis://redis:6379
+      BACKEND_API_URL: http://backend-api:8080
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USERNAME: ${SMTP_USERNAME}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      FROM_EMAIL: ${FROM_EMAIL}
+    volumes:
+      - .:/app
+      - /app/tmp
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend-api:
+        condition: service_started
+    networks:
+      - academy-sync-network
+    restart: unless-stopped
+
+  # Web UI
+  web:
+    build:
+      context: ./web
+      dockerfile: Dockerfile
+    container_name: academy-sync-web
+    environment:
+      # Client-side API URL (browser access)
+      NEXT_PUBLIC_API_URL: http://localhost:${BACKEND_API_PORT:-8080}
+      # Server-side API URL (container-to-container)
+      INTERNAL_API_URL: http://backend-api:8080
+      NEXT_PUBLIC_STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID}
+      NEXT_PUBLIC_GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+    ports:
+      - "${WEB_PORT:-3000}:8080"
+    depends_on:
+      - backend-api
+    networks:
+      - academy-sync-network
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+
+networks:
+  academy-sync-network:
+    driver: bridge
