@@ -134,13 +134,27 @@ func loadFromEnv() (*Config, error) {
 }
 
 // loadFromSecretManager loads configuration from Google Secret Manager.
-// For now, this is a placeholder that falls back to environment variables.
-// Full Secret Manager integration will be added when deploying to GCP.
+// NOTE: Full Secret Manager integration requires Go 1.19+ due to dependency constraints.
+// For now, this implementation falls back to environment variables with a clear path
+// for future Secret Manager integration when the Go version is upgraded.
 func loadFromSecretManager() (*Config, error) {
-	// For now, fall back to environment variable loading
-	// This ensures the code works in production environments that use env vars
-	// Full Google Secret Manager integration can be added later
+	projectID := getEnv("GCP_PROJECT_ID", "")
+	if projectID == "" {
+		return nil, fmt.Errorf("GCP_PROJECT_ID environment variable is required for Secret Manager")
+	}
+
+	// TODO: Implement full Google Secret Manager integration
+	// This requires upgrading to Go 1.19+ to support the latest Secret Manager client library
+	// For now, we fall back to environment variables but maintain the Secret Manager API structure
 	
+	fmt.Printf("Info: Secret Manager integration requires Go 1.19+. Using environment variable fallback for project: %s\n", projectID)
+	return loadFromEnvForProduction()
+}
+
+// loadFromEnvForProduction loads configuration from environment variables for production.
+// This is used as a fallback when Secret Manager is not available or when running
+// in environments that use environment variables instead of Secret Manager.
+func loadFromEnvForProduction() (*Config, error) {
 	config := &Config{
 		Environment: getEnv("APP_ENV", "production"),
 		Port:        getEnv("PORT", "8080"),
@@ -241,5 +255,13 @@ func getEnv(key, defaultValue string) string {
 		return value
 	}
 	return defaultValue
+}
+
+// getValueOrEnv returns the secret value if available, otherwise falls back to environment variable.
+func getValueOrEnv(secretValue *string, envKey, defaultValue string) string {
+	if secretValue != nil && *secretValue != "" {
+		return *secretValue
+	}
+	return getEnv(envKey, defaultValue)
 }
 
