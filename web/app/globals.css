@@ -59,6 +59,9 @@
   .btn-primary-main:hover:not(:disabled) {
     background-color: hsl(var(--primary-hover));
   }
+  .btn-primary-main:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
   .btn-primary-main:disabled {
     @apply bg-primary/50 cursor-not-allowed;
   }
@@ -69,6 +72,9 @@
   .btn-secondary-main:hover:not(:disabled) {
     background-color: hsl(var(--secondary-hover-bg));
   }
+  .btn-secondary-main:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
   .btn-secondary-main:disabled {
     @apply border-primary/50 text-primary/50 cursor-not-allowed;
   }
@@ -78,6 +84,9 @@
   }
   .btn-destructive-main:hover:not(:disabled) {
     @apply bg-destructive/90;
+  }
+  .btn-destructive-main:focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
   }
   .btn-destructive-main:disabled {
     @apply bg-destructive/50 cursor-not-allowed;

@@ -20,7 +20,6 @@ import { AcademyLogo } from "@/components/icons/academy-logo"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { href: "/logs", label: "Log Summaries", icon: ListChecks },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
