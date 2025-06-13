@@ -12,7 +12,14 @@ WORKDIR /app
 
 # Accept build argument for service name
 ARG SERVICE_NAME
-RUN test -n "$SERVICE_NAME" || (echo "SERVICE_NAME build argument is required" && false)
+RUN case "$SERVICE_NAME" in \
+        "backend-api"|"automation-engine"|"notification-service") \
+            echo "Building service: $SERVICE_NAME" ;; \
+        *) \
+            echo "ERROR: SERVICE_NAME must be one of: backend-api, automation-engine, notification-service" && \
+            echo "Provided: $SERVICE_NAME" && \
+            false ;; \
+    esac
 
 # Copy go.mod and go.sum for dependency caching
 COPY go.mod go.sum ./
