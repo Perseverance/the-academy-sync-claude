@@ -1,4 +1,11 @@
 // Authentication service for handling Google OAuth and session management
+export interface ActivityLog {
+  id: string
+  date: string
+  status: 'Success' | 'Failure' | 'SuccessWithWarning'
+  summary: string
+}
+
 export interface User {
   id: number
   email: string
@@ -9,6 +16,7 @@ export interface User {
   automation_enabled: boolean
   has_strava_connection: boolean
   has_sheets_connection: boolean
+  recent_activity_logs: ActivityLog[]
 }
 
 export interface AuthResponse {

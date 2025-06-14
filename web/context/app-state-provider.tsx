@@ -90,7 +90,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           stravaStatus: user?.has_strava_connection ? "Connected" : "NotConnected",
           // Initialize spreadsheet status based on user data
           spreadsheetStatus: user?.has_sheets_connection ? "Configured" : 
-                             user?.has_strava_connection ? "NotConfigured" : "Disabled"
+                             user?.has_strava_connection ? "NotConfigured" : "Disabled",
+          // Use activity logs from user data, fallback to mock data if empty
+          activityLogs: user?.recent_activity_logs?.length ? user.recent_activity_logs : mockLogs,
+          isLogsLoading: false
         }))
       } catch (error) {
         console.error('Error checking auth status:', error)

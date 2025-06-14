@@ -100,3 +100,17 @@ func (u *User) ToPublicUser() *PublicUser {
 		HasSheetsConnection:       u.SpreadsheetID != nil && *u.SpreadsheetID != "",
 	}
 }
+
+// ActivityLog represents an activity log entry for the dashboard
+type ActivityLog struct {
+	ID      string `json:"id"`
+	Date    string `json:"date"`
+	Status  string `json:"status"`  // "Success", "Failure", "SuccessWithWarning"
+	Summary string `json:"summary"`
+}
+
+// DashboardUserResponse represents user data with dashboard-specific additions
+type DashboardUserResponse struct {
+	*PublicUser                        `json:",inline"`
+	RecentActivityLogs []ActivityLog  `json:"recent_activity_logs"`
+}

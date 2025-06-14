@@ -41,7 +41,7 @@ export function DashboardPage() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={state.user.avatarUrl || "/placeholder.svg"} alt={state.user.name} />
+                  <AvatarImage src={state.user.profile_picture_url || "/placeholder.svg"} alt={state.user.name} />
                   <AvatarFallback>{state.user.name.charAt(0)}</AvatarFallback>
                 </Avatar>
               </Button>
@@ -78,8 +78,8 @@ export function DashboardPage() {
               serviceName="Google Account"
               serviceIcon={<GoogleLogo className="h-8 w-8 text-primary" />} // Google logo can use primary color or its own
               status={state.googleStatus}
-              userName={state.user.email} // Using email as username for Google
-              userAvatarUrl={state.user.avatarUrl}
+              userName={state.user.name}
+              userAvatarUrl={state.user.profile_picture_url}
               onConnect={() => {
                 /* Google is connected by sign-in */
               }}
