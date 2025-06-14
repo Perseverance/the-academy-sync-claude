@@ -43,6 +43,9 @@ type Config struct {
 	// JWT configuration
 	JWTSecret string `json:"jwt_secret"`
 
+	// Encryption configuration
+	EncryptionSecret string `json:"encryption_secret"`
+
 	// SMTP configuration
 	SMTPHost     string `json:"smtp_host"`
 	SMTPPort     string `json:"smtp_port"`
@@ -101,6 +104,9 @@ func loadFromEnv() (*Config, error) {
 
 		// JWT
 		JWTSecret: getEnv("JWT_SECRET", ""),
+
+		// Encryption
+		EncryptionSecret: getEnv("ENCRYPTION_SECRET", ""),
 
 		// SMTP
 		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
@@ -171,6 +177,7 @@ func loadFromSecretManager() (*Config, error) {
 		"strava-client-id":       new(string),
 		"strava-client-secret":   new(string),
 		"jwt-secret":             new(string),
+		"encryption-secret":      new(string),
 		"smtp-username":          new(string),
 		"smtp-password":          new(string),
 		"from-email":             new(string),
@@ -205,6 +212,7 @@ func loadFromSecretManager() (*Config, error) {
 		StravaClientID:     getValueOrEnv(secrets["strava-client-id"], "STRAVA_CLIENT_ID", ""),
 		StravaClientSecret: getValueOrEnv(secrets["strava-client-secret"], "STRAVA_CLIENT_SECRET", ""),
 		JWTSecret:          getValueOrEnv(secrets["jwt-secret"], "JWT_SECRET", ""),
+		EncryptionSecret:   getValueOrEnv(secrets["encryption-secret"], "ENCRYPTION_SECRET", ""),
 		SMTPUsername:       getValueOrEnv(secrets["smtp-username"], "SMTP_USERNAME", ""),
 		SMTPPassword:       getValueOrEnv(secrets["smtp-password"], "SMTP_PASSWORD", ""),
 		FromEmail:          getValueOrEnv(secrets["from-email"], "FROM_EMAIL", ""),
@@ -303,6 +311,9 @@ func loadFromEnvForProduction() (*Config, error) {
 		// JWT
 		JWTSecret: getEnv("JWT_SECRET", ""),
 
+		// Encryption
+		EncryptionSecret: getEnv("ENCRYPTION_SECRET", ""),
+
 		// SMTP
 		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
 		SMTPPort:     getEnv("SMTP_PORT", "587"),
@@ -358,6 +369,16 @@ func (c *Config) validate() error {
 	// In production, JWT secret is critical
 	if c.Environment != "local" && c.Environment != "development" && c.Environment != "dev" && c.JWTSecret == "" {
 		errors = append(errors, "JWT_SECRET is required in production")
+	}
+
+	// In production, encryption secret is critical
+	if c.Environment != "local" && c.Environment != "development" && c.Environment != "dev" && c.EncryptionSecret == "" {
+		errors = append(errors, "ENCRYPTION_SECRET is required in production")
+	}
+
+	// Validate encryption secret length (recommended minimum 32 bytes)
+	if c.EncryptionSecret != "" && len(c.EncryptionSecret) < 32 {
+		errors = append(errors, "ENCRYPTION_SECRET should be at least 32 characters for security")
 	}
 
 	// Validate port is numeric
