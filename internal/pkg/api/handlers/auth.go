@@ -228,33 +228,27 @@ func (h *AuthHandler) createUserSession(w http.ResponseWriter, r *http.Request, 
 	userAgent := r.Header.Get("User-Agent")
 	ipAddress := middleware.GetClientIP(r)
 	
+	// Create session record first to get the actual session ID
 	sessionReq := &database.CreateSessionRequest{
 		UserID:    user.ID,
 		UserAgent: &userAgent,
 		IPAddress: &ipAddress,
 		ExpiresAt: time.Now().Add(24 * time.Hour), // 24 hour session
+		// SessionToken will be set after generation
 	}
-
-	// Generate JWT token first to get the session token
-	jwtToken, err := h.jwtService.GenerateToken(user.ID, user.Email, user.GoogleID, 0) // Temporary session ID
-	if err != nil {
-		return err
-	}
-
-	sessionReq.SessionToken = jwtToken
 
 	session, err := h.sessionRepository.CreateSession(r.Context(), sessionReq)
 	if err != nil {
 		return err
 	}
 
-	// Regenerate JWT with actual session ID
-	jwtToken, err = h.jwtService.GenerateToken(user.ID, user.Email, user.GoogleID, session.ID)
+	// Generate JWT token once with the actual session ID
+	jwtToken, err := h.jwtService.GenerateToken(user.ID, user.Email, user.GoogleID, session.ID)
 	if err != nil {
 		return err
 	}
 
-	// Update session with correct JWT token in database
+	// Update session with the generated JWT token
 	err = h.sessionRepository.UpdateSessionToken(r.Context(), session.ID, jwtToken)
 	if err != nil {
 		return err
@@ -355,6 +349,13 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	claims, err := h.jwtService.ValidateToken(cookie.Value)
 	if err != nil {
 		http.Error(w, "Invalid session token", http.StatusUnauthorized)
+		return
+	}
+
+	// Check if session is still active
+	session, err := h.sessionRepository.GetSessionByID(r.Context(), claims.SessionID)
+	if err != nil || session == nil || !session.IsActive {
+		http.Error(w, "Session revoked or inactive", http.StatusUnauthorized)
 		return
 	}
 
