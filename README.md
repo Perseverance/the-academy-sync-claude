@@ -193,6 +193,7 @@ The system automatically detects the environment using the following priority:
 #### Core Configuration
 - `APP_ENV` - Environment name (`local`, `development`, `production`, etc.)
 - `PORT` - Service port (default: 8080)
+- `LOG_LEVEL` - Logging level (`DEBUG`, `INFO`, `WARNING`, `ERROR`, `CRITICAL`) (default: INFO)
 
 #### Database Configuration
 - `DATABASE_URL` - Complete PostgreSQL connection string (auto-generated if not provided)
@@ -244,6 +245,58 @@ The system performs validation on startup:
 - JWT secret is required in production environments
 - Port must be a valid number
 - Service will fail to start if validation fails
+
+### Logging Configuration
+
+The Academy Sync uses structured JSON logging powered by Go's `log/slog` package. All logs are output to stdout/stderr for cloud-native deployments.
+
+#### Log Levels
+
+The system supports five log levels controlled by the `LOG_LEVEL` environment variable:
+
+- **DEBUG**: Detailed information for diagnosing problems (includes OAuth flows, database queries, etc.)
+- **INFO**: General information about system operation (default level)
+- **WARNING**: Warning messages for potential issues
+- **ERROR**: Error messages for failures that don't stop execution
+- **CRITICAL**: Critical errors that may stop system operation
+
+#### Setting Log Levels
+
+**Docker Compose Development:**
+```bash
+# Set in environment
+LOG_LEVEL=DEBUG docker-compose up
+
+# Or add to .env file
+echo "LOG_LEVEL=DEBUG" >> .env
+docker-compose up
+```
+
+**Direct Go Execution:**
+```bash
+LOG_LEVEL=DEBUG go run ./cmd/backend-api
+```
+
+**Production Deployment:**
+Set `LOG_LEVEL` as an environment variable in your deployment configuration.
+
+#### JSON Log Format
+
+All logs are output in structured JSON format:
+
+```json
+{
+  "time": "2025-06-14T11:51:29.460402+03:00",
+  "level": "INFO",
+  "msg": "Backend API starting", 
+  "service": "backend-api",
+  "environment": "development",
+  "port": "8080",
+  "additional_fields": "..."
+}
+```
+
+This format enables easy parsing by log aggregation systems like ELK stack, Grafana Loki, or cloud logging services.
 
 ### Google Secret Manager Integration
 
