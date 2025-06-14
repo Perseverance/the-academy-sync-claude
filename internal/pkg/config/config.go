@@ -410,6 +410,17 @@ func (c *Config) validate() error {
 		}
 	}
 
+	// Validate log level
+	if c.LogLevel != "" {
+		validLevels := map[string]struct{}{
+			"DEBUG": {}, "INFO": {}, "WARN": {}, "WARNING": {},
+			"ERROR": {}, "CRITICAL": {},
+		}
+		if _, ok := validLevels[strings.ToUpper(c.LogLevel)]; !ok {
+			errors = append(errors, "log_level must be one of DEBUG, INFO, WARN, WARNING, ERROR, CRITICAL")
+		}
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf("validation errors: %s", strings.Join(errors, ", "))
 	}

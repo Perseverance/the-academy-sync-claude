@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/config"
@@ -14,7 +15,7 @@ func main() {
 	if err != nil {
 		// Use fallback logging before structured logger is available
 		fmt.Printf("ERROR: Failed to load configuration: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	// Initialize structured logger
