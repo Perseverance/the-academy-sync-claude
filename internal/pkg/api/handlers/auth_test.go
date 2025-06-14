@@ -360,7 +360,7 @@ func TestGetCurrentUser(t *testing.T) {
 		w := httptest.NewRecorder()
 
 		// Call GetCurrentUser handler
-		handler.testGetCurrentUser(w, req)
+		handler.testGetCurrentUser(w, req, t)
 
 		// Verify HTTP response
 		if w.Code != http.StatusOK {
@@ -439,7 +439,7 @@ func (m *MockUserRepository) GetUserByID(ctx context.Context, userID int) (*Mock
 }
 
 // Add mock function to TestableAuthHandler
-func (t *TestableAuthHandler) testGetCurrentUser(w http.ResponseWriter, r *http.Request) {
+func (t *TestableAuthHandler) testGetCurrentUser(w http.ResponseWriter, r *http.Request, test *testing.T) {
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	if !ok {
 		http.Error(w, "User not found in context", http.StatusUnauthorized)
@@ -473,7 +473,10 @@ func (t *TestableAuthHandler) testGetCurrentUser(w http.ResponseWriter, r *http.
 		}
 
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(response)
+		if err := json.NewEncoder(w).Encode(response); err != nil {
+			test.Errorf("Failed to encode response: %v", err)
+			http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		}
 		return
 	}
 
