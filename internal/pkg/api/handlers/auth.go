@@ -45,8 +45,9 @@ func NewAuthHandler(
 // getCookieConfig returns appropriate cookie configuration for the environment
 func (h *AuthHandler) getCookieConfig() (domain string, sameSite http.SameSite, secure bool) {
 	if h.isDevelopment {
-		// Development: Allow cross-port access on localhost
-		return "localhost", http.SameSiteNoneMode, false
+		// Development: Use .localhost domain to share cookies across ports
+		// SameSite=Lax allows cookies in top-level navigation (OAuth redirects)
+		return ".localhost", http.SameSiteLaxMode, false
 	}
 	// Production: Use secure settings
 	return "", http.SameSiteLaxMode, true
