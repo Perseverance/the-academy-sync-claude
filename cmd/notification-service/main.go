@@ -38,9 +38,15 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 		})
 		
 		if err != nil {
-			log.Warn("Database dependency check failed - notification service will run with limited functionality", 
-				"error", err.Error())
-			// Don't fail fast for notification service database issues - it can operate with reduced functionality
+			if cfg.FailFastEnabled {
+				log.Critical("Database dependency check failed with fail-fast enabled", 
+					"error", err.Error())
+				return fmt.Errorf("database dependency check failed: %w", err)
+			} else {
+				log.Warn("Database dependency check failed - notification service will run with limited functionality", 
+					"error", err.Error())
+				// Continue operation with reduced functionality when fail-fast is disabled
+			}
 		}
 	}
 	
