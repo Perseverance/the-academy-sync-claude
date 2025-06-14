@@ -37,7 +37,9 @@ export function ConnectionCard({
           <>
             <div className="flex items-center space-x-3 mb-3">
               {serviceIcon}
-              <p className="text-sm text-muted-foreground">Status: Not Connected</p>
+              <Badge className="bg-orange-100 text-orange-800 border-orange-200">
+                Not connected
+              </Badge>
             </div>
             <button onClick={onConnect} className="btn-primary-main w-full">
               <LinkIcon className="h-4 w-4" />
