@@ -20,6 +20,7 @@ type Config struct {
 	Environment string `json:"environment"`
 	Port        string `json:"port"`
 	BaseURL     string `json:"base_url"`
+	FrontendURL string `json:"frontend_url"`
 
 	// Database configuration
 	DatabaseURL      string `json:"database_url"`
@@ -82,6 +83,7 @@ func loadFromEnv() (*Config, error) {
 		Environment: getEnv("APP_ENV", getEnv("GO_ENV", "local")),
 		Port:        getEnv("PORT", "8080"),
 		BaseURL:     getEnv("BASE_URL", ""),
+		FrontendURL: getEnv("FRONTEND_URL", ""),
 
 		// Database
 		DatabaseURL:      getEnv("DATABASE_URL", ""),
@@ -138,6 +140,9 @@ func loadFromEnv() (*Config, error) {
 
 	// Build BaseURL if not provided
 	config.buildBaseURL()
+
+	// Build FrontendURL if not provided
+	config.buildFrontendURL()
 
 	// Validate required configuration
 	if err := config.validate(); err != nil {
@@ -203,6 +208,7 @@ func loadFromSecretManager() (*Config, error) {
 		Environment: getEnv("APP_ENV", "production"),
 		Port:        getEnv("PORT", "8080"),
 		BaseURL:     getEnv("BASE_URL", ""),
+		FrontendURL: getEnv("FRONTEND_URL", ""),
 
 		// Use secrets if available, otherwise fall back to env vars
 		DatabaseURL:        getValueOrEnv(secrets["database-url"], "DATABASE_URL", ""),
@@ -258,6 +264,9 @@ func loadFromSecretManager() (*Config, error) {
 	// Build BaseURL if not provided
 	config.buildBaseURL()
 
+	// Build FrontendURL if not provided
+	config.buildFrontendURL()
+
 	// Validate required configuration
 	if err := config.validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -288,6 +297,7 @@ func loadFromEnvForProduction() (*Config, error) {
 		Environment: getEnv("APP_ENV", "production"),
 		Port:        getEnv("PORT", "8080"),
 		BaseURL:     getEnv("BASE_URL", ""),
+		FrontendURL: getEnv("FRONTEND_URL", ""),
 
 		// Database
 		DatabaseURL:      getEnv("DATABASE_URL", ""),
@@ -345,6 +355,9 @@ func loadFromEnvForProduction() (*Config, error) {
 	// Build BaseURL if not provided
 	config.buildBaseURL()
 
+	// Build FrontendURL if not provided
+	config.buildFrontendURL()
+
 	// Validate required configuration
 	if err := config.validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -374,6 +387,11 @@ func (c *Config) validate() error {
 	// In production, encryption secret is critical
 	if c.Environment != "local" && c.Environment != "development" && c.Environment != "dev" && c.EncryptionSecret == "" {
 		errors = append(errors, "ENCRYPTION_SECRET is required in production")
+	}
+
+	// In production, BaseURL must be explicitly configured
+	if c.Environment != "local" && c.Environment != "development" && c.Environment != "dev" && c.BaseURL == "" {
+		errors = append(errors, "BASE_URL is required in production environments")
 	}
 
 	// Validate encryption secret length (recommended minimum 32 bytes)
@@ -411,16 +429,23 @@ func getValueOrEnv(secretValue *string, envKey, defaultValue string) string {
 	return getEnv(envKey, defaultValue)
 }
 
-// buildBaseURL constructs the base URL if not provided
+// buildBaseURL constructs the base URL if not provided for development environments only
 func (c *Config) buildBaseURL() {
 	if c.BaseURL == "" {
 		if c.Environment == "local" || c.Environment == "development" || c.Environment == "dev" {
 			c.BaseURL = fmt.Sprintf("http://localhost:%s", c.Port)
-		} else {
-			// In production, BaseURL should be explicitly configured
-			// This is a fallback that should be overridden with the actual domain
-			c.BaseURL = fmt.Sprintf("https://your-domain.com")
 		}
+		// In production, BaseURL must be explicitly configured - no fallback provided
+	}
+}
+
+// buildFrontendURL constructs the frontend URL if not provided for development environments only
+func (c *Config) buildFrontendURL() {
+	if c.FrontendURL == "" {
+		if c.Environment == "local" || c.Environment == "development" || c.Environment == "dev" {
+			c.FrontendURL = "http://localhost:3000"
+		}
+		// In production, FrontendURL must be explicitly configured - no fallback provided
 	}
 }
 

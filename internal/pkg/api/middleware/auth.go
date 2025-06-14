@@ -72,11 +72,12 @@ func (a *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 		// Update session last used timestamp
 		if err := a.sessionRepository.UpdateSessionLastUsed(r.Context(), session.ID); err != nil {
 			// Log error but don't fail the request
-			// In production, you'd use a proper logger here
+			// In production, this should use a structured logger
+			// Analytics and refresh-logic heuristics may be affected but auth should continue
 		}
 
 		// Check and refresh OAuth tokens if necessary
-		go a.checkAndRefreshOAuthTokens(r.Context(), claims.UserID)
+		go a.checkAndRefreshOAuthTokens(context.Background(), claims.UserID)
 
 		// Add user information to request context
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
@@ -135,7 +136,10 @@ func (a *AuthMiddleware) OptionalAuth(next http.Handler) http.Handler {
 		}
 
 		// Update session last used timestamp
-		a.sessionRepository.UpdateSessionLastUsed(r.Context(), session.ID)
+		if err := a.sessionRepository.UpdateSessionLastUsed(r.Context(), session.ID); err != nil {
+			// Log error but don't fail the optional auth request
+			// In production, this should use a structured logger
+		}
 
 		// Add user information to request context
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
@@ -148,22 +152,24 @@ func (a *AuthMiddleware) OptionalAuth(next http.Handler) http.Handler {
 }
 
 // CORS middleware to handle cross-origin requests
-func CORS(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Set CORS headers
-		w.Header().Set("Access-Control-Allow-Origin", "http://localhost:3000") // Frontend URL
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
-		w.Header().Set("Access-Control-Allow-Credentials", "true")
+func CORS(allowedOrigin string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Set CORS headers
+			w.Header().Set("Access-Control-Allow-Origin", allowedOrigin)
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+			w.Header().Set("Access-Control-Allow-Credentials", "true")
 
-		// Handle preflight requests
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+			// Handle preflight requests
+			if r.Method == "OPTIONS" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 
-		next.ServeHTTP(w, r)
-	})
+			next.ServeHTTP(w, r)
+		})
+	}
 }
 
 // GetClientIP extracts the client IP address from the request
@@ -171,7 +177,12 @@ func GetClientIP(r *http.Request) string {
 	// Check for forwarded IP first (for load balancers/proxies)
 	forwarded := r.Header.Get("X-Forwarded-For")
 	if forwarded != "" {
-		return forwarded
+		// X-Forwarded-For may contain comma-separated list: "client, proxy1, proxy2"
+		// The first IP is the original client IP
+		parts := strings.Split(forwarded, ",")
+		if len(parts) > 0 {
+			return strings.TrimSpace(parts[0])
+		}
 	}
 
 	realIP := r.Header.Get("X-Real-IP")
@@ -265,8 +276,11 @@ func (a *AuthMiddleware) refreshGoogleOAuthToken(ctx context.Context, user *data
 		UpdateLastLogin:    false, // Don't update last login for background token refresh
 	}
 
-	// Update in database (ignore errors since this is background operation)
-	a.userRepository.UpdateUserTokens(ctx, updateReq)
+	// Update in database (log errors since this is background operation)
+	if err := a.userRepository.UpdateUserTokens(ctx, updateReq); err != nil {
+		// In production, this should use a structured logger
+		// Silent token refresh failures can affect API access for users
+	}
 }
 
 // refreshStravaOAuthToken refreshes the user's Strava OAuth token

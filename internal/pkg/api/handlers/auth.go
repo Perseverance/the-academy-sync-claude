@@ -2,9 +2,11 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -53,10 +55,26 @@ func (h *AuthHandler) getCookieConfig() (domain string, sameSite http.SameSite, 
 	return "", http.SameSiteLaxMode, true
 }
 
+// generateSecureState generates a cryptographically secure random state for OAuth CSRF protection
+func generateSecureState() (string, error) {
+	// Generate 16 bytes (128 bits) of cryptographically secure random data
+	randomBytes := make([]byte, 16)
+	if _, err := rand.Read(randomBytes); err != nil {
+		return "", fmt.Errorf("failed to generate secure random state: %w", err)
+	}
+	
+	// Encode as base64 URL-safe string with "oauth-" prefix for identification
+	return "oauth-" + base64.URLEncoding.EncodeToString(randomBytes), nil
+}
+
 // GoogleAuthURL generates and returns the Google OAuth authorization URL
 func (h *AuthHandler) GoogleAuthURL(w http.ResponseWriter, r *http.Request) {
-	// Generate a state parameter for CSRF protection
-	state := "random-state-" + strconv.FormatInt(time.Now().Unix(), 10)
+	// Generate a cryptographically secure state parameter for CSRF protection
+	state, err := generateSecureState()
+	if err != nil {
+		http.Error(w, "Failed to generate secure state", http.StatusInternalServerError)
+		return
+	}
 	
 	// Store state in session cookie for validation
 	domain, sameSite, secure := h.getCookieConfig()
@@ -78,7 +96,10 @@ func (h *AuthHandler) GoogleAuthURL(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // GoogleCallback handles the OAuth callback from Google
@@ -90,17 +111,25 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Try to validate state cookie for enhanced security
+	// Validate state cookie exists and matches (required for security)
 	stateCookie, cookieErr := r.Cookie("oauth_state")
-	if cookieErr == nil && stateCookie.Value != stateParam {
-		http.Error(w, "Invalid state parameter", http.StatusBadRequest)
-		return
-	}
-
-	// If no cookie but state exists, validate format as fallback (development tolerance)
-	if cookieErr != nil && !strings.HasPrefix(stateParam, "random-state-") {
-		http.Error(w, "Invalid state parameter", http.StatusBadRequest)
-		return
+	if cookieErr != nil {
+		// In production, state cookie is required for CSRF protection
+		if !h.isDevelopment {
+			http.Error(w, "Missing state cookie - CSRF protection required", http.StatusBadRequest)
+			return
+		}
+		// In development, allow fallback validation for direct callback testing
+		if !strings.HasPrefix(stateParam, "oauth-") {
+			http.Error(w, "Invalid state parameter format", http.StatusBadRequest)
+			return
+		}
+	} else {
+		// Cookie exists, must match exactly
+		if stateCookie.Value != stateParam {
+			http.Error(w, "Invalid state parameter - CSRF protection failed", http.StatusBadRequest)
+			return
+		}
 	}
 
 	// Clear the state cookie if it exists
@@ -271,7 +300,10 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	publicUser := user.ToPublicUser()
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(publicUser)
+	if err := json.NewEncoder(w).Encode(publicUser); err != nil {
+		http.Error(w, "Failed to encode user data", http.StatusInternalServerError)
+		return
+	}
 }
 
 // Logout handles user logout by invalidating the session
@@ -279,7 +311,11 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	sessionID, ok := middleware.GetSessionIDFromContext(r.Context())
 	if ok {
 		// Deactivate session in database
-		h.sessionRepository.DeactivateSession(r.Context(), sessionID)
+		if err := h.sessionRepository.DeactivateSession(r.Context(), sessionID); err != nil {
+			// Log error but don't fail the logout - user should still be logged out on client side
+			// In production, this should use a proper logger
+			// For now, we'll continue with clearing the cookie
+		}
 	}
 
 	// Clear session cookie
@@ -298,9 +334,12 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, cookie)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"message": "Logged out successfully",
-	})
+	}); err != nil {
+		http.Error(w, "Failed to encode logout response", http.StatusInternalServerError)
+		return
+	}
 }
 
 // RefreshToken refreshes the user's JWT token
@@ -312,10 +351,23 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate current token to get session ID
+	claims, err := h.jwtService.ValidateToken(cookie.Value)
+	if err != nil {
+		http.Error(w, "Invalid session token", http.StatusUnauthorized)
+		return
+	}
+
 	// Generate new token
 	newToken, err := h.jwtService.RefreshToken(cookie.Value)
 	if err != nil {
 		http.Error(w, "Failed to refresh token", http.StatusUnauthorized)
+		return
+	}
+
+	// Update session token in database
+	if err := h.sessionRepository.UpdateSessionToken(r.Context(), claims.SessionID, newToken); err != nil {
+		http.Error(w, "Failed to update session", http.StatusInternalServerError)
 		return
 	}
 
@@ -335,9 +387,12 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	http.SetCookie(w, newCookie)
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	if err := json.NewEncoder(w).Encode(map[string]string{
 		"message": "Token refreshed successfully",
-	})
+	}); err != nil {
+		http.Error(w, "Failed to encode refresh response", http.StatusInternalServerError)
+		return
+	}
 }
 
 
