@@ -21,6 +21,7 @@ type Config struct {
 	Port        string `json:"port"`
 	BaseURL     string `json:"base_url"`
 	FrontendURL string `json:"frontend_url"`
+	LogLevel    string `json:"log_level"`
 
 	// Database configuration
 	DatabaseURL      string `json:"database_url"`
@@ -84,6 +85,7 @@ func loadFromEnv() (*Config, error) {
 		Port:        getEnv("PORT", "8080"),
 		BaseURL:     getEnv("BASE_URL", ""),
 		FrontendURL: getEnv("FRONTEND_URL", ""),
+		LogLevel:    getEnv("LOG_LEVEL", "INFO"),
 
 		// Database
 		DatabaseURL:      getEnv("DATABASE_URL", ""),
@@ -209,6 +211,7 @@ func loadFromSecretManager() (*Config, error) {
 		Port:        getEnv("PORT", "8080"),
 		BaseURL:     getEnv("BASE_URL", ""),
 		FrontendURL: getEnv("FRONTEND_URL", ""),
+		LogLevel:    getEnv("LOG_LEVEL", "INFO"),
 
 		// Use secrets if available, otherwise fall back to env vars
 		DatabaseURL:        getValueOrEnv(secrets["database-url"], "DATABASE_URL", ""),
@@ -298,6 +301,7 @@ func loadFromEnvForProduction() (*Config, error) {
 		Port:        getEnv("PORT", "8080"),
 		BaseURL:     getEnv("BASE_URL", ""),
 		FrontendURL: getEnv("FRONTEND_URL", ""),
+		LogLevel:    getEnv("LOG_LEVEL", "INFO"),
 
 		// Database
 		DatabaseURL:      getEnv("DATABASE_URL", ""),
@@ -403,6 +407,17 @@ func (c *Config) validate() error {
 	if c.Port != "" {
 		if _, err := strconv.Atoi(c.Port); err != nil {
 			errors = append(errors, "port must be a valid number")
+		}
+	}
+
+	// Validate log level
+	if c.LogLevel != "" {
+		validLevels := map[string]struct{}{
+			"DEBUG": {}, "INFO": {}, "WARN": {}, "WARNING": {},
+			"ERROR": {}, "CRITICAL": {},
+		}
+		if _, ok := validLevels[strings.ToUpper(c.LogLevel)]; !ok {
+			errors = append(errors, "log_level must be one of DEBUG, INFO, WARN, WARNING, ERROR, CRITICAL")
 		}
 	}
 
