@@ -3,7 +3,6 @@ package main
 import (
 	"database/sql"
 	"fmt"
-	"log"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -15,31 +14,43 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/config"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 )
 
 func main() {
 	// Load configuration using hybrid loading strategy
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		// Use fallback logging before structured logger is available
+		fmt.Printf("ERROR: Failed to load configuration: %v\n", err)
+		return
 	}
 
-	log.Printf("Backend API starting in %s environment on port %s", cfg.Environment, cfg.Port)
-	log.Printf("Database URL configured: %t", cfg.DatabaseURL != "")
-	log.Printf("Google OAuth configured: %t", cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "")
+	// Initialize structured logger
+	log := logger.New("backend-api")
+
+	log.Info("Backend API starting", 
+		"environment", cfg.Environment, 
+		"port", cfg.Port,
+		"log_level", cfg.LogLevel)
+	log.Info("Configuration status", 
+		"database_configured", cfg.DatabaseURL != "",
+		"google_oauth_configured", cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "")
 
 	// Initialize database connection
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
-		log.Fatalf("Failed to connect to database: %v", err)
+		log.Critical("Failed to connect to database", "error", err)
+		return
 	}
 	defer db.Close()
 
 	// Test database connection
 	if err := db.Ping(); err != nil {
-		log.Fatalf("Failed to ping database: %v", err)
+		log.Critical("Failed to ping database", "error", err)
+		return
 	}
-	log.Printf("Database connection established successfully")
+	log.Info("Database connection established successfully")
 
 	// Initialize services
 	jwtService := auth.NewJWTService(cfg.JWTSecret)
@@ -67,6 +78,7 @@ func main() {
 		sessionRepository,
 		cfg.FrontendURL,
 		isDevelopment,
+		log.WithContext("component", "auth_handler"),
 	)
 
 	// Create router
@@ -115,9 +127,12 @@ func main() {
 		// r.Route("/notifications", func(r chi.Router) { ... })
 	})
 
-	log.Printf("Backend API server starting on :%s", cfg.Port)
-	log.Printf("Base URL configured: %s", cfg.BaseURL)
-	log.Printf("Google OAuth redirect URL: %s", redirectURL)
+	log.Info("Backend API server starting", 
+		"port", cfg.Port,
+		"base_url", cfg.BaseURL,
+		"google_oauth_redirect_url", redirectURL)
 	
-	log.Fatal(http.ListenAndServe(":"+cfg.Port, r))
+	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
+		log.Critical("Server failed to start", "error", err)
+	}
 }
