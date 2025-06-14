@@ -43,7 +43,7 @@ func main() {
 
 	// Initialize services
 	jwtService := auth.NewJWTService(cfg.JWTSecret)
-	encryptionService := auth.NewEncryptionService(cfg.JWTSecret) // Use JWT secret for encryption key
+	encryptionService := auth.NewEncryptionService(cfg.EncryptionSecret) // Use separate encryption secret
 	
 	// Construct OAuth redirect URL using configurable base URL
 	redirectURL := fmt.Sprintf("%s/api/auth/google/callback", cfg.BaseURL)
