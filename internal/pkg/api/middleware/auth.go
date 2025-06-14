@@ -8,6 +8,7 @@ import (
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 )
 
 // AuthMiddleware provides authentication middleware for protected routes
@@ -16,15 +17,17 @@ type AuthMiddleware struct {
 	sessionRepository *database.SessionRepository
 	oauthService      *auth.OAuthService
 	userRepository    *database.UserRepository
+	logger            *logger.Logger
 }
 
 // NewAuthMiddleware creates a new authentication middleware
-func NewAuthMiddleware(jwtService *auth.JWTService, sessionRepository *database.SessionRepository, oauthService *auth.OAuthService, userRepository *database.UserRepository) *AuthMiddleware {
+func NewAuthMiddleware(jwtService *auth.JWTService, sessionRepository *database.SessionRepository, oauthService *auth.OAuthService, userRepository *database.UserRepository, logger *logger.Logger) *AuthMiddleware {
 	return &AuthMiddleware{
 		jwtService:        jwtService,
 		sessionRepository: sessionRepository,
 		oauthService:      oauthService,
 		userRepository:    userRepository,
+		logger:            logger,
 	}
 }
 
@@ -43,9 +46,21 @@ const (
 // RequireAuth middleware validates JWT tokens and ensures user is authenticated
 func (a *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		clientIP := GetClientIP(r)
+		
+		a.logger.Debug("Auth middleware processing request",
+			"path", r.URL.Path,
+			"method", r.Method,
+			"client_ip", clientIP,
+			"user_agent", r.Header.Get("User-Agent"))
+		
 		// Get JWT token from cookie
 		cookie, err := r.Cookie("session_token")
 		if err != nil {
+			a.logger.Warn("Authentication failed: No session token cookie",
+				"path", r.URL.Path,
+				"client_ip", clientIP,
+				"cookie_error", err.Error())
 			http.Error(w, "Unauthorized: No session token", http.StatusUnauthorized)
 			return
 		}
@@ -53,6 +68,10 @@ func (a *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 		// Validate JWT token
 		claims, err := a.jwtService.ValidateToken(cookie.Value)
 		if err != nil {
+			a.logger.Warn("Authentication failed: Invalid JWT token",
+				"path", r.URL.Path,
+				"client_ip", clientIP,
+				"validation_error", err.Error())
 			http.Error(w, "Unauthorized: Invalid session token", http.StatusUnauthorized)
 			return
 		}
@@ -60,24 +79,43 @@ func (a *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 		// Verify session still exists and is active in database
 		session, err := a.sessionRepository.GetSessionByToken(r.Context(), cookie.Value)
 		if err != nil {
+			a.logger.Error("Authentication failed: Session validation database error",
+				"path", r.URL.Path,
+				"client_ip", clientIP,
+				"user_id", claims.UserID,
+				"session_id", claims.SessionID,
+				"error", err.Error())
 			http.Error(w, "Unauthorized: Session validation error", http.StatusUnauthorized)
 			return
 		}
 
 		if session == nil {
+			a.logger.Warn("Authentication failed: Session not found or expired",
+				"path", r.URL.Path,
+				"client_ip", clientIP,
+				"user_id", claims.UserID,
+				"session_id", claims.SessionID)
 			http.Error(w, "Unauthorized: Session not found or expired", http.StatusUnauthorized)
 			return
 		}
 
 		// Update session last used timestamp
 		if err := a.sessionRepository.UpdateSessionLastUsed(r.Context(), session.ID); err != nil {
-			// Log error but don't fail the request
-			// In production, this should use a structured logger
-			// Analytics and refresh-logic heuristics may be affected but auth should continue
+			a.logger.Error("Failed to update session last used timestamp",
+				"session_id", session.ID,
+				"user_id", claims.UserID,
+				"error", err.Error())
+			// Don't fail the request - this is a non-critical operation
 		}
 
 		// Check and refresh OAuth tokens if necessary
 		go a.checkAndRefreshOAuthTokens(context.Background(), claims.UserID)
+
+		a.logger.Debug("Authentication successful",
+			"path", r.URL.Path,
+			"user_id", claims.UserID,
+			"session_id", claims.SessionID,
+			"client_ip", clientIP)
 
 		// Add user information to request context
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
@@ -255,16 +293,22 @@ func (a *AuthMiddleware) shouldRefreshStravaToken(user *database.User) bool {
 
 // refreshGoogleOAuthToken refreshes the user's Google OAuth token
 func (a *AuthMiddleware) refreshGoogleOAuthToken(ctx context.Context, user *database.User) {
+	a.logger.Debug("Starting background Google OAuth token refresh", "user_id", user.ID)
+	
 	// Decrypt the refresh token
 	refreshToken, err := a.userRepository.DecryptToken(user.GoogleRefreshToken)
 	if err != nil {
-		return // Failed to decrypt refresh token
+		a.logger.Error("Failed to decrypt Google refresh token for background refresh",
+			"user_id", user.ID, "error", err.Error())
+		return
 	}
 
 	// Refresh the token with Google
 	newToken, err := a.oauthService.RefreshToken(ctx, refreshToken)
 	if err != nil {
-		return // Failed to refresh token
+		a.logger.Error("Failed to refresh Google OAuth token",
+			"user_id", user.ID, "error", err.Error())
+		return
 	}
 
 	// Update the user's tokens in the database (background refresh, don't update last login)
@@ -276,11 +320,15 @@ func (a *AuthMiddleware) refreshGoogleOAuthToken(ctx context.Context, user *data
 		UpdateLastLogin:    false, // Don't update last login for background token refresh
 	}
 
-	// Update in database (log errors since this is background operation)
+	// Update in database
 	if err := a.userRepository.UpdateUserTokens(ctx, updateReq); err != nil {
-		// In production, this should use a structured logger
-		// Silent token refresh failures can affect API access for users
+		a.logger.Error("Failed to update user tokens after Google OAuth refresh",
+			"user_id", user.ID, "error", err.Error())
+		return
 	}
+	
+	a.logger.Info("Successfully refreshed Google OAuth token in background",
+		"user_id", user.ID, "new_expiry", newToken.Expiry.String())
 }
 
 // refreshStravaOAuthToken refreshes the user's Strava OAuth token
