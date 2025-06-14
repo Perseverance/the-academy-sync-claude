@@ -65,7 +65,7 @@ func main() {
 		jwtService,
 		userRepository,
 		sessionRepository,
-		"http://localhost:3000", // Frontend URL
+		cfg.FrontendURL,
 		isDevelopment,
 	)
 
@@ -75,7 +75,7 @@ func main() {
 	// Global middleware
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(authMiddleware.CORS) // Enable CORS for frontend communication
+	r.Use(authMiddleware.CORS(cfg.FrontendURL)) // Enable CORS for frontend communication
 
 	// Public routes (no authentication required)
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
