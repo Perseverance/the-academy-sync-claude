@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"time"
 
@@ -22,7 +23,7 @@ func NewUserRepository(db *sql.DB, encryptor *auth.EncryptionService) *UserRepos
 }
 
 // CreateUser creates a new user in the database
-func (r *UserRepository) CreateUser(req *CreateUserRequest) (*User, error) {
+func (r *UserRepository) CreateUser(ctx context.Context, req *CreateUserRequest) (*User, error) {
 	// Encrypt OAuth tokens
 	encryptedAccessToken, err := r.encryptor.Encrypt(req.GoogleAccessToken)
 	if err != nil {
@@ -48,7 +49,8 @@ func (r *UserRepository) CreateUser(req *CreateUserRequest) (*User, error) {
 	var id int
 	var createdAt, updatedAt time.Time
 
-	err = r.db.QueryRow(
+	err = r.db.QueryRowContext(
+		ctx,
 		query,
 		req.GoogleID,
 		req.Email,
@@ -88,7 +90,7 @@ func (r *UserRepository) CreateUser(req *CreateUserRequest) (*User, error) {
 }
 
 // GetUserByGoogleID retrieves a user by their Google ID
-func (r *UserRepository) GetUserByGoogleID(googleID string) (*User, error) {
+func (r *UserRepository) GetUserByGoogleID(ctx context.Context, googleID string) (*User, error) {
 	query := `
 		SELECT id, google_id, email, name, profile_picture_url,
 			   google_access_token, google_refresh_token, google_token_expiry,
@@ -99,7 +101,7 @@ func (r *UserRepository) GetUserByGoogleID(googleID string) (*User, error) {
 	`
 
 	var user User
-	err := r.db.QueryRow(query, googleID).Scan(
+	err := r.db.QueryRowContext(ctx, query, googleID).Scan(
 		&user.ID, &user.GoogleID, &user.Email, &user.Name, &user.ProfilePictureURL,
 		&user.GoogleAccessToken, &user.GoogleRefreshToken, &user.GoogleTokenExpiry,
 		&user.StravaAccessToken, &user.StravaRefreshToken, &user.StravaTokenExpiry, &user.StravaAthleteID,
@@ -118,7 +120,7 @@ func (r *UserRepository) GetUserByGoogleID(googleID string) (*User, error) {
 }
 
 // GetUserByID retrieves a user by their ID
-func (r *UserRepository) GetUserByID(id int) (*User, error) {
+func (r *UserRepository) GetUserByID(ctx context.Context, id int) (*User, error) {
 	query := `
 		SELECT id, google_id, email, name, profile_picture_url,
 			   google_access_token, google_refresh_token, google_token_expiry,
@@ -129,7 +131,7 @@ func (r *UserRepository) GetUserByID(id int) (*User, error) {
 	`
 
 	var user User
-	err := r.db.QueryRow(query, id).Scan(
+	err := r.db.QueryRowContext(ctx, query, id).Scan(
 		&user.ID, &user.GoogleID, &user.Email, &user.Name, &user.ProfilePictureURL,
 		&user.GoogleAccessToken, &user.GoogleRefreshToken, &user.GoogleTokenExpiry,
 		&user.StravaAccessToken, &user.StravaRefreshToken, &user.StravaTokenExpiry, &user.StravaAthleteID,
@@ -148,7 +150,7 @@ func (r *UserRepository) GetUserByID(id int) (*User, error) {
 }
 
 // UpdateUserTokens updates a user's Google OAuth tokens and optionally last login timestamp
-func (r *UserRepository) UpdateUserTokens(req *UpdateUserTokensRequest) error {
+func (r *UserRepository) UpdateUserTokens(ctx context.Context, req *UpdateUserTokensRequest) error {
 	// Encrypt OAuth tokens
 	encryptedAccessToken, err := r.encryptor.Encrypt(req.GoogleAccessToken)
 	if err != nil {
@@ -202,26 +204,26 @@ func (r *UserRepository) UpdateUserTokens(req *UpdateUserTokensRequest) error {
 		}
 	}
 
-	_, err = r.db.Exec(query, args...)
+	_, err = r.db.ExecContext(ctx, query, args...)
 	return err
 }
 
 // UpdateLastLoginAt updates the user's last login timestamp
-func (r *UserRepository) UpdateLastLoginAt(userID int) error {
+func (r *UserRepository) UpdateLastLoginAt(ctx context.Context, userID int) error {
 	query := `UPDATE users SET last_login_at = $1, updated_at = $2 WHERE id = $3`
-	_, err := r.db.Exec(query, time.Now(), time.Now(), userID)
+	_, err := r.db.ExecContext(ctx, query, time.Now(), time.Now(), userID)
 	return err
 }
 
 // GetDecryptedGoogleTokens retrieves and decrypts a user's Google OAuth tokens
-func (r *UserRepository) GetDecryptedGoogleTokens(userID int) (accessToken, refreshToken string, expiry *time.Time, err error) {
+func (r *UserRepository) GetDecryptedGoogleTokens(ctx context.Context, userID int) (accessToken, refreshToken string, expiry *time.Time, err error) {
 	query := `
 		SELECT google_access_token, google_refresh_token, google_token_expiry
 		FROM users WHERE id = $1
 	`
 
 	var encryptedAccessToken, encryptedRefreshToken []byte
-	err = r.db.QueryRow(query, userID).Scan(&encryptedAccessToken, &encryptedRefreshToken, &expiry)
+	err = r.db.QueryRowContext(ctx, query, userID).Scan(&encryptedAccessToken, &encryptedRefreshToken, &expiry)
 	if err != nil {
 		return "", "", nil, err
 	}
