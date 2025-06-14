@@ -246,6 +246,9 @@ func loadFromSecretManager() (*Config, error) {
 		// Redis components (for URL construction if needed)
 		RedisHost: getEnv("REDIS_HOST", "localhost"),
 		RedisPort: getEnv("REDIS_PORT", "6379"),
+
+		// Fail-fast
+		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
 	}
 
 	// Build database URL if not provided from secrets
