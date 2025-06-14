@@ -3,11 +3,31 @@ package database
 import (
 	"context"
 	"database/sql"
+	"regexp"
 	"testing"
 	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 )
+
+const getSessionByIDQuery = `
+		SELECT id, user_id, session_token, user_agent, ip_address,
+			   created_at, expires_at, last_used_at, is_active
+		FROM user_sessions 
+		WHERE id = $1 AND is_active = true AND expires_at > $2
+	`
+
+const createSessionQuery = `
+		INSERT INTO user_sessions (
+			user_id, session_token, user_agent, ip_address, 
+			created_at, expires_at, last_used_at, is_active
+		) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+		RETURNING id, created_at, last_used_at
+	`
+
+const updateSessionTokenQuery = `UPDATE user_sessions SET session_token = $1 WHERE id = $2`
+
+const deactivateSessionQuery = `UPDATE user_sessions SET is_active = false WHERE id = $1`
 
 func setupTestDB(t *testing.T) (*sql.DB, sqlmock.Sqlmock) {
 	db, mock, err := sqlmock.New()
@@ -37,7 +57,7 @@ func TestGetSessionByID(t *testing.T) {
 		isActive := true
 
 		// Set up mock expectation for GetSessionByID query
-		mock.ExpectQuery(`SELECT id, user_id, session_token, user_agent, ip_address, created_at, expires_at, last_used_at, is_active FROM user_sessions WHERE id = \$1 AND is_active = true AND expires_at > \$2`).
+		mock.ExpectQuery(regexp.QuoteMeta(getSessionByIDQuery)).
 			WithArgs(sessionID, sqlmock.AnyArg()).
 			WillReturnRows(sqlmock.NewRows([]string{
 				"id", "user_id", "session_token", "user_agent", "ip_address",
@@ -84,7 +104,7 @@ func TestGetSessionByID(t *testing.T) {
 		ctx := context.Background()
 
 		// Set up mock expectation for non-existent session
-		mock.ExpectQuery(`SELECT id, user_id, session_token, user_agent, ip_address, created_at, expires_at, last_used_at, is_active FROM user_sessions WHERE id = \$1 AND is_active = true AND expires_at > \$2`).
+		mock.ExpectQuery(regexp.QuoteMeta(getSessionByIDQuery)).
 			WithArgs(99999, sqlmock.AnyArg()).
 			WillReturnError(sql.ErrNoRows)
 
@@ -112,7 +132,7 @@ func TestGetSessionByID(t *testing.T) {
 		ctx := context.Background()
 
 		// Set up mock expectation for expired session (should return no rows because of expires_at check)
-		mock.ExpectQuery(`SELECT id, user_id, session_token, user_agent, ip_address, created_at, expires_at, last_used_at, is_active FROM user_sessions WHERE id = \$1 AND is_active = true AND expires_at > \$2`).
+		mock.ExpectQuery(regexp.QuoteMeta(getSessionByIDQuery)).
 			WithArgs(456, sqlmock.AnyArg()).
 			WillReturnError(sql.ErrNoRows)
 
@@ -140,7 +160,7 @@ func TestGetSessionByID(t *testing.T) {
 		ctx := context.Background()
 
 		// Set up mock expectation for inactive session (should return no rows because of is_active check)
-		mock.ExpectQuery(`SELECT id, user_id, session_token, user_agent, ip_address, created_at, expires_at, last_used_at, is_active FROM user_sessions WHERE id = \$1 AND is_active = true AND expires_at > \$2`).
+		mock.ExpectQuery(regexp.QuoteMeta(getSessionByIDQuery)).
 			WithArgs(789, sqlmock.AnyArg()).
 			WillReturnError(sql.ErrNoRows)
 
@@ -168,7 +188,7 @@ func TestGetSessionByID(t *testing.T) {
 		ctx := context.Background()
 
 		// Set up mock expectation for database error
-		mock.ExpectQuery(`SELECT id, user_id, session_token, user_agent, ip_address, created_at, expires_at, last_used_at, is_active FROM user_sessions WHERE id = \$1 AND is_active = true AND expires_at > \$2`).
+		mock.ExpectQuery(regexp.QuoteMeta(getSessionByIDQuery)).
 			WithArgs(123, sqlmock.AnyArg()).
 			WillReturnError(sql.ErrConnDone)
 
@@ -208,7 +228,8 @@ func TestCreateSession(t *testing.T) {
 		lastUsedAt := time.Now()
 
 		// Set up mock expectation for CreateSession query
-		mock.ExpectQuery(`INSERT INTO user_sessions`).
+		// Note: CreateSession only returns "id", "created_at", "last_used_at" columns in RETURNING clause
+		mock.ExpectQuery(regexp.QuoteMeta(createSessionQuery)).
 			WithArgs(userID, sessionToken, userAgent, ipAddress, sqlmock.AnyArg(), expiresAt, sqlmock.AnyArg(), true).
 			WillReturnRows(sqlmock.NewRows([]string{"id", "created_at", "last_used_at"}).
 				AddRow(returnedSessionID, createdAt, lastUsedAt))
@@ -239,6 +260,35 @@ func TestCreateSession(t *testing.T) {
 			t.Errorf("Expected user ID %d, got %d", userID, session.UserID)
 		}
 
+		if session.SessionToken != sessionToken {
+			t.Errorf("Expected session token %s, got %s", sessionToken, session.SessionToken)
+		}
+
+		if session.UserAgent == nil || *session.UserAgent != *userAgent {
+			t.Errorf("Expected user agent %v, got %v", userAgent, session.UserAgent)
+		}
+
+		if session.IPAddress == nil || *session.IPAddress != *ipAddress {
+			t.Errorf("Expected IP address %v, got %v", ipAddress, session.IPAddress)
+		}
+
+		if !session.ExpiresAt.Equal(expiresAt) {
+			t.Errorf("Expected expires at %v, got %v", expiresAt, session.ExpiresAt)
+		}
+
+		if !session.IsActive {
+			t.Error("Expected session to be active")
+		}
+
+		// Verify the returned timestamps match what was mocked
+		if !session.CreatedAt.Equal(createdAt) {
+			t.Errorf("Expected created at %v, got %v", createdAt, session.CreatedAt)
+		}
+
+		if !session.LastUsedAt.Equal(lastUsedAt) {
+			t.Errorf("Expected last used at %v, got %v", lastUsedAt, session.LastUsedAt)
+		}
+
 		// Verify all expectations were met
 		if err := mock.ExpectationsWereMet(); err != nil {
 			t.Errorf("Unfulfilled expectations: %s", err)
@@ -258,7 +308,7 @@ func TestUpdateSessionToken(t *testing.T) {
 		newToken := "new-token-456"
 
 		// Set up mock expectation for UpdateSessionToken query
-		mock.ExpectExec(`UPDATE user_sessions SET session_token = \$1 WHERE id = \$2`).
+		mock.ExpectExec(regexp.QuoteMeta(updateSessionTokenQuery)).
 			WithArgs(newToken, sessionID).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
@@ -286,7 +336,7 @@ func TestDeactivateSession(t *testing.T) {
 		sessionID := 1
 
 		// Set up mock expectation for DeactivateSession query
-		mock.ExpectExec(`UPDATE user_sessions SET is_active = false WHERE id = \$1`).
+		mock.ExpectExec(regexp.QuoteMeta(deactivateSessionQuery)).
 			WithArgs(sessionID).
 			WillReturnResult(sqlmock.NewResult(0, 1))
 
