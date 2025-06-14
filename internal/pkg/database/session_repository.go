@@ -69,7 +69,7 @@ func (r *SessionRepository) GetSessionByID(ctx context.Context, sessionID int) (
 		SELECT id, user_id, session_token, user_agent, ip_address,
 			   created_at, expires_at, last_used_at, is_active
 		FROM user_sessions 
-		WHERE id = $1 AND expires_at > $2
+		WHERE id = $1 AND is_active = true AND expires_at > $2
 	`
 
 	var session UserSession

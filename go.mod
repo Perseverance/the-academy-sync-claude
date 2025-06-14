@@ -12,6 +12,8 @@ require (
 	github.com/lib/pq v1.10.9
 )
 
+require github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
+
 require (
 	cloud.google.com/go/auth v0.16.0 // indirect
 	cloud.google.com/go/auth/oauth2adapt v0.2.8 // indirect
