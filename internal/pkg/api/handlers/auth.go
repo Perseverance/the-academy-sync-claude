@@ -225,10 +225,11 @@ func (h *AuthHandler) createUserSession(w http.ResponseWriter, r *http.Request, 
 		return err
 	}
 
-	// Update session with correct JWT token
-	sessionReq.SessionToken = jwtToken
-	// Note: In a real implementation, you might want to update the session record
-	// For now, we'll proceed with the new token
+	// Update session with correct JWT token in database
+	err = h.sessionRepository.UpdateSessionToken(r.Context(), session.ID, jwtToken)
+	if err != nil {
+		return err
+	}
 
 	// Set JWT as HttpOnly cookie
 	domain, sameSite, secure := h.getCookieConfig()

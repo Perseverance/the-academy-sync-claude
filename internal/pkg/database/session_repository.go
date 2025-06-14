@@ -96,6 +96,13 @@ func (r *SessionRepository) UpdateSessionLastUsed(ctx context.Context, sessionID
 	return err
 }
 
+// UpdateSessionToken updates the session token for an existing session
+func (r *SessionRepository) UpdateSessionToken(ctx context.Context, sessionID int, newToken string) error {
+	query := `UPDATE user_sessions SET session_token = $1 WHERE id = $2`
+	_, err := r.db.ExecContext(ctx, query, newToken, sessionID)
+	return err
+}
+
 // DeactivateSession marks a session as inactive (logout)
 func (r *SessionRepository) DeactivateSession(ctx context.Context, sessionID int) error {
 	query := `UPDATE user_sessions SET is_active = false WHERE id = $1`
