@@ -26,21 +26,25 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	
+	// Validate critical dependencies - DATABASE_URL is required for automation engine
+	if cfg.DatabaseURL == "" {
+		log.Critical("Critical dependency validation failed: DATABASE_URL not configured")
+		return fmt.Errorf("DATABASE_URL is required but not configured")
+	}
+
 	// For automation engine, database connectivity is critical for job processing
-	if cfg.DatabaseURL != "" {
-		err := retry.WithExponentialBackoff(ctx, retry.CriticalConfig(), log, "database_health_check", func() error {
-			result := healthChecker.CheckDatabaseConnection(ctx, cfg.DatabaseURL)
-			if !result.IsHealthy() {
-				return fmt.Errorf("database health check failed: %w", result.Error)
-			}
-			return nil
-		})
-		
-		if err != nil {
-			log.Critical("Critical dependency failed: Database connection unavailable after retries", 
-				"error", err.Error())
-			return fmt.Errorf("database dependency check failed: %w", err)
+	err := retry.WithExponentialBackoff(ctx, retry.CriticalConfig(), log, "database_health_check", func() error {
+		result := healthChecker.CheckDatabaseConnection(ctx, cfg.DatabaseURL)
+		if !result.IsHealthy() {
+			return fmt.Errorf("database health check failed: %w", result.Error)
 		}
+		return nil
+	})
+	
+	if err != nil {
+		log.Critical("Critical dependency failed: Database connection unavailable after retries", 
+			"error", err.Error())
+		return fmt.Errorf("database dependency check failed: %w", err)
 	}
 	
 	// TODO: Add Redis health check when Redis connectivity is implemented

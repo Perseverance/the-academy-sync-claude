@@ -57,6 +57,9 @@ type Config struct {
 
 	// GCP configuration
 	GCPProjectID string `json:"gcp_project_id"`
+
+	// Fail-fast configuration
+	FailFastEnabled bool `json:"fail_fast_enabled"`
 }
 
 // Load loads configuration based on the environment.
@@ -121,6 +124,9 @@ func loadFromEnv() (*Config, error) {
 
 		// GCP
 		GCPProjectID: getEnv("GCP_PROJECT_ID", ""),
+
+		// Fail-fast
+		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
 	}
 
 	// Build database URL if not provided
@@ -337,6 +343,9 @@ func loadFromEnvForProduction() (*Config, error) {
 
 		// GCP
 		GCPProjectID: getEnv("GCP_PROJECT_ID", ""),
+
+		// Fail-fast
+		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
 	}
 
 	// Build database URL if not provided
@@ -432,6 +441,19 @@ func (c *Config) validate() error {
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+// getEnvBool gets a boolean environment variable with a fallback default value.
+func getEnvBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		switch strings.ToLower(value) {
+		case "true", "1", "yes", "on":
+			return true
+		case "false", "0", "no", "off":
+			return false
+		}
 	}
 	return defaultValue
 }
