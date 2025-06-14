@@ -1,13 +1,60 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
 
+	_ "github.com/lib/pq"
+
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/config"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
 )
+
+// performStartupHealthChecks validates critical dependencies and fails fast if any are unavailable
+// This function implements the US046 fail-fast mechanism for automation engine dependencies
+func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
+	log.Info("Starting dependency health checks")
+	
+	// Create health checker
+	healthChecker := health.NewHealthChecker(log)
+	
+	// Create context with timeout for all health checks
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	
+	// Validate critical dependencies - DATABASE_URL is required for automation engine
+	if cfg.DatabaseURL == "" {
+		log.Critical("Critical dependency validation failed: DATABASE_URL not configured")
+		return fmt.Errorf("DATABASE_URL is required but not configured")
+	}
+
+	// For automation engine, database connectivity is critical for job processing
+	err := retry.WithExponentialBackoff(ctx, retry.CriticalConfig(), log, "database_health_check", func() error {
+		result := healthChecker.CheckDatabaseConnection(ctx, cfg.DatabaseURL)
+		if !result.IsHealthy() {
+			return fmt.Errorf("database health check failed: %w", result.Error)
+		}
+		return nil
+	})
+	
+	if err != nil {
+		log.Critical("Critical dependency failed: Database connection unavailable after retries", 
+			"error", err.Error())
+		return fmt.Errorf("database dependency check failed: %w", err)
+	}
+	
+	// TODO: Add Redis health check when Redis connectivity is implemented
+	// if cfg.RedisURL != "" {
+	//     // Redis health check logic here
+	// }
+	
+	log.Info("All critical dependency health checks passed successfully")
+	return nil
+}
 
 func main() {
 	// Load configuration using hybrid loading strategy
@@ -28,6 +75,14 @@ func main() {
 		"database_configured", cfg.DatabaseURL != "",
 		"redis_configured", cfg.RedisURL != "",
 		"strava_oauth_configured", cfg.StravaClientID != "" && cfg.StravaClientSecret != "")
+
+	// Dependency Health Check - US046 Fail Fast Mechanism
+	// Validate critical dependencies before starting processing loop
+	if err := performStartupHealthChecks(cfg, log); err != nil {
+		log.Critical("Startup dependency health checks failed - automation engine cannot continue", 
+			"error", err.Error())
+		os.Exit(2) // Exit code 2 indicates dependency failure
+	}
 
 	for {
 		log.Debug("Processing job queue", "environment", cfg.Environment)
