@@ -66,7 +66,7 @@ func main() {
 	sessionRepository := database.NewSessionRepository(db)
 
 	// Initialize middleware
-	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository, oauthService, userRepository)
+	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository, oauthService, userRepository, log.WithContext("component", "auth_middleware"))
 
 	// Initialize handlers
 	// Determine if running in development mode
