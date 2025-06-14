@@ -111,6 +111,6 @@ type ActivityLog struct {
 
 // DashboardUserResponse represents user data with dashboard-specific additions
 type DashboardUserResponse struct {
-	*PublicUser                        `json:",inline"`
+	*PublicUser
 	RecentActivityLogs []ActivityLog  `json:"recent_activity_logs"`
 }

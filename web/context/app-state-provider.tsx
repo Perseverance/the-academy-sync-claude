@@ -245,12 +245,18 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }
 
 
-  // Load mock logs
+  // Load mock logs only if no real logs are present
   useEffect(() => {
-    if (state.user) {
+    if (state.user && state.activityLogs.length === 0) {
       setState((s) => ({ ...s, isLogsLoading: true }))
       setTimeout(() => {
-        setState((s) => ({ ...s, activityLogs: mockLogs, isLogsLoading: false }))
+        setState((s) => {
+          // Only set mock logs if still no real logs present
+          if (s.activityLogs.length === 0) {
+            return { ...s, activityLogs: mockLogs, isLogsLoading: false }
+          }
+          return { ...s, isLogsLoading: false }
+        })
       }, 1000)
     }
   }, [state.user])
