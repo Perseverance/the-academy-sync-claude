@@ -63,6 +63,32 @@ func (r *SessionRepository) CreateSession(ctx context.Context, req *CreateSessio
 	return &session, nil
 }
 
+// GetSessionByID retrieves a session by its ID
+func (r *SessionRepository) GetSessionByID(ctx context.Context, sessionID int) (*UserSession, error) {
+	query := `
+		SELECT id, user_id, session_token, user_agent, ip_address,
+			   created_at, expires_at, last_used_at, is_active
+		FROM user_sessions 
+		WHERE id = $1 AND expires_at > $2
+	`
+
+	var session UserSession
+	err := r.db.QueryRowContext(ctx, query, sessionID, time.Now()).Scan(
+		&session.ID, &session.UserID, &session.SessionToken,
+		&session.UserAgent, &session.IPAddress,
+		&session.CreatedAt, &session.ExpiresAt, &session.LastUsedAt, &session.IsActive,
+	)
+
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil // Session not found or expired
+		}
+		return nil, err
+	}
+
+	return &session, nil
+}
+
 // GetSessionByToken retrieves a session by its token
 func (r *SessionRepository) GetSessionByToken(ctx context.Context, token string) (*UserSession, error) {
 	query := `
