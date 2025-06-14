@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"time"
 )
@@ -16,7 +17,7 @@ func NewSessionRepository(db *sql.DB) *SessionRepository {
 }
 
 // CreateSession creates a new user session in the database
-func (r *SessionRepository) CreateSession(req *CreateSessionRequest) (*UserSession, error) {
+func (r *SessionRepository) CreateSession(ctx context.Context, req *CreateSessionRequest) (*UserSession, error) {
 	query := `
 		INSERT INTO user_sessions (
 			user_id, session_token, user_agent, ip_address, 
@@ -30,7 +31,8 @@ func (r *SessionRepository) CreateSession(req *CreateSessionRequest) (*UserSessi
 	var id int
 	var createdAt, lastUsedAt time.Time
 
-	err := r.db.QueryRow(
+	err := r.db.QueryRowContext(
+		ctx,
 		query,
 		req.UserID,
 		req.SessionToken,
@@ -62,7 +64,7 @@ func (r *SessionRepository) CreateSession(req *CreateSessionRequest) (*UserSessi
 }
 
 // GetSessionByToken retrieves a session by its token
-func (r *SessionRepository) GetSessionByToken(token string) (*UserSession, error) {
+func (r *SessionRepository) GetSessionByToken(ctx context.Context, token string) (*UserSession, error) {
 	query := `
 		SELECT id, user_id, session_token, user_agent, ip_address,
 			   created_at, expires_at, last_used_at, is_active
@@ -71,7 +73,7 @@ func (r *SessionRepository) GetSessionByToken(token string) (*UserSession, error
 	`
 
 	var session UserSession
-	err := r.db.QueryRow(query, token, time.Now()).Scan(
+	err := r.db.QueryRowContext(ctx, query, token, time.Now()).Scan(
 		&session.ID, &session.UserID, &session.SessionToken,
 		&session.UserAgent, &session.IPAddress,
 		&session.CreatedAt, &session.ExpiresAt, &session.LastUsedAt, &session.IsActive,
@@ -88,35 +90,35 @@ func (r *SessionRepository) GetSessionByToken(token string) (*UserSession, error
 }
 
 // UpdateSessionLastUsed updates the last used timestamp for a session
-func (r *SessionRepository) UpdateSessionLastUsed(sessionID int) error {
+func (r *SessionRepository) UpdateSessionLastUsed(ctx context.Context, sessionID int) error {
 	query := `UPDATE user_sessions SET last_used_at = $1 WHERE id = $2`
-	_, err := r.db.Exec(query, time.Now(), sessionID)
+	_, err := r.db.ExecContext(ctx, query, time.Now(), sessionID)
 	return err
 }
 
 // DeactivateSession marks a session as inactive (logout)
-func (r *SessionRepository) DeactivateSession(sessionID int) error {
+func (r *SessionRepository) DeactivateSession(ctx context.Context, sessionID int) error {
 	query := `UPDATE user_sessions SET is_active = false WHERE id = $1`
-	_, err := r.db.Exec(query, sessionID)
+	_, err := r.db.ExecContext(ctx, query, sessionID)
 	return err
 }
 
 // DeactivateAllUserSessions marks all sessions for a user as inactive
-func (r *SessionRepository) DeactivateAllUserSessions(userID int) error {
+func (r *SessionRepository) DeactivateAllUserSessions(ctx context.Context, userID int) error {
 	query := `UPDATE user_sessions SET is_active = false WHERE user_id = $1`
-	_, err := r.db.Exec(query, userID)
+	_, err := r.db.ExecContext(ctx, query, userID)
 	return err
 }
 
 // CleanupExpiredSessions removes expired sessions from the database
-func (r *SessionRepository) CleanupExpiredSessions() error {
+func (r *SessionRepository) CleanupExpiredSessions(ctx context.Context) error {
 	query := `DELETE FROM user_sessions WHERE expires_at < $1`
-	_, err := r.db.Exec(query, time.Now())
+	_, err := r.db.ExecContext(ctx, query, time.Now())
 	return err
 }
 
 // GetUserActiveSessions retrieves all active sessions for a user
-func (r *SessionRepository) GetUserActiveSessions(userID int) ([]*UserSession, error) {
+func (r *SessionRepository) GetUserActiveSessions(ctx context.Context, userID int) ([]*UserSession, error) {
 	query := `
 		SELECT id, user_id, session_token, user_agent, ip_address,
 			   created_at, expires_at, last_used_at, is_active
@@ -125,7 +127,7 @@ func (r *SessionRepository) GetUserActiveSessions(userID int) ([]*UserSession, e
 		ORDER BY last_used_at DESC
 	`
 
-	rows, err := r.db.Query(query, userID, time.Now())
+	rows, err := r.db.QueryContext(ctx, query, userID, time.Now())
 	if err != nil {
 		return nil, err
 	}

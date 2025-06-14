@@ -110,7 +110,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if user already exists
-	existingUser, err := h.userRepository.GetUserByGoogleID(userInfo.ID)
+	existingUser, err := h.userRepository.GetUserByGoogleID(r.Context(), userInfo.ID)
 	if err != nil {
 		http.Error(w, "Database error", http.StatusInternalServerError)
 		return
@@ -129,7 +129,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			UpdateLastLogin:    true, // Update last login in same transaction
 		}
 
-		if err := h.userRepository.UpdateUserTokens(updateReq); err != nil {
+		if err := h.userRepository.UpdateUserTokens(r.Context(), updateReq); err != nil {
 			http.Error(w, "Failed to update user tokens", http.StatusInternalServerError)
 			return
 		}
@@ -145,7 +145,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			GoogleTokenExpiry:  &token.Expiry,
 		}
 
-		user, err = h.userRepository.CreateUser(createReq)
+		user, err = h.userRepository.CreateUser(r.Context(), createReq)
 		if err != nil {
 			http.Error(w, "Failed to create user", http.StatusInternalServerError)
 			return
@@ -184,7 +184,7 @@ func (h *AuthHandler) createUserSession(w http.ResponseWriter, r *http.Request, 
 
 	sessionReq.SessionToken = jwtToken
 
-	session, err := h.sessionRepository.CreateSession(sessionReq)
+	session, err := h.sessionRepository.CreateSession(r.Context(), sessionReq)
 	if err != nil {
 		return err
 	}
@@ -223,7 +223,7 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.userRepository.GetUserByID(userID)
+	user, err := h.userRepository.GetUserByID(r.Context(), userID)
 	if err != nil {
 		http.Error(w, "Failed to get user", http.StatusInternalServerError)
 		return
@@ -246,7 +246,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	sessionID, ok := middleware.GetSessionIDFromContext(r.Context())
 	if ok {
 		// Deactivate session in database
-		h.sessionRepository.DeactivateSession(sessionID)
+		h.sessionRepository.DeactivateSession(r.Context(), sessionID)
 	}
 
 	// Clear session cookie

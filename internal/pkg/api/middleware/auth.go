@@ -58,7 +58,7 @@ func (a *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 		}
 
 		// Verify session still exists and is active in database
-		session, err := a.sessionRepository.GetSessionByToken(cookie.Value)
+		session, err := a.sessionRepository.GetSessionByToken(r.Context(), cookie.Value)
 		if err != nil {
 			http.Error(w, "Unauthorized: Session validation error", http.StatusUnauthorized)
 			return
@@ -70,7 +70,7 @@ func (a *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 		}
 
 		// Update session last used timestamp
-		if err := a.sessionRepository.UpdateSessionLastUsed(session.ID); err != nil {
+		if err := a.sessionRepository.UpdateSessionLastUsed(r.Context(), session.ID); err != nil {
 			// Log error but don't fail the request
 			// In production, you'd use a proper logger here
 		}
@@ -127,7 +127,7 @@ func (a *AuthMiddleware) OptionalAuth(next http.Handler) http.Handler {
 		}
 
 		// Try to verify session exists and is active
-		session, err := a.sessionRepository.GetSessionByToken(cookie.Value)
+		session, err := a.sessionRepository.GetSessionByToken(r.Context(), cookie.Value)
 		if err != nil || session == nil {
 			// Session not found or error, continue without authentication
 			next.ServeHTTP(w, r)
@@ -135,7 +135,7 @@ func (a *AuthMiddleware) OptionalAuth(next http.Handler) http.Handler {
 		}
 
 		// Update session last used timestamp
-		a.sessionRepository.UpdateSessionLastUsed(session.ID)
+		a.sessionRepository.UpdateSessionLastUsed(r.Context(), session.ID)
 
 		// Add user information to request context
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
@@ -206,7 +206,7 @@ func (a *AuthMiddleware) checkAndRefreshOAuthTokens(ctx context.Context, userID 
 	}
 
 	// Get user from database to check token expiry
-	user, err := a.userRepository.GetUserByID(userID)
+	user, err := a.userRepository.GetUserByID(ctx, userID)
 	if err != nil || user == nil {
 		return // User not found or error
 	}
@@ -266,7 +266,7 @@ func (a *AuthMiddleware) refreshGoogleOAuthToken(ctx context.Context, user *data
 	}
 
 	// Update in database (ignore errors since this is background operation)
-	a.userRepository.UpdateUserTokens(updateReq)
+	a.userRepository.UpdateUserTokens(ctx, updateReq)
 }
 
 // refreshStravaOAuthToken refreshes the user's Strava OAuth token
