@@ -4,12 +4,7 @@ import type React from "react"
 import { createContext, useContext, useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import type { LogEntry } from "@/components/activity-log" // Assuming LogEntry type is in ActivityLog
-
-interface User {
-  email: string
-  name: string
-  avatarUrl?: string
-}
+import { authService, type User } from "@/services/auth"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
 export type SpreadsheetConfigStatus = "Configured" | "NotConfigured" | "Disabled"
@@ -80,15 +75,30 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     isLogsLoading: true,
   })
 
-  // Authentication
+
+  // Authentication - Check session with backend
   useEffect(() => {
-    // Simulate checking stored auth state
-    const storedUser = localStorage.getItem("appUser")
-    if (storedUser) {
-      setState((s) => ({ ...s, user: JSON.parse(storedUser), isAuthLoading: false }))
-    } else {
-      setState((s) => ({ ...s, isAuthLoading: false }))
+    const checkAuthStatus = async () => {
+      try {
+        const { isAuthenticated, user } = await authService.checkAuthStatus()
+        setState((s) => ({ 
+          ...s, 
+          user: user, 
+          isAuthLoading: false,
+          googleStatus: isAuthenticated ? "Connected" : "NotConnected",
+          // Initialize Strava status based on user data
+          stravaStatus: user?.has_strava_connection ? "Connected" : "NotConnected",
+          // Initialize spreadsheet status based on user data
+          spreadsheetStatus: user?.has_sheets_connection ? "Configured" : 
+                             user?.has_strava_connection ? "NotConfigured" : "Disabled"
+        }))
+      } catch (error) {
+        console.error('Error checking auth status:', error)
+        setState((s) => ({ ...s, isAuthLoading: false }))
+      }
     }
+
+    checkAuthStatus()
   }, [])
 
   useEffect(() => {
@@ -134,32 +144,37 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const signIn = async () => {
     setState((s) => ({ ...s, isAuthLoading: true }))
-    await new Promise((resolve) => setTimeout(resolve, 1000)) // Simulate API call
-    const mockUser: User = {
-      email: "user@example.com",
-      name: "Demo User",
-      avatarUrl: "/placeholder.svg?width=40&height=40",
+    try {
+      // Initiate Google OAuth flow - this will redirect to Google
+      await authService.initiateGoogleOAuth()
+      // Note: After successful OAuth, user will be redirected back to our app
+      // The auth status will be checked again by the useEffect above
+    } catch (error) {
+      console.error('Error during sign in:', error)
+      setState((s) => ({ ...s, isAuthLoading: false }))
     }
-    localStorage.setItem("appUser", JSON.stringify(mockUser))
-    setState((s) => ({
-      ...s,
-      user: mockUser,
-      isAuthLoading: false,
-      googleStatus: "Connected", // Google connected by default on sign-in
-      // Reset other states to initial for new session as per flow
+  }
+
+  const signOut = async () => {
+    try {
+      await authService.signOut()
+    } catch (error) {
+      console.error('Error during sign out:', error)
+    }
+    
+    // Clear local state regardless of API call success
+    setState((s) => ({ 
+      ...s, 
+      user: null,
+      googleStatus: "NotConnected",
       stravaStatus: "NotConnected",
       stravaUserName: undefined,
       stravaAvatarUrl: undefined,
       spreadsheetStatus: "Disabled",
       spreadsheetUrl: undefined,
       manualSyncStatus: "Disabled",
+      activityLogs: []
     }))
-    router.push("/dashboard")
-  }
-
-  const signOut = () => {
-    localStorage.removeItem("appUser")
-    setState((s) => ({ ...s, user: null }))
     router.push("/")
   }
 
@@ -225,6 +240,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const setGoogleStatus = (status: ServiceStatus) => {
     setState((s) => ({ ...s, googleStatus: status }))
   }
+
 
   // Load mock logs
   useEffect(() => {

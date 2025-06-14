@@ -151,6 +151,7 @@ func TestValidateConfig(t *testing.T) {
 				Environment: "production",
 				Port:        "8080",
 				JWTSecret:   "secret",
+				EncryptionSecret: "this-is-a-32-character-encryption-secret-key",
 			},
 			expectError: false,
 		},
@@ -178,6 +179,26 @@ func TestValidateConfig(t *testing.T) {
 			},
 			expectError: true,
 			errorMsg:    "JWT_SECRET is required in production",
+		},
+		{
+			name: "production without encryption secret",
+			config: Config{
+				Environment: "production",
+				Port:        "8080",
+				JWTSecret:   "secret",
+			},
+			expectError: true,
+			errorMsg:    "ENCRYPTION_SECRET is required in production",
+		},
+		{
+			name: "encryption secret too short",
+			config: Config{
+				Environment: "local",
+				Port:        "8080",
+				EncryptionSecret: "short",
+			},
+			expectError: true,
+			errorMsg:    "ENCRYPTION_SECRET should be at least 32 characters",
 		},
 		{
 			name: "invalid port",
@@ -361,7 +382,7 @@ func TestLoadFromEnvForProduction(t *testing.T) {
 	// Save original environment
 	originalEnv := make(map[string]string)
 	testEnvVars := []string{
-		"APP_ENV", "PORT", "DATABASE_URL", "JWT_SECRET",
+		"APP_ENV", "PORT", "DATABASE_URL", "JWT_SECRET", "ENCRYPTION_SECRET",
 	}
 
 	for _, key := range testEnvVars {
@@ -381,10 +402,11 @@ func TestLoadFromEnvForProduction(t *testing.T) {
 
 	// Set test environment variables
 	testValues := map[string]string{
-		"APP_ENV":      "production",
-		"PORT":         "9090",
-		"DATABASE_URL": "postgres://test:test@localhost:5432/test",
-		"JWT_SECRET":   "production-secret",
+		"APP_ENV":           "production",
+		"PORT":              "9090",
+		"DATABASE_URL":      "postgres://test:test@localhost:5432/test",
+		"JWT_SECRET":        "production-secret",
+		"ENCRYPTION_SECRET": "this-is-a-32-character-encryption-secret-key",
 	}
 
 	for key, value := range testValues {
@@ -416,6 +438,7 @@ func TestLoadFromSecretManagerFallback(t *testing.T) {
 	originalGCPProject := os.Getenv("GCP_PROJECT_ID")
 	originalAppEnv := os.Getenv("APP_ENV")
 	originalJWT := os.Getenv("JWT_SECRET")
+	originalEncryption := os.Getenv("ENCRYPTION_SECRET")
 
 	// Clean up after test
 	defer func() {
@@ -434,6 +457,11 @@ func TestLoadFromSecretManagerFallback(t *testing.T) {
 		} else {
 			os.Unsetenv("JWT_SECRET")
 		}
+		if originalEncryption != "" {
+			os.Setenv("ENCRYPTION_SECRET", originalEncryption)
+		} else {
+			os.Unsetenv("ENCRYPTION_SECRET")
+		}
 	}()
 
 	// Test case 1: Missing GCP_PROJECT_ID should return error
@@ -451,6 +479,7 @@ func TestLoadFromSecretManagerFallback(t *testing.T) {
 	os.Setenv("GCP_PROJECT_ID", "test-project")
 	os.Setenv("APP_ENV", "production")
 	os.Setenv("JWT_SECRET", "fallback-secret")
+	os.Setenv("ENCRYPTION_SECRET", "this-is-a-32-character-encryption-secret-key")
 
 	config, err := loadFromSecretManager()
 	if err != nil {
