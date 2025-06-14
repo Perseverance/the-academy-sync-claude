@@ -29,7 +29,7 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 	// For notification service, database connectivity is optional but recommended
 	// Only enforce it if explicitly configured
 	if cfg.DatabaseURL != "" {
-		err := retry.WithExponentialBackoff(ctx, retry.DefaultConfig(), log, "database_health_check", func() error {
+		err := retry.WithExponentialBackoff(ctx, retry.CriticalConfig(), log, "database_health_check", func() error {
 			result := healthChecker.CheckDatabaseConnection(ctx, cfg.DatabaseURL)
 			if !result.IsHealthy() {
 				return fmt.Errorf("database health check failed: %w", result.Error)
