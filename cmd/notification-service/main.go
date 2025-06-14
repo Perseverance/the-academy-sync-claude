@@ -2,26 +2,35 @@ package main
 
 import (
 	"fmt"
-	"log"
+	"os"
 	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/config"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 )
 
 func main() {
 	// Load configuration using hybrid loading strategy
 	cfg, err := config.Load()
 	if err != nil {
-		log.Fatalf("Failed to load configuration: %v", err)
+		// Use fallback logging before structured logger is available
+		fmt.Printf("ERROR: Failed to load configuration: %v\n", err)
+		os.Exit(1)
 	}
 
-	log.Printf("Notification Service starting in %s environment", cfg.Environment)
-	log.Printf("Database URL configured: %t", cfg.DatabaseURL != "")
-	log.Printf("Redis URL configured: %t", cfg.RedisURL != "")
-	log.Printf("SMTP configured: %t", cfg.SMTPHost != "" && cfg.SMTPUsername != "")
+	// Initialize structured logger
+	log := logger.New("notification-service")
+
+	log.Info("Notification Service starting", 
+		"environment", cfg.Environment,
+		"log_level", cfg.LogLevel)
+	log.Info("Configuration status", 
+		"database_configured", cfg.DatabaseURL != "",
+		"redis_configured", cfg.RedisURL != "",
+		"smtp_configured", cfg.SMTPHost != "" && cfg.SMTPUsername != "")
 
 	for {
-		fmt.Printf("Notification Service is processing notifications in %s environment...\n", cfg.Environment)
+		log.Debug("Processing notification queue", "environment", cfg.Environment)
 		time.Sleep(30 * time.Second)
 	}
 }
