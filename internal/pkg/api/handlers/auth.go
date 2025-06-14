@@ -367,17 +367,24 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Return public user data (no sensitive tokens)
+	// Return public user data with dashboard additions (no sensitive tokens)
 	publicUser := user.ToPublicUser()
+	
+	// Create dashboard response with empty activity logs (UI uses mocked data for now)
+	dashboardResponse := &database.DashboardUserResponse{
+		PublicUser:         publicUser,
+		RecentActivityLogs: []database.ActivityLog{}, // Empty for now, will be populated in future stories
+	}
 	
 	h.logger.Debug("Returning user information", 
 		"user_id", user.ID,
 		"has_strava_connection", publicUser.HasStravaConnection,
 		"has_sheets_connection", publicUser.HasSheetsConnection,
-		"timezone", user.Timezone)
+		"timezone", user.Timezone,
+		"activity_logs_count", len(dashboardResponse.RecentActivityLogs))
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(publicUser); err != nil {
+	if err := json.NewEncoder(w).Encode(dashboardResponse); err != nil {
 		h.logger.Error("Failed to encode user data response", 
 			"error", err, 
 			"user_id", user.ID,
