@@ -20,6 +20,7 @@ type AuthHandler struct {
 	userRepository    *database.UserRepository
 	sessionRepository *database.SessionRepository
 	frontendURL       string
+	isDevelopment     bool
 }
 
 // NewAuthHandler creates a new authentication handler
@@ -29,6 +30,7 @@ func NewAuthHandler(
 	userRepository *database.UserRepository,
 	sessionRepository *database.SessionRepository,
 	frontendURL string,
+	isDevelopment bool,
 ) *AuthHandler {
 	return &AuthHandler{
 		oauthService:      oauthService,
@@ -36,7 +38,18 @@ func NewAuthHandler(
 		userRepository:    userRepository,
 		sessionRepository: sessionRepository,
 		frontendURL:       frontendURL,
+		isDevelopment:     isDevelopment,
 	}
+}
+
+// getCookieConfig returns appropriate cookie configuration for the environment
+func (h *AuthHandler) getCookieConfig() (domain string, sameSite http.SameSite, secure bool) {
+	if h.isDevelopment {
+		// Development: Allow cross-port access on localhost
+		return "localhost", http.SameSiteNoneMode, false
+	}
+	// Production: Use secure settings
+	return "", http.SameSiteLaxMode, true
 }
 
 // GoogleAuthURL generates and returns the Google OAuth authorization URL
@@ -45,15 +58,16 @@ func (h *AuthHandler) GoogleAuthURL(w http.ResponseWriter, r *http.Request) {
 	state := "random-state-" + strconv.FormatInt(time.Now().Unix(), 10)
 	
 	// Store state in session cookie for validation
+	domain, sameSite, secure := h.getCookieConfig()
 	http.SetCookie(w, &http.Cookie{
 		Name:     "oauth_state",
 		Value:    state,
 		Path:     "/",
-		Domain:   "localhost",
+		Domain:   domain,
 		MaxAge:   300, // 5 minutes
 		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteNoneMode,
+		Secure:   secure,
+		SameSite: sameSite,
 	})
 
 	authURL := h.oauthService.GetAuthURL(state)
@@ -75,15 +89,33 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Basic state format validation (should start with "random-state-")
-	if !strings.HasPrefix(stateParam, "random-state-") {
-		http.Error(w, "Invalid state parameter format", http.StatusBadRequest)
+	// Try to validate state cookie for enhanced security
+	stateCookie, cookieErr := r.Cookie("oauth_state")
+	if cookieErr == nil && stateCookie.Value != stateParam {
+		http.Error(w, "Invalid state parameter", http.StatusBadRequest)
 		return
 	}
 
-	// Note: In development with direct OAuth callback, state cookie validation
-	// is not reliable due to cross-origin redirect. We rely on state parameter
-	// format validation and the OAuth code validation instead.
+	// If no cookie but state exists, validate format as fallback (development tolerance)
+	if cookieErr != nil && !strings.HasPrefix(stateParam, "random-state-") {
+		http.Error(w, "Invalid state parameter", http.StatusBadRequest)
+		return
+	}
+
+	// Clear the state cookie if it exists
+	if cookieErr == nil {
+		domain, sameSite, secure := h.getCookieConfig()
+		http.SetCookie(w, &http.Cookie{
+			Name:     "oauth_state",
+			Value:    "",
+			Path:     "/",
+			Domain:   domain,
+			MaxAge:   -1,
+			HttpOnly: true,
+			Secure:   secure,
+			SameSite: sameSite,
+		})
+	}
 
 	// Get authorization code
 	code := r.URL.Query().Get("code")
@@ -198,15 +230,16 @@ func (h *AuthHandler) createUserSession(w http.ResponseWriter, r *http.Request, 
 	// For now, we'll proceed with the new token
 
 	// Set JWT as HttpOnly cookie
+	domain, sameSite, secure := h.getCookieConfig()
 	cookie := &http.Cookie{
 		Name:     "session_token",
 		Value:    jwtToken,
 		Path:     "/",
-		Domain:   "localhost", // Allow cookie to be shared across localhost ports
+		Domain:   domain,
 		MaxAge:   int((24 * time.Hour).Seconds()), // 24 hours
 		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteNoneMode, // Allow cross-site requests for localhost development
+		Secure:   secure,
+		SameSite: sameSite,
 	}
 
 	http.SetCookie(w, cookie)
@@ -248,14 +281,16 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Clear session cookie
+	domain, sameSite, secure := h.getCookieConfig()
 	cookie := &http.Cookie{
 		Name:     "session_token",
 		Value:    "",
 		Path:     "/",
-		Domain:   "localhost",
+		Domain:   domain,
 		MaxAge:   -1,
 		HttpOnly: true,
-		SameSite: http.SameSiteNoneMode,
+		Secure:   secure,
+		SameSite: sameSite,
 	}
 
 	http.SetCookie(w, cookie)
@@ -283,15 +318,16 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Set new JWT as HttpOnly cookie
+	domain, sameSite, secure := h.getCookieConfig()
 	newCookie := &http.Cookie{
 		Name:     "session_token",
 		Value:    newToken,
 		Path:     "/",
-		Domain:   "localhost",
+		Domain:   domain,
 		MaxAge:   int((24 * time.Hour).Seconds()),
 		HttpOnly: true,
-		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteNoneMode,
+		Secure:   secure,
+		SameSite: sameSite,
 	}
 
 	http.SetCookie(w, newCookie)
