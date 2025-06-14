@@ -45,8 +45,8 @@ func main() {
 	jwtService := auth.NewJWTService(cfg.JWTSecret)
 	encryptionService := auth.NewEncryptionService(cfg.JWTSecret) // Use JWT secret for encryption key
 	
-	// Construct OAuth redirect URL
-	redirectURL := fmt.Sprintf("http://localhost:%s/api/auth/google/callback", cfg.Port)
+	// Construct OAuth redirect URL using configurable base URL
+	redirectURL := fmt.Sprintf("%s/api/auth/google/callback", cfg.BaseURL)
 	oauthService := auth.NewOAuthService(cfg.GoogleClientID, cfg.GoogleClientSecret, redirectURL)
 
 	// Initialize repositories
@@ -54,7 +54,7 @@ func main() {
 	sessionRepository := database.NewSessionRepository(db)
 
 	// Initialize middleware
-	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository)
+	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository, oauthService, userRepository)
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(
@@ -112,8 +112,8 @@ func main() {
 	})
 
 	log.Printf("Backend API server starting on :%s", cfg.Port)
+	log.Printf("Base URL configured: %s", cfg.BaseURL)
 	log.Printf("Google OAuth redirect URL: %s", redirectURL)
-	log.Printf("Frontend URL configured: http://localhost:3000")
 	
 	log.Fatal(http.ListenAndServe(":"+cfg.Port, r))
 }
