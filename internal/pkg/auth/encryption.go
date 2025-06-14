@@ -4,9 +4,10 @@ import (
 	"crypto/aes"
 	"crypto/cipher"
 	"crypto/rand"
-	"crypto/sha256"
 	"errors"
 	"io"
+
+	"golang.org/x/crypto/argon2"
 )
 
 // EncryptionService handles encryption and decryption of sensitive data
@@ -14,12 +15,40 @@ type EncryptionService struct {
 	key []byte
 }
 
-// NewEncryptionService creates a new encryption service with a derived key
+// Key derivation parameters for Argon2id
+const (
+	// Argon2id parameters - these provide strong security while remaining performant
+	// Time parameter (iterations): Number of passes over memory
+	argon2Time = 3
+	// Memory parameter: Amount of memory to use in KiB (64 MB)
+	argon2Memory = 64 * 1024
+	// Threads parameter: Number of parallel threads
+	argon2Threads = 4
+	// Key length: 32 bytes for AES-256
+	argon2KeyLen = 32
+	
+	// Static versioned salt for consistent key derivation
+	// In production, this could be environment-specific or derived from app version
+	// Using a versioned approach allows for future salt rotation if needed
+	saltVersion = "v1"
+	staticSalt = "academy-sync-encryption-salt-" + saltVersion + "-2025"
+)
+
+// NewEncryptionService creates a new encryption service with a securely derived key
 func NewEncryptionService(secret string) *EncryptionService {
-	// Use SHA256 to create a consistent 32-byte key from the secret
-	hash := sha256.Sum256([]byte(secret))
+	// Use Argon2id to derive a strong key from the secret
+	// This provides resistance against brute-force attacks even with low-entropy inputs
+	key := argon2.IDKey(
+		[]byte(secret),
+		[]byte(staticSalt),
+		argon2Time,
+		argon2Memory,
+		argon2Threads,
+		argon2KeyLen,
+	)
+	
 	return &EncryptionService{
-		key: hash[:],
+		key: key,
 	}
 }
 
