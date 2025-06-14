@@ -48,10 +48,11 @@ func (h *AuthHandler) GoogleAuthURL(w http.ResponseWriter, r *http.Request) {
 		Name:     "oauth_state",
 		Value:    state,
 		Path:     "/",
+		Domain:   "localhost",
 		MaxAge:   300, // 5 minutes
 		HttpOnly: true,
 		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteNoneMode,
 	})
 
 	authURL := h.oauthService.GetAuthURL(state)
@@ -84,8 +85,10 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		Name:     "oauth_state",
 		Value:    "",
 		Path:     "/",
+		Domain:   "localhost",
 		MaxAge:   -1,
 		HttpOnly: true,
+		SameSite: http.SameSiteNoneMode,
 	})
 
 	// Get authorization code
@@ -205,10 +208,11 @@ func (h *AuthHandler) createUserSession(w http.ResponseWriter, r *http.Request, 
 		Name:     "session_token",
 		Value:    jwtToken,
 		Path:     "/",
+		Domain:   "localhost", // Allow cookie to be shared across localhost ports
 		MaxAge:   int((24 * time.Hour).Seconds()), // 24 hours
 		HttpOnly: true,
 		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteNoneMode, // Allow cross-site requests for localhost development
 	}
 
 	http.SetCookie(w, cookie)
@@ -254,8 +258,10 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		Name:     "session_token",
 		Value:    "",
 		Path:     "/",
+		Domain:   "localhost",
 		MaxAge:   -1,
 		HttpOnly: true,
+		SameSite: http.SameSiteNoneMode,
 	}
 
 	http.SetCookie(w, cookie)
@@ -287,10 +293,11 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		Name:     "session_token",
 		Value:    newToken,
 		Path:     "/",
+		Domain:   "localhost",
 		MaxAge:   int((24 * time.Hour).Seconds()),
 		HttpOnly: true,
 		Secure:   false, // Set to true in production with HTTPS
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteNoneMode,
 	}
 
 	http.SetCookie(w, newCookie)
