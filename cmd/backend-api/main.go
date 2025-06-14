@@ -57,12 +57,16 @@ func main() {
 	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository, oauthService, userRepository)
 
 	// Initialize handlers
+	// Determine if running in development mode
+	isDevelopment := cfg.Environment == "local" || cfg.Environment == "development" || cfg.Environment == "dev"
+	
 	authHandler := handlers.NewAuthHandler(
 		oauthService,
 		jwtService,
 		userRepository,
 		sessionRepository,
 		"http://localhost:3000", // Frontend URL
+		isDevelopment,
 	)
 
 	// Create router
