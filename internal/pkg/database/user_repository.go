@@ -147,7 +147,7 @@ func (r *UserRepository) GetUserByID(id int) (*User, error) {
 	return &user, nil
 }
 
-// UpdateUserTokens updates a user's Google OAuth tokens
+// UpdateUserTokens updates a user's Google OAuth tokens and optionally last login timestamp
 func (r *UserRepository) UpdateUserTokens(req *UpdateUserTokensRequest) error {
 	// Encrypt OAuth tokens
 	encryptedAccessToken, err := r.encryptor.Encrypt(req.GoogleAccessToken)
@@ -160,24 +160,49 @@ func (r *UserRepository) UpdateUserTokens(req *UpdateUserTokensRequest) error {
 		return err
 	}
 
-	query := `
-		UPDATE users 
-		SET google_access_token = $1,
-			google_refresh_token = $2,
-			google_token_expiry = $3,
-			updated_at = $4
-		WHERE id = $5
-	`
+	now := time.Now()
+	
+	// Build query based on whether we should update last login
+	var query string
+	var args []interface{}
+	
+	if req.UpdateLastLogin {
+		query = `
+			UPDATE users 
+			SET google_access_token = $1,
+				google_refresh_token = $2,
+				google_token_expiry = $3,
+				last_login_at = $4,
+				updated_at = $5
+			WHERE id = $6
+		`
+		args = []interface{}{
+			encryptedAccessToken,
+			encryptedRefreshToken,
+			req.GoogleTokenExpiry,
+			now,
+			now,
+			req.UserID,
+		}
+	} else {
+		query = `
+			UPDATE users 
+			SET google_access_token = $1,
+				google_refresh_token = $2,
+				google_token_expiry = $3,
+				updated_at = $4
+			WHERE id = $5
+		`
+		args = []interface{}{
+			encryptedAccessToken,
+			encryptedRefreshToken,
+			req.GoogleTokenExpiry,
+			now,
+			req.UserID,
+		}
+	}
 
-	_, err = r.db.Exec(
-		query,
-		encryptedAccessToken,
-		encryptedRefreshToken,
-		req.GoogleTokenExpiry,
-		time.Now(),
-		req.UserID,
-	)
-
+	_, err = r.db.Exec(query, args...)
 	return err
 }
 
@@ -213,4 +238,13 @@ func (r *UserRepository) GetDecryptedGoogleTokens(userID int) (accessToken, refr
 	}
 
 	return accessToken, refreshToken, expiry, nil
+}
+
+// DecryptToken decrypts an encrypted token
+func (r *UserRepository) DecryptToken(encryptedToken []byte) (string, error) {
+	if len(encryptedToken) == 0 {
+		return "", nil // No token to decrypt
+	}
+	
+	return r.encryptor.Decrypt(encryptedToken)
 }

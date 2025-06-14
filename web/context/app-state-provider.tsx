@@ -75,6 +75,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     isLogsLoading: true,
   })
 
+
   // Authentication - Check session with backend
   useEffect(() => {
     const checkAuthStatus = async () => {
@@ -239,6 +240,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const setGoogleStatus = (status: ServiceStatus) => {
     setState((s) => ({ ...s, googleStatus: status }))
   }
+
 
   // Load mock logs
   useEffect(() => {

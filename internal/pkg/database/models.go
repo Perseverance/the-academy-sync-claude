@@ -57,6 +57,7 @@ type UpdateUserTokensRequest struct {
 	GoogleAccessToken    string
 	GoogleRefreshToken   string
 	GoogleTokenExpiry    *time.Time
+	UpdateLastLogin      bool  // If true, also updates last_login_at
 }
 
 // CreateSessionRequest represents the data needed to create a new session

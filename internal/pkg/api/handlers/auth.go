@@ -119,23 +119,19 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	var user *database.User
 
 	if existingUser != nil {
-		// Update existing user's tokens
+		// Update existing user's tokens and last login atomically
 		user = existingUser
 		updateReq := &database.UpdateUserTokensRequest{
 			UserID:             user.ID,
 			GoogleAccessToken:  token.AccessToken,
 			GoogleRefreshToken: token.RefreshToken,
 			GoogleTokenExpiry:  &token.Expiry,
+			UpdateLastLogin:    true, // Update last login in same transaction
 		}
 
 		if err := h.userRepository.UpdateUserTokens(updateReq); err != nil {
 			http.Error(w, "Failed to update user tokens", http.StatusInternalServerError)
 			return
-		}
-
-		// Update last login
-		if err := h.userRepository.UpdateLastLoginAt(user.ID); err != nil {
-			// Log error but don't fail the request
 		}
 	} else {
 		// Create new user
@@ -304,4 +300,5 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		"message": "Token refreshed successfully",
 	})
 }
+
 
