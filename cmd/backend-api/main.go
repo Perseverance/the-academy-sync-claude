@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"fmt"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -23,7 +24,7 @@ func main() {
 	if err != nil {
 		// Use fallback logging before structured logger is available
 		fmt.Printf("ERROR: Failed to load configuration: %v\n", err)
-		return
+		os.Exit(1)
 	}
 
 	// Initialize structured logger
@@ -41,14 +42,14 @@ func main() {
 	db, err := sql.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
 		log.Critical("Failed to connect to database", "error", err)
-		return
+		os.Exit(1)
 	}
 	defer db.Close()
 
 	// Test database connection
 	if err := db.Ping(); err != nil {
 		log.Critical("Failed to ping database", "error", err)
-		return
+		os.Exit(1)
 	}
 	log.Info("Database connection established successfully")
 
@@ -134,5 +135,6 @@ func main() {
 	
 	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
 		log.Critical("Server failed to start", "error", err)
+		os.Exit(1)
 	}
 }
