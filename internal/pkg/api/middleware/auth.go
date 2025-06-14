@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"strings"
+	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
@@ -13,13 +14,17 @@ import (
 type AuthMiddleware struct {
 	jwtService        *auth.JWTService
 	sessionRepository *database.SessionRepository
+	oauthService      *auth.OAuthService
+	userRepository    *database.UserRepository
 }
 
 // NewAuthMiddleware creates a new authentication middleware
-func NewAuthMiddleware(jwtService *auth.JWTService, sessionRepository *database.SessionRepository) *AuthMiddleware {
+func NewAuthMiddleware(jwtService *auth.JWTService, sessionRepository *database.SessionRepository, oauthService *auth.OAuthService, userRepository *database.UserRepository) *AuthMiddleware {
 	return &AuthMiddleware{
 		jwtService:        jwtService,
 		sessionRepository: sessionRepository,
+		oauthService:      oauthService,
+		userRepository:    userRepository,
 	}
 }
 
@@ -69,6 +74,9 @@ func (a *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 			// Log error but don't fail the request
 			// In production, you'd use a proper logger here
 		}
+
+		// Check and refresh OAuth tokens if necessary
+		go a.checkAndRefreshOAuthTokens(r.Context(), claims.UserID)
 
 		// Add user information to request context
 		ctx := context.WithValue(r.Context(), UserIDKey, claims.UserID)
@@ -188,4 +196,82 @@ func GetClientIP(r *http.Request) string {
 	}
 	
 	return addr
+}
+
+// checkAndRefreshOAuthTokens checks if the user's OAuth tokens need refreshing and updates them
+// This runs asynchronously to avoid blocking the request
+func (a *AuthMiddleware) checkAndRefreshOAuthTokens(ctx context.Context, userID int) {
+	if a.oauthService == nil || a.userRepository == nil {
+		return // OAuth services not available
+	}
+
+	// Get user from database to check token expiry
+	user, err := a.userRepository.GetUserByID(userID)
+	if err != nil || user == nil {
+		return // User not found or error
+	}
+
+	// Check if Google OAuth token needs refreshing (refresh if expires within 5 minutes)
+	if a.shouldRefreshGoogleToken(user) {
+		a.refreshGoogleOAuthToken(ctx, user)
+	}
+
+	// Check if Strava OAuth token needs refreshing (refresh if expires within 5 minutes)
+	if a.shouldRefreshStravaToken(user) {
+		a.refreshStravaOAuthToken(ctx, user)
+	}
+}
+
+// shouldRefreshGoogleToken checks if the Google OAuth token needs refreshing
+func (a *AuthMiddleware) shouldRefreshGoogleToken(user *database.User) bool {
+	if user.GoogleTokenExpiry == nil {
+		return false // No expiry set, assume token is still valid
+	}
+
+	// Refresh if token expires within 5 minutes
+	return time.Until(*user.GoogleTokenExpiry) < 5*time.Minute
+}
+
+// shouldRefreshStravaToken checks if the Strava OAuth token needs refreshing
+func (a *AuthMiddleware) shouldRefreshStravaToken(user *database.User) bool {
+	if user.StravaTokenExpiry == nil {
+		return false // No expiry set, assume token is still valid
+	}
+
+	// Refresh if token expires within 5 minutes
+	return time.Until(*user.StravaTokenExpiry) < 5*time.Minute
+}
+
+// refreshGoogleOAuthToken refreshes the user's Google OAuth token
+func (a *AuthMiddleware) refreshGoogleOAuthToken(ctx context.Context, user *database.User) {
+	// Decrypt the refresh token
+	refreshToken, err := a.userRepository.DecryptToken(user.GoogleRefreshToken)
+	if err != nil {
+		return // Failed to decrypt refresh token
+	}
+
+	// Refresh the token with Google
+	newToken, err := a.oauthService.RefreshToken(ctx, refreshToken)
+	if err != nil {
+		return // Failed to refresh token
+	}
+
+	// Update the user's tokens in the database (background refresh, don't update last login)
+	updateReq := &database.UpdateUserTokensRequest{
+		UserID:             user.ID,
+		GoogleAccessToken:  newToken.AccessToken,
+		GoogleRefreshToken: newToken.RefreshToken,
+		GoogleTokenExpiry:  &newToken.Expiry,
+		UpdateLastLogin:    false, // Don't update last login for background token refresh
+	}
+
+	// Update in database (ignore errors since this is background operation)
+	a.userRepository.UpdateUserTokens(updateReq)
+}
+
+// refreshStravaOAuthToken refreshes the user's Strava OAuth token
+// Note: This would require a Strava OAuth service to be implemented
+func (a *AuthMiddleware) refreshStravaOAuthToken(ctx context.Context, user *database.User) {
+	// TODO: Implement Strava token refresh when Strava OAuth service is available
+	// This is a placeholder for future Strava integration
 }

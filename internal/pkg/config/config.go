@@ -19,6 +19,7 @@ type Config struct {
 	// Environment settings
 	Environment string `json:"environment"`
 	Port        string `json:"port"`
+	BaseURL     string `json:"base_url"`
 
 	// Database configuration
 	DatabaseURL      string `json:"database_url"`
@@ -77,6 +78,7 @@ func loadFromEnv() (*Config, error) {
 	config := &Config{
 		Environment: getEnv("APP_ENV", getEnv("GO_ENV", "local")),
 		Port:        getEnv("PORT", "8080"),
+		BaseURL:     getEnv("BASE_URL", ""),
 
 		// Database
 		DatabaseURL:      getEnv("DATABASE_URL", ""),
@@ -127,6 +129,9 @@ func loadFromEnv() (*Config, error) {
 	if config.RedisURL == "" && config.RedisHost != "" {
 		config.RedisURL = fmt.Sprintf("redis://%s:%s", config.RedisHost, config.RedisPort)
 	}
+
+	// Build BaseURL if not provided
+	config.buildBaseURL()
 
 	// Validate required configuration
 	if err := config.validate(); err != nil {
@@ -190,6 +195,7 @@ func loadFromSecretManager() (*Config, error) {
 	config := &Config{
 		Environment: getEnv("APP_ENV", "production"),
 		Port:        getEnv("PORT", "8080"),
+		BaseURL:     getEnv("BASE_URL", ""),
 
 		// Use secrets if available, otherwise fall back to env vars
 		DatabaseURL:        getValueOrEnv(secrets["database-url"], "DATABASE_URL", ""),
@@ -241,6 +247,9 @@ func loadFromSecretManager() (*Config, error) {
 		config.RedisURL = fmt.Sprintf("redis://%s:%s", config.RedisHost, config.RedisPort)
 	}
 
+	// Build BaseURL if not provided
+	config.buildBaseURL()
+
 	// Validate required configuration
 	if err := config.validate(); err != nil {
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
@@ -270,6 +279,7 @@ func loadFromEnvForProduction() (*Config, error) {
 	config := &Config{
 		Environment: getEnv("APP_ENV", "production"),
 		Port:        getEnv("PORT", "8080"),
+		BaseURL:     getEnv("BASE_URL", ""),
 
 		// Database
 		DatabaseURL:      getEnv("DATABASE_URL", ""),
@@ -320,6 +330,9 @@ func loadFromEnvForProduction() (*Config, error) {
 	if config.RedisURL == "" && config.RedisHost != "" {
 		config.RedisURL = fmt.Sprintf("redis://%s:%s", config.RedisHost, config.RedisPort)
 	}
+
+	// Build BaseURL if not provided
+	config.buildBaseURL()
 
 	// Validate required configuration
 	if err := config.validate(); err != nil {
@@ -375,5 +388,18 @@ func getValueOrEnv(secretValue *string, envKey, defaultValue string) string {
 		return *secretValue
 	}
 	return getEnv(envKey, defaultValue)
+}
+
+// buildBaseURL constructs the base URL if not provided
+func (c *Config) buildBaseURL() {
+	if c.BaseURL == "" {
+		if c.Environment == "local" || c.Environment == "development" || c.Environment == "dev" {
+			c.BaseURL = fmt.Sprintf("http://localhost:%s", c.Port)
+		} else {
+			// In production, BaseURL should be explicitly configured
+			// This is a fallback that should be overridden with the actual domain
+			c.BaseURL = fmt.Sprintf("https://your-domain.com")
+		}
+	}
 }
 
