@@ -345,7 +345,7 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	if !ok {
 		h.logger.Warn("GetCurrentUser called without valid user context", 
 			"client_ip", clientIP)
-		http.Error(w, "User not found in context", http.StatusInternalServerError)
+		http.Error(w, "User not found in context", http.StatusUnauthorized)
 		return
 	}
 
