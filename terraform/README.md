@@ -59,8 +59,8 @@ Once the bucket is created, you need to update the `terraform/backend.tf` file:
 ```terraform
 terraform {
   backend "gcs" {
-    bucket  = "the-academy-sync-claude-tfstate"
-    prefix  = "tf-state/${terraform.workspace}" // Example, assuming workspace usage is now standard
+    bucket = "the-academy-sync-claude-tfstate"
+    prefix = "tf-state"
   }
 }
 ```
@@ -83,7 +83,7 @@ After successful initialization, any `terraform apply` commands will store the s
 
 This project uses Terraform Workspaces to manage multiple deployment environments (e.g., staging, production) from a single codebase. Each workspace maintains its own state file, allowing for independent and safe infrastructure management.
 
-The backend is configured to store state files in GCS under a path specific to each workspace (e.g., `gs://<your-bucket-name>/tf-state/staging`, `gs://<your-bucket-name>/tf-state/prod`).
+The backend is configured to store state files in GCS. Terraform automatically creates workspace-specific paths within the bucket (e.g., `gs://the-academy-sync-claude-tfstate/tf-state/env:/staging/`, `gs://the-academy-sync-claude-tfstate/tf-state/env:/prod/`).
 
 ### Creating Workspaces
 
