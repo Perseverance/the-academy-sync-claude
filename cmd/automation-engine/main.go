@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"time"
 
 	_ "github.com/lib/pq"
 
+	"github.com/Perseverance/the-academy-sync-claude/cmd/automation-engine/internal/processing"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/config"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
@@ -84,8 +89,111 @@ func main() {
 		os.Exit(2) // Exit code 2 indicates dependency failure
 	}
 
+	// Initialize database connection
+	db, err := sql.Open("postgres", cfg.DatabaseURL)
+	if err != nil {
+		log.Critical("Failed to open database connection", "error", err.Error())
+		os.Exit(3)
+	}
+	defer db.Close()
+
+	// Test database connection
+	if err := db.Ping(); err != nil {
+		log.Critical("Failed to ping database", "error", err.Error())
+		os.Exit(3)
+	}
+
+	log.Info("Database connection established successfully")
+
+	// Initialize encryption service for token handling
+	encryptionService := auth.NewEncryptionService(cfg.EncryptionSecret)
+
+	// Initialize repositories and services
+	userRepository := database.NewUserRepository(db, encryptionService)
+	configService := automation.NewConfigService(userRepository, log)
+
+	// Initialize processing worker
+	worker := processing.NewWorker(
+		configService,
+		cfg.StravaClientID,
+		cfg.StravaClientSecret,
+		cfg.GoogleClientID,
+		cfg.GoogleClientSecret,
+		"", // GoogleRedirectURL not needed for server-side token refresh
+		log,
+	)
+
+	log.Info("Automation engine initialized successfully, starting processing loop",
+		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "")
+
+	// Main processing loop
+	cycleCount := 0
 	for {
-		log.Debug("Processing job queue", "environment", cfg.Environment)
-		time.Sleep(30 * time.Second)
+		cycleCount++
+		cycleStartTime := time.Now()
+		
+		log.Debug("🔄 Starting automation processing cycle",
+			"cycle_number", cycleCount,
+			"cycle_start_time", cycleStartTime.Format(time.RFC3339),
+			"environment", cfg.Environment,
+			"next_cycle_in_seconds", 60)
+		
+		// For now, we'll implement a simple test cycle
+		// In the future, this would be replaced with job queue processing
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		
+		// Test processing with user ID 1 (if exists)
+		// This is a placeholder - real implementation would process from job queue
+		testUserID := 1
+		
+		log.Debug("🧪 Starting test processing for development user",
+			"test_user_id", testUserID,
+			"cycle_number", cycleCount,
+			"timeout_minutes", 5,
+			"note", "This is a development test - production will use job queue")
+		
+		result := worker.ProcessUser(ctx, testUserID)
+		
+		cycleDuration := time.Since(cycleStartTime)
+		
+		if result.Success {
+			log.Info("✅ Test processing cycle completed successfully",
+				"cycle_number", cycleCount,
+				"user_id", testUserID,
+				"cycle_results", map[string]interface{}{
+					"activities_count":        result.ActivitiesCount,
+					"user_processing_time_ms": result.ProcessingTime.Milliseconds(),
+					"total_cycle_time_ms":     cycleDuration.Milliseconds(),
+					"success":                 true,
+				})
+		} else {
+			log.Warn("⚠️ Test processing cycle failed",
+				"cycle_number", cycleCount,
+				"user_id", testUserID,
+				"cycle_results", map[string]interface{}{
+					"error":                   result.Error,
+					"error_type":              result.ErrorType,
+					"requires_reauth":         result.RequiresReauth,
+					"user_processing_time_ms": result.ProcessingTime.Milliseconds(),
+					"total_cycle_time_ms":     cycleDuration.Milliseconds(),
+					"success":                 false,
+				},
+				"troubleshooting", map[string]interface{}{
+					"check_user_exists":      "Verify user ID 1 exists in database",
+					"check_oauth_tokens":     "Verify user has valid OAuth tokens",
+					"check_spreadsheet_id":   "Verify user has configured spreadsheet ID",
+					"check_oauth_credentials": "Verify app OAuth credentials are configured",
+				})
+		}
+		
+		cancel()
+		
+		// Wait before next cycle
+		log.Debug("💤 Automation processing cycle completed, waiting for next cycle",
+			"cycle_number", cycleCount,
+			"cycle_duration_ms", cycleDuration.Milliseconds(),
+			"next_cycle_at", time.Now().Add(60*time.Second).Format(time.RFC3339),
+			"wait_seconds", 60)
+		time.Sleep(60 * time.Second) // Process every minute for testing
 	}
 }
