@@ -146,7 +146,14 @@ func main() {
 	configService := services.NewConfigService(userRepository, sheetsService, log)
 	
 	// Initialize automation config service for sync validation
-	automationConfigService := automation.NewConfigService(userRepository, log)
+	// Create token refresh service for automatic token management
+	tokenRefreshService := automation.NewTokenRefreshService(
+		userRepository,
+		cfg.GoogleClientID, cfg.GoogleClientSecret,
+		cfg.StravaClientID, cfg.StravaClientSecret,
+		log,
+	)
+	automationConfigService := automation.NewConfigService(userRepository, tokenRefreshService, log)
 	
 	// Initialize sync service (only if Redis is available)
 	var syncService *apiServices.SyncService

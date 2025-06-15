@@ -36,7 +36,6 @@ func TestSyncHandler_TriggerManualSync(t *testing.T) {
 			triggerResult: &services.SyncResponse{
 				Success:                   true,
 				Message:                   "Manual sync triggered successfully",
-				TraceID:                   "test-trace-123",
 				EstimatedCompletionSeconds: 60,
 			},
 		}

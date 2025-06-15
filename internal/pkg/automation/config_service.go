@@ -27,15 +27,17 @@ type UserRepository interface {
 // This service implements US022 requirements for securely retrieving all necessary
 // operational configurations from the database for a specific user's processing run.
 type ConfigService struct {
-	userRepository UserRepository
-	logger         *logger.Logger
+	userRepository     UserRepository
+	tokenRefreshService *TokenRefreshService
+	logger             *logger.Logger
 }
 
 // NewConfigService creates a new configuration service
-func NewConfigService(userRepository UserRepository, logger *logger.Logger) *ConfigService {
+func NewConfigService(userRepository UserRepository, tokenRefreshService *TokenRefreshService, logger *logger.Logger) *ConfigService {
 	return &ConfigService{
-		userRepository: userRepository,
-		logger:         logger.WithContext("component", "config_service"),
+		userRepository:     userRepository,
+		tokenRefreshService: tokenRefreshService,
+		logger:             logger.WithContext("component", "config_service"),
 	}
 }
 
@@ -124,6 +126,25 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 	s.logger.Debug("Built processing configuration from user data",
 		"user_id", userID,
 		"config_summary", config.String())
+
+	// Refresh tokens if needed before validation
+	if s.tokenRefreshService != nil {
+		s.logger.Debug("Checking for expired tokens and refreshing if necessary",
+			"user_id", userID)
+		
+		refreshedConfig, err := s.tokenRefreshService.RefreshUserTokensIfNeeded(ctx, config)
+		if err != nil {
+			s.logger.Error("Failed to refresh expired tokens",
+				"error", err,
+				"user_id", userID)
+			return nil, fmt.Errorf("failed to refresh tokens: %w", err)
+		}
+		config = refreshedConfig
+		
+		s.logger.Debug("Token refresh check completed",
+			"user_id", userID,
+			"updated_config_summary", config.String())
+	}
 
 	// Validate configuration completeness
 	s.logger.Debug("Validating processing configuration completeness",

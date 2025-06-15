@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
@@ -540,6 +541,43 @@ func (r *UserRepository) CheckAndEnableAutomationIfReady(ctx context.Context, us
 		`
 		_, err = r.db.ExecContext(ctx, updateQuery, time.Now(), userID)
 		return err
+	}
+
+	return nil
+}
+
+// UpdateStravaTokensOnly updates only the Strava access and refresh tokens for a user
+func (r *UserRepository) UpdateStravaTokensOnly(ctx context.Context, userID int, accessToken, refreshToken string, expiry *time.Time) error {
+	// Encrypt the tokens
+	encryptedAccessToken, err := r.encryptor.Encrypt(accessToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt Strava access token: %w", err)
+	}
+
+	encryptedRefreshToken, err := r.encryptor.Encrypt(refreshToken)
+	if err != nil {
+		return fmt.Errorf("failed to encrypt Strava refresh token: %w", err)
+	}
+
+	query := `
+		UPDATE users 
+		SET strava_access_token = $1, strava_refresh_token = $2, strava_token_expiry = $3, updated_at = $4
+		WHERE id = $5
+	`
+
+	now := time.Now()
+	result, err := r.db.ExecContext(ctx, query, encryptedAccessToken, encryptedRefreshToken, expiry, now, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
 	}
 
 	return nil

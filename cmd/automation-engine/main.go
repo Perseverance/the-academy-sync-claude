@@ -111,7 +111,16 @@ func main() {
 
 	// Initialize repositories and services
 	userRepository := database.NewUserRepository(db, encryptionService)
-	configService := automation.NewConfigService(userRepository, log)
+	
+	// Create token refresh service for automatic token management
+	tokenRefreshService := automation.NewTokenRefreshService(
+		userRepository,
+		cfg.GoogleClientID, cfg.GoogleClientSecret,
+		cfg.StravaClientID, cfg.StravaClientSecret,
+		log,
+	)
+	
+	configService := automation.NewConfigService(userRepository, tokenRefreshService, log)
 
 	// Initialize Redis queue client (optional)
 	var queueClient *queue.Client
