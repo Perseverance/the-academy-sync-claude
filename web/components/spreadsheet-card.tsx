@@ -4,22 +4,35 @@ import { useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { FileSpreadsheet, Edit3, Save, Info } from "lucide-react"
+import { FileSpreadsheet, Edit3, Save, Info, Loader2, CheckCircle } from "lucide-react"
 import type { SpreadsheetConfigStatus } from "@/context/app-state-provider"
 import { useToast } from "@/hooks/use-toast"
+import { configService, ConfigApiError } from "@/services/config"
+import { Badge } from "@/components/ui/badge"
 
 interface SpreadsheetCardProps {
   status: SpreadsheetConfigStatus
   configuredUrl?: string
-  onSave: (url: string) => void
+  onSave: (url: string) => Promise<void>
   onChange: () => void
 }
 
 export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: SpreadsheetCardProps) {
   const [urlInput, setUrlInput] = useState(configuredUrl || "")
+  const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
-  const handleSave = () => {
+  const handleSave = async () => {
+    // Basic client-side validation
+    if (!urlInput.trim()) {
+      toast({
+        title: "Empty URL",
+        description: "Please enter a Google Spreadsheet URL.",
+        variant: "destructive",
+      })
+      return
+    }
+
     if (!urlInput.startsWith("https://docs.google.com/spreadsheets/d/")) {
       toast({
         title: "Invalid URL",
@@ -28,7 +41,34 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
       })
       return
     }
-    onSave(urlInput)
+
+    setIsLoading(true)
+    try {
+      await onSave(urlInput)
+      toast({
+        title: "Success",
+        description: "Spreadsheet configuration saved successfully!",
+      })
+    } catch (error) {
+      console.error("Error saving spreadsheet:", error)
+      
+      // Handle ConfigApiError with user-friendly messages
+      if (error instanceof ConfigApiError) {
+        toast({
+          title: "Configuration Error",
+          description: error.getUserFriendlyMessage(),
+          variant: "destructive",
+        })
+      } else {
+        toast({
+          title: "Error",
+          description: "Failed to save spreadsheet configuration. Please try again.",
+          variant: "destructive",
+        })
+      }
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const isDisabled = status === "Disabled"
@@ -40,17 +80,19 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
         <CardTitle className="text-xl flex items-center gap-2">
           <FileSpreadsheet className="h-6 w-6" />
           Spreadsheet Configuration
+          {isConfigured && (
+            <Badge className="bg-success/20 text-success border-success/30 ml-auto">
+              <CheckCircle className="h-3 w-3 mr-1" /> Active
+            </Badge>
+          )}
         </CardTitle>
         {isConfigured && configuredUrl && (
           <CardDescription className="text-sm pt-1 block overflow-hidden">
-            {" "}
-            {/* Ensure parent can constrain */}
-            Current Sheet:{" "}
             <a
               href={configuredUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="link-main truncate inline-block max-w-[calc(100%-theme(spacing.28))]" /* Adjust max-width as needed or use max-w-full if parent is well-constrained */
+              className="link-main truncate inline-block max-w-[calc(100%-theme(spacing.28))]"
               title={configuredUrl} // Show full URL on hover
             >
               {configuredUrl}
@@ -81,9 +123,17 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
                 disabled={isDisabled}
                 className="input-main"
               />
-              <button onClick={handleSave} className="btn-primary-main px-4" disabled={isDisabled || !urlInput}>
-                <Save className="h-4 w-4" />
-                Save
+              <button 
+                onClick={handleSave} 
+                className="btn-primary-main px-4" 
+                disabled={isDisabled || !urlInput.trim() || isLoading}
+              >
+                {isLoading ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4" />
+                )}
+                {isLoading ? "Saving..." : "Save"}
               </button>
             </div>
           </div>
