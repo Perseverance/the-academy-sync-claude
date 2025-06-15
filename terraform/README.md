@@ -78,3 +78,61 @@ terraform init
 This command will download the necessary provider plugins and configure the backend to use your GCS bucket. You should see a message like "Successfully configured the backend 'gcs'".
 
 After successful initialization, any `terraform apply` commands will store the state in the configured GCS bucket.
+
+## Managing Environments with Workspaces
+
+This project uses Terraform Workspaces to manage multiple deployment environments (e.g., staging, production) from a single codebase. Each workspace maintains its own state file, allowing for independent and safe infrastructure management.
+
+The backend is configured to store state files in GCS under a path specific to each workspace (e.g., `gs://<your-bucket-name>/tf-state/staging`, `gs://<your-bucket-name>/tf-state/prod`).
+
+### Creating Workspaces
+
+If they don't already exist, you can create workspaces for different environments. For example, to create `staging` and `prod` workspaces:
+
+```sh
+terraform workspace new staging
+terraform workspace new prod
+```
+
+The `default` workspace is present initially. It's recommended to create specific workspaces for your environments rather than using `default` for any particular environment.
+
+### Selecting a Workspace
+
+Before running any Terraform commands for a specific environment, you need to select its workspace:
+
+```sh
+terraform workspace select staging
+```
+Or for production:
+```sh
+terraform workspace select prod
+```
+You can list available workspaces with `terraform workspace list`.
+
+### Applying Environment-Specific Configurations
+
+To deploy or make changes to an environment, first select the appropriate workspace. Then, use the `-var-file` flag with `terraform apply` (or `plan`) to specify the environment's configuration file:
+
+**For Staging:**
+1. Select the staging workspace:
+   ```sh
+   terraform workspace select staging
+   ```
+2. Apply the configuration using `staging.tfvars`:
+   ```sh
+   terraform plan -var-file="staging.tfvars"
+   terraform apply -var-file="staging.tfvars"
+   ```
+
+**For Production:**
+1. Select the production workspace:
+   ```sh
+   terraform workspace select prod
+   ```
+2. Apply the configuration using `prod.tfvars`:
+   ```sh
+   terraform plan -var-file="prod.tfvars"
+   terraform apply -var-file="prod.tfvars"
+   ```
+
+Remember to replace `"your-gcs-bucket-name-here"` in the `backend.tf` file and the project IDs in `staging.tfvars` and `prod.tfvars` with your actual values.
