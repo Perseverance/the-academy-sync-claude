@@ -11,13 +11,15 @@ export interface User {
   email: string
   name: string
   profile_picture_url?: string
+  strava_athlete_id?: number
+  strava_athlete_name?: string
+  strava_profile_picture_url?: string
+  spreadsheet_id?: string
   timezone: string
   email_notifications_enabled: boolean
   automation_enabled: boolean
   has_strava_connection: boolean
   has_sheets_connection: boolean
-  strava_athlete_name?: string
-  strava_profile_picture_url?: string
   recent_activity_logs: ActivityLog[]
 }
 
