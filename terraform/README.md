@@ -10,6 +10,27 @@ This project is configured to use a Google Cloud Storage (GCS) bucket as a remot
 
 Before you can initialize Terraform and use the remote backend, you **must manually create a GCS bucket** that will store the state file.
 
+### Initial GCP Setup & Authentication
+
+Before creating the GCS bucket or running any Terraform commands that interact with Google Cloud, ensure you have:
+
+1.  **Authenticated with GCP:**
+    *   For interactive use, run:
+        ```sh
+        gcloud auth login
+        ```
+        And follow the prompts to log in with your Google account.
+    *   For non-interactive environments (like CI/CD pipelines), ensure the `GOOGLE_APPLICATION_CREDENTIALS` environment variable is set to the path of your service account key JSON file.
+
+2.  **Enabled the Cloud Storage API:**
+    The Google Cloud Storage API must be enabled for your project. You can enable it by running:
+    ```sh
+    gcloud services enable storage.googleapis.com --project=your-gcp-project-id
+    ```
+    Replace `your-gcp-project-id` with your actual GCP Project ID.
+
+Once these steps are complete, you can proceed to create the GCS bucket.
+
 **Recommended GCS Bucket Configuration:**
 
 *   **Unique Name:** Choose a globally unique name for your bucket (e.g., `your-unique-project-name-tfstate`).
