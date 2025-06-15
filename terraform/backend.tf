@@ -1,6 +1,6 @@
 terraform {
   backend "gcs" {
-    bucket  = "your-gcs-bucket-name-here"  // TODO: Replace with your actual GCS bucket name
-    prefix  = "the-academy-sync/state"     // This will store the state under gs://your-gcs-bucket-name-here/the-academy-sync/state
+    bucket = "the-academy-sync-claude-tfstate"
+    prefix = "the-academy-sync/state"    // This will store the state under gs://the-academy-sync-claude-tfstate/the-academy-sync/state
   }
 }
