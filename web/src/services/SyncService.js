@@ -3,8 +3,8 @@
  * Provides methods to trigger manual sync and get queue status
  */
 
-const API_BASE = process.env.NODE_ENV === 'production' 
-  ? '/api' 
+const API_BASE = process.env.NEXT_PUBLIC_API_URL 
+  ? `${process.env.NEXT_PUBLIC_API_URL}/api`
   : 'http://localhost:8080/api';
 
 /**
