@@ -6,6 +6,7 @@ import { useRouter, usePathname } from "next/navigation"
 import type { LogEntry } from "@/components/activity-log" // Assuming LogEntry type is in ActivityLog
 import { authService, type User } from "@/services/auth"
 import { stravaService } from "@/services/strava"
+import { configService } from "@/services/config"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
 export type SpreadsheetConfigStatus = "Configured" | "NotConfigured" | "Disabled"
@@ -223,8 +224,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }
 
   const saveSpreadsheet = async (url: string) => {
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setState((s) => ({ ...s, spreadsheetStatus: "Configured", spreadsheetUrl: url }))
+    try {
+      // Call the real API to save the spreadsheet configuration
+      await configService.setSpreadsheetUrl(url)
+      
+      // Update local state on success
+      setState((s) => ({ 
+        ...s, 
+        spreadsheetStatus: "Configured", 
+        spreadsheetUrl: url 
+      }))
+    } catch (error) {
+      console.error('Failed to save spreadsheet configuration:', error)
+      // Let the component handle the error display
+      throw error
+    }
   }
 
   const changeSpreadsheet = () => {
