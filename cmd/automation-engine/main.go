@@ -2,13 +2,18 @@ package main
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"os"
 	"time"
 
 	_ "github.com/lib/pq"
 
+	"github.com/Perseverance/the-academy-sync-claude/cmd/automation-engine/internal/processing"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/config"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
@@ -84,8 +89,74 @@ func main() {
 		os.Exit(2) // Exit code 2 indicates dependency failure
 	}
 
+	// Initialize database connection
+	db, err := sql.Open("postgres", cfg.DatabaseURL)
+	if err != nil {
+		log.Critical("Failed to open database connection", "error", err.Error())
+		os.Exit(3)
+	}
+	defer db.Close()
+
+	// Test database connection
+	if err := db.Ping(); err != nil {
+		log.Critical("Failed to ping database", "error", err.Error())
+		os.Exit(3)
+	}
+
+	log.Info("Database connection established successfully")
+
+	// Initialize encryption service for token handling
+	encryptionService := auth.NewEncryptionService(cfg.EncryptionSecret)
+
+	// Initialize repositories and services
+	userRepository := database.NewUserRepository(db, encryptionService)
+	configService := automation.NewConfigService(userRepository, log)
+
+	// Initialize processing worker
+	worker := processing.NewWorker(
+		configService,
+		cfg.StravaClientID,
+		cfg.StravaClientSecret,
+		cfg.GoogleClientID,
+		cfg.GoogleClientSecret,
+		"", // GoogleRedirectURL not needed for server-side token refresh
+		log,
+	)
+
+	log.Info("Automation engine initialized successfully, starting processing loop",
+		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "")
+
+	// Main processing loop
 	for {
-		log.Debug("Processing job queue", "environment", cfg.Environment)
-		time.Sleep(30 * time.Second)
+		log.Debug("Starting automation processing cycle", "environment", cfg.Environment)
+		
+		// For now, we'll implement a simple test cycle
+		// In the future, this would be replaced with job queue processing
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
+		
+		// Test processing with user ID 1 (if exists)
+		// This is a placeholder - real implementation would process from job queue
+		testUserID := 1
+		result := worker.ProcessUser(ctx, testUserID)
+		
+		if result.Success {
+			log.Info("Test processing cycle completed successfully",
+				"user_id", testUserID,
+				"activities_count", result.ActivitiesCount,
+				"processing_time_ms", result.ProcessingTime.Milliseconds())
+		} else {
+			log.Warn("Test processing cycle failed",
+				"user_id", testUserID,
+				"error", result.Error,
+				"error_type", result.ErrorType,
+				"requires_reauth", result.RequiresReauth,
+				"processing_time_ms", result.ProcessingTime.Milliseconds())
+		}
+		
+		cancel()
+		
+		// Wait before next cycle
+		log.Debug("Automation processing cycle completed, waiting for next cycle")
+		time.Sleep(60 * time.Second) // Process every minute for testing
 	}
 }
