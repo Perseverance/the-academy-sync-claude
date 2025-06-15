@@ -42,15 +42,15 @@ Once these steps are complete, you can proceed to create the GCS bucket.
 **Example `gcloud` command to create such a bucket:**
 
 ```sh
-gcloud storage buckets create gs://your-unique-project-name-tfstate \
+gcloud storage buckets create gs://the-academy-sync-claude-tfstate \
     --project=your-gcp-project-id \
     --location=europe-central2 \
     --uniform-bucket-level-access \
     --public-access-prevention
-gcloud storage buckets update gs://your-unique-project-name-tfstate --versioning
+gcloud storage buckets update gs://the-academy-sync-claude-tfstate --versioning
 ```
 
-Replace `your-unique-project-name-tfstate` and `your-gcp-project-id` with your actual values.
+Replace `your-gcp-project-id` with your actual project ID. The bucket name `the-academy-sync-claude-tfstate` is used as an example.
 
 ### Updating `backend.tf`
 
@@ -59,13 +59,13 @@ Once the bucket is created, you need to update the `terraform/backend.tf` file:
 ```terraform
 terraform {
   backend "gcs" {
-    bucket  = "your-gcs-bucket-name-here"  // TODO: Replace with your actual GCS bucket name
-    prefix  = "the-academy-sync/state"
+    bucket = "the-academy-sync-claude-tfstate"
+    prefix = "tf-state"
   }
 }
 ```
 
-Replace `"your-gcs-bucket-name-here"` with the actual name of the GCS bucket you created.
+The `bucket` attribute should be set to the name of the GCS bucket you created (e.g., `the-academy-sync-claude-tfstate`). The `prefix` is configured to support Terraform workspaces.
 
 ### Initializing Terraform
 
@@ -78,3 +78,61 @@ terraform init
 This command will download the necessary provider plugins and configure the backend to use your GCS bucket. You should see a message like "Successfully configured the backend 'gcs'".
 
 After successful initialization, any `terraform apply` commands will store the state in the configured GCS bucket.
+
+## Managing Environments with Workspaces
+
+This project uses Terraform Workspaces to manage multiple deployment environments (e.g., staging, production) from a single codebase. Each workspace maintains its own state file, allowing for independent and safe infrastructure management.
+
+The backend is configured to store state files in GCS. Terraform automatically creates workspace-specific paths within the bucket (e.g., `gs://the-academy-sync-claude-tfstate/tf-state/env:/staging/`, `gs://the-academy-sync-claude-tfstate/tf-state/env:/prod/`).
+
+### Creating Workspaces
+
+If they don't already exist, you can create workspaces for different environments. For example, to create `staging` and `prod` workspaces:
+
+```sh
+terraform workspace new staging
+terraform workspace new prod
+```
+
+The `default` workspace is present initially. It's recommended to create specific workspaces for your environments rather than using `default` for any particular environment.
+
+### Selecting a Workspace
+
+Before running any Terraform commands for a specific environment, you need to select its workspace:
+
+```sh
+terraform workspace select staging
+```
+Or for production:
+```sh
+terraform workspace select prod
+```
+You can list available workspaces with `terraform workspace list`.
+
+### Applying Environment-Specific Configurations
+
+To deploy or make changes to an environment, first select the appropriate workspace. Then, use the `-var-file` flag with `terraform apply` (or `plan`) to specify the environment's configuration file:
+
+**For Staging:**
+1. Select the staging workspace:
+   ```sh
+   terraform workspace select staging
+   ```
+2. Apply the configuration using `staging.tfvars`:
+   ```sh
+   terraform plan -var-file="staging.tfvars"
+   terraform apply -var-file="staging.tfvars"
+   ```
+
+**For Production:**
+1. Select the production workspace:
+   ```sh
+   terraform workspace select prod
+   ```
+2. Apply the configuration using `prod.tfvars`:
+   ```sh
+   terraform plan -var-file="prod.tfvars"
+   terraform apply -var-file="prod.tfvars"
+   ```
+
+Remember to ensure the `bucket` in `backend.tf` is set to your GCS bucket name (e.g., `the-academy-sync-claude-tfstate`) and update the project IDs in `staging.tfvars` and `prod.tfvars` with your actual values.
