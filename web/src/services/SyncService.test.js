@@ -39,7 +39,6 @@ describe('SyncService', () => {
       const mockResponse = {
         success: true,
         message: 'Manual sync triggered successfully',
-        trace_id: 'test-trace-123',
         estimated_completion_seconds: 60
       };
 

@@ -48,7 +48,6 @@ type SyncRequest struct {
 type SyncResponse struct {
 	Success                   bool   `json:"success"`
 	Message                   string `json:"message"`
-	TraceID                   string `json:"trace_id"`
 	EstimatedCompletionSeconds int    `json:"estimated_completion_seconds"`
 }
 
@@ -147,7 +146,6 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) (*SyncR
 	
 	s.logger.Info("Manual sync job enqueued successfully",
 		"user_id", userID,
-		"trace_id", job.TraceID,
 		"trigger_type", "manual",
 		"job_created_at", job.CreatedAt.Format(time.RFC3339),
 		"operation_duration_ms", operationDuration.Milliseconds(),
@@ -156,7 +154,6 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) (*SyncR
 	return &SyncResponse{
 		Success:                   true,
 		Message:                   "Manual sync triggered successfully",
-		TraceID:                   job.TraceID,
 		EstimatedCompletionSeconds: 60, // Estimated completion time
 	}, nil
 }

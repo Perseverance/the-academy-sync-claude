@@ -81,7 +81,6 @@ func (h *SyncHandler) TriggerManualSync(w http.ResponseWriter, r *http.Request) 
 	// Success response (202 Accepted)
 	h.logger.Info("Manual sync triggered successfully",
 		"user_id", userID,
-		"trace_id", response.TraceID,
 		"client_ip", clientIP,
 		"estimated_completion_seconds", response.EstimatedCompletionSeconds)
 
@@ -91,7 +90,6 @@ func (h *SyncHandler) TriggerManualSync(w http.ResponseWriter, r *http.Request) 
 		h.logger.Error("Failed to encode manual sync response",
 			"error", err,
 			"user_id", userID,
-			"trace_id", response.TraceID,
 			"client_ip", clientIP)
 	}
 }

@@ -268,7 +268,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         id: String(Date.now()),
         date: new Date().toISOString(),
         status: "Success",
-        summary: `Manual sync triggered successfully. Trace ID: ${response.trace_id}`
+        summary: "Manual sync triggered successfully"
       }
       
       setState((s) => ({

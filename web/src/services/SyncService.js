@@ -12,7 +12,6 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL
  * @typedef {Object} SyncResponse
  * @property {boolean} success - Whether the sync was triggered successfully
  * @property {string} message - Success message
- * @property {string} trace_id - Unique trace ID for the sync job
  * @property {number} estimated_completion_seconds - Estimated time for completion
  */
 
@@ -142,7 +141,6 @@ export class SyncService {
       const data = await response.json();
       
       console.log('✅ Manual sync triggered successfully:', {
-        trace_id: data.trace_id,
         estimated_completion: data.estimated_completion_seconds
       });
 

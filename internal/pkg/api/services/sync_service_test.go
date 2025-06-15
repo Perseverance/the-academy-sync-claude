@@ -40,7 +40,7 @@ func (m *MockQueueClient) EnqueueJob(ctx context.Context, userID int, triggerTyp
 	// Default successful response
 	return &queue.Job{
 		UserID:         userID,
-		TraceID:        "test-trace-id-123",
+		TraceID:        "test-trace-id-123", // Still needed for job creation, just not in response
 		TriggerType:    triggerType,
 		CreatedAt:      time.Now(),
 		TimeoutSeconds: 300,
@@ -76,10 +76,6 @@ func TestSyncService_TriggerManualSync(t *testing.T) {
 		
 		if !response.Success {
 			t.Error("Expected success to be true")
-		}
-		
-		if response.TraceID != "test-trace-id-123" {
-			t.Errorf("Expected trace ID 'test-trace-id-123', got %s", response.TraceID)
 		}
 		
 		if response.EstimatedCompletionSeconds != 60 {

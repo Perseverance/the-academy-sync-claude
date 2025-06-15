@@ -17,7 +17,6 @@ export function ManualSyncCard({ status, onSync }: ManualSyncCardProps) {
   const [lastSyncResult, setLastSyncResult] = useState<{
     success: boolean
     message: string
-    traceId?: string
   } | null>(null)
 
   const isDisabled = status === "Disabled" || isProcessing
@@ -38,8 +37,7 @@ export function ManualSyncCard({ status, onSync }: ManualSyncCardProps) {
       
       setLastSyncResult({
         success: true,
-        message: "Sync triggered successfully! Your data will be updated shortly.",
-        traceId: response.trace_id
+        message: "Sync triggered successfully! Your data will be updated shortly."
       })
 
       // Call the optional onSync callback if provided
@@ -140,11 +138,6 @@ export function ManualSyncCard({ status, onSync }: ManualSyncCardProps) {
                 <p className="text-sm font-medium">
                   {lastSyncResult.message}
                 </p>
-                {lastSyncResult.traceId && (
-                  <p className="text-xs mt-1 font-mono">
-                    Trace ID: {lastSyncResult.traceId}
-                  </p>
-                )}
               </div>
             </div>
           </div>
