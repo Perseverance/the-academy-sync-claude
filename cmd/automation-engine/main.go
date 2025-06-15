@@ -110,7 +110,18 @@ func main() {
 
 	// Initialize repositories and services
 	userRepository := database.NewUserRepository(db, encryptionService)
-	configService := automation.NewConfigService(userRepository, log)
+	
+	// Initialize token refresh service for OAuth token management
+	tokenRefreshService := automation.NewTokenRefreshService(
+		userRepository,
+		cfg.GoogleClientID,
+		cfg.GoogleClientSecret,
+		cfg.StravaClientID,
+		cfg.StravaClientSecret,
+		log,
+	)
+	
+	configService := automation.NewConfigService(userRepository, tokenRefreshService, log)
 
 	// Initialize processing worker
 	worker := processing.NewWorker(

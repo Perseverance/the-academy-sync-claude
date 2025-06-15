@@ -266,8 +266,9 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 	// Step 5: Fetch activities from Strava
 	// Get activities from the last 7 days (configurable in the future)
 	since := time.Now().AddDate(0, 0, -7)
-	
-	w.logger.Debug("🏃 Step 5/6: Fetching activities from Strava",
+	// TODO: Implement actual Strava activity fetching functionality
+	// This is subject to a separate story and should not be implemented yet
+	w.logger.Debug("🏃 Step 5/6: Simulating Strava activity fetch (TODO: implement actual fetching)",
 		"user_id", userID,
 		"step", "strava_activity_fetch",
 		"fetch_parameters", map[string]interface{}{
@@ -278,65 +279,50 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 			"timezone":         config.Timezone,
 		})
 	
-	activities, err := stravaClient.GetActivities(ctx, since)
-	if err != nil {
-		processingDuration := time.Since(startTime)
-		
-		// Check if this requires re-authorization
-		if strava.IsReauthRequired(err) {
-			w.logger.Warn("🔐 Strava access requires user re-authorization",
-				"user_id", userID,
-				"step", "strava_activity_fetch",
-				"error", err,
-				"error_analysis", map[string]interface{}{
-					"error_type":          fmt.Sprintf("%T", err),
-					"requires_reauth":     true,
-					"athlete_id":          config.StravaAthleteID,
-					"strava_token_expired": !config.HasValidStravaToken(),
-					"fetch_parameters":    map[string]interface{}{
-						"since":     since.Format(time.RFC3339),
-						"days_back": 7,
-					},
-				},
-				"processing_duration_ms", processingDuration.Milliseconds(),
-				"action_required", "User must re-authorize Strava access")
-			
-			result.ProcessingTime = processingDuration
-			result.Error = "Strava access requires re-authorization"
-			result.ErrorType = "STRAVA_REAUTH_REQUIRED"
-			result.RequiresReauth = true
-			return result
-		}
-		
-		w.logger.Error("❌ Failed to fetch activities from Strava",
-			"error", err,
-			"user_id", userID,
-			"step", "strava_activity_fetch",
-			"error_details", map[string]interface{}{
-				"error_type":       fmt.Sprintf("%T", err),
-				"error_string":     err.Error(),
-				"athlete_id":       config.StravaAthleteID,
-				"has_valid_token":  config.HasValidStravaToken(),
-				"token_expiry":     config.StravaTokenExpiry,
-				"fetch_parameters": map[string]interface{}{
-					"since":     since.Format(time.RFC3339),
-					"days_back": 7,
-				},
-			},
-			"processing_duration_ms", processingDuration.Milliseconds())
-		
-		result.ProcessingTime = processingDuration
-		result.Error = fmt.Sprintf("Strava activity fetch failed: %v", err)
-		result.ErrorType = "STRAVA_FETCH_ERROR"
-		return result
+	// TODO: Replace this simulation with actual Strava API call
+	// The implementation should:
+	// 1. Use the stravaClient.GetActivities() method
+	// 2. Handle re-authorization errors properly
+	// 3. Fetch activities since the specified date
+	// 4. Apply proper rate limiting and error handling
+	
+	time.Sleep(500 * time.Millisecond) // Simulate API call time
+	
+	// Simulate some activities for testing purposes
+	activities := []strava.Activity{
+		{
+			ID:         12345,
+			Name:       "Morning Run",
+			Type:       "Run",
+			Distance:   5000,    // 5km in meters
+			MovingTime: 1800,    // 30 minutes in seconds
+			StartDate:  time.Now().Add(-24 * time.Hour),
+			StartDateLocal: time.Now().Add(-24 * time.Hour),
+			TotalElevationGain: 50,
+			AverageHeartrate: 150,
+			Kudos: 5,
+		},
+		{
+			ID:         12346,
+			Name:       "Evening Bike Ride",
+			Type:       "Ride",
+			Distance:   15000,   // 15km in meters
+			MovingTime: 2700,    // 45 minutes in seconds
+			StartDate:  time.Now().Add(-48 * time.Hour),
+			StartDateLocal: time.Now().Add(-48 * time.Hour),
+			TotalElevationGain: 200,
+			AverageHeartrate: 130,
+			Kudos: 8,
+		},
 	}
 	
-	w.logger.Info("✅ Step 5/6: Successfully fetched activities from Strava",
+	w.logger.Info("✅ Step 5/6: Simulated Strava activity fetch completed (TODO: implement actual fetching)",
 		"user_id", userID,
 		"step", "strava_activity_fetch",
 		"fetch_results", map[string]interface{}{
 			"activity_count":   len(activities),
 			"since":            since.Format(time.RFC3339),
+			"fetch_simulated":  true,
 			"first_activity":   func() string {
 				if len(activities) > 0 {
 					return activities[0].StartDate.Format(time.RFC3339)
@@ -352,71 +338,35 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 		})
 	
 	// Step 6: Write activities to Google Sheets
+	// TODO: Implement actual Google Sheets writing functionality
+	// This is subject to a separate story and should not be implemented yet
 	if len(activities) > 0 {
-		w.logger.Debug("📝 Step 6/6: Writing activities to Google Sheets",
+		w.logger.Debug("📝 Step 6/6: Simulating Google Sheets write (TODO: implement actual writing)",
 			"user_id", userID,
 			"step", "sheets_activity_write",
 			"write_parameters", map[string]interface{}{
 				"activity_count":   len(activities),
 				"spreadsheet_id":   config.SpreadsheetID,
-				"target_sheet":     "Sheet1",
+				"target_sheet":     "Тренировъчен План",
 				"write_range":      fmt.Sprintf("A2:I%d", len(activities)+1),
 			})
 		
-		if err := sheetsClient.WriteActivities(ctx, config.SpreadsheetID, activities); err != nil {
-			processingDuration := time.Since(startTime)
-			
-			// Check if this requires re-authorization
-			if google.IsReauthRequired(err) {
-				w.logger.Warn("🔐 Google Sheets write requires user re-authorization",
-					"user_id", userID,
-					"step", "sheets_activity_write",
-					"error", err,
-					"error_analysis", map[string]interface{}{
-						"error_type":           fmt.Sprintf("%T", err),
-						"requires_reauth":      true,
-						"spreadsheet_id":       config.SpreadsheetID,
-						"activity_count":       len(activities),
-						"google_token_expired": !config.HasValidGoogleToken(),
-					},
-					"processing_duration_ms", processingDuration.Milliseconds(),
-					"action_required", "User must re-authorize Google Sheets access")
-				
-				result.ProcessingTime = processingDuration
-				result.Error = "Google Sheets write requires re-authorization"
-				result.ErrorType = "GOOGLE_REAUTH_REQUIRED"
-				result.RequiresReauth = true
-				return result
-			}
-			
-			w.logger.Error("❌ Failed to write activities to Google Sheets",
-				"error", err,
-				"user_id", userID,
-				"step", "sheets_activity_write",
-				"error_details", map[string]interface{}{
-					"error_type":       fmt.Sprintf("%T", err),
-					"error_string":     err.Error(),
-					"activity_count":   len(activities),
-					"spreadsheet_id":   config.SpreadsheetID,
-					"has_valid_token":  config.HasValidGoogleToken(),
-					"token_expiry":     config.GoogleTokenExpiry,
-					"write_range":      fmt.Sprintf("A2:I%d", len(activities)+1),
-				},
-				"processing_duration_ms", processingDuration.Milliseconds())
-			
-			result.ProcessingTime = processingDuration
-			result.Error = fmt.Sprintf("Sheets write failed: %v", err)
-			result.ErrorType = "SHEETS_WRITE_ERROR"
-			return result
-		}
+		// TODO: Replace this simulation with actual sheets writing
+		// The implementation should:
+		// 1. Use the corrected Google Sheets client
+		// 2. Write to the "Тренировъчен План" sheet
+		// 3. Handle re-authorization errors
+		// 4. Provide proper error logging and recovery
 		
-		w.logger.Info("✅ Step 6/6: Successfully wrote activities to Google Sheets",
+		time.Sleep(300 * time.Millisecond) // Simulate processing time
+		
+		w.logger.Info("✅ Step 6/6: Simulated Google Sheets write completed (TODO: implement actual writing)",
 			"user_id", userID,
 			"step", "sheets_activity_write",
 			"write_results", map[string]interface{}{
 				"activity_count":   len(activities),
 				"spreadsheet_id":   config.SpreadsheetID,
-				"write_successful": true,
+				"write_simulated":  true,
 			})
 	} else {
 		w.logger.Info("ℹ️ Step 6/6: No new activities to write to Google Sheets",
