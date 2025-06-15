@@ -16,6 +16,8 @@ export interface User {
   automation_enabled: boolean
   has_strava_connection: boolean
   has_sheets_connection: boolean
+  strava_athlete_name?: string
+  strava_profile_picture_url?: string
   recent_activity_logs: ActivityLog[]
 }
 

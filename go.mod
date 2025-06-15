@@ -12,7 +12,7 @@ require (
 	github.com/lib/pq v1.10.9
 )
 
-require github.com/DATA-DOG/go-sqlmock v1.5.2 // indirect
+require github.com/DATA-DOG/go-sqlmock v1.5.2
 
 require (
 	cloud.google.com/go/auth v0.16.0 // indirect
@@ -32,7 +32,7 @@ require (
 	go.opentelemetry.io/otel v1.35.0 // indirect
 	go.opentelemetry.io/otel/metric v1.35.0 // indirect
 	go.opentelemetry.io/otel/trace v1.35.0 // indirect
-	golang.org/x/crypto v0.39.0 // indirect
+	golang.org/x/crypto v0.39.0
 	golang.org/x/net v0.39.0 // indirect
 	golang.org/x/oauth2 v0.29.0
 	golang.org/x/sync v0.15.0 // indirect
