@@ -5,7 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { RefreshCw, Loader2, Info, CheckCircle, AlertCircle } from "lucide-react"
 import type { SyncStatus } from "@/context/app-state-provider"
-import { SyncService, SyncError } from "@/src/services/SyncService"
+import { SyncService, SyncError } from "@/services/SyncService"
 
 interface ManualSyncCardProps {
   status: SyncStatus
