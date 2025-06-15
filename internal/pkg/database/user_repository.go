@@ -344,3 +344,55 @@ func (r *UserRepository) GetDecryptedStravaTokens(ctx context.Context, userID in
 
 	return accessToken, refreshToken, expiry, athleteID, nil
 }
+
+// UpdateSpreadsheetID updates the user's Google Spreadsheet ID
+func (r *UserRepository) UpdateSpreadsheetID(ctx context.Context, userID int, spreadsheetID string) error {
+	query := `
+		UPDATE users 
+		SET spreadsheet_id = $1, updated_at = $2 
+		WHERE id = $3
+	`
+
+	now := time.Now()
+	result, err := r.db.ExecContext(ctx, query, spreadsheetID, now, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}
+
+// ClearSpreadsheetID clears the user's Google Spreadsheet ID
+func (r *UserRepository) ClearSpreadsheetID(ctx context.Context, userID int) error {
+	query := `
+		UPDATE users 
+		SET spreadsheet_id = NULL, updated_at = $1 
+		WHERE id = $2
+	`
+
+	now := time.Now()
+	result, err := r.db.ExecContext(ctx, query, now, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}
