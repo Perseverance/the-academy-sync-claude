@@ -354,8 +354,21 @@ func (r *UserRepository) UpdateSpreadsheetID(ctx context.Context, userID int, sp
 	`
 
 	now := time.Now()
-	_, err := r.db.ExecContext(ctx, query, spreadsheetID, now, userID)
-	return err
+	result, err := r.db.ExecContext(ctx, query, spreadsheetID, now, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }
 
 // ClearSpreadsheetID clears the user's Google Spreadsheet ID
@@ -367,6 +380,19 @@ func (r *UserRepository) ClearSpreadsheetID(ctx context.Context, userID int) err
 	`
 
 	now := time.Now()
-	_, err := r.db.ExecContext(ctx, query, now, userID)
-	return err
+	result, err := r.db.ExecContext(ctx, query, now, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }

@@ -11,6 +11,14 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 )
 
+// Pre-compiled regex patterns for better performance
+var (
+	spreadsheetURLPatterns = []*regexp.Regexp{
+		regexp.MustCompile(`https://docs\.google\.com/spreadsheets/d/([a-zA-Z0-9_-]+)`),
+		regexp.MustCompile(`docs\.google\.com/spreadsheets/d/([a-zA-Z0-9_-]+)`),
+	}
+)
+
 // ConfigService handles configuration operations for user settings
 type ConfigService struct {
 	userRepository *database.UserRepository
@@ -74,12 +82,12 @@ func (c *ConfigService) SetSpreadsheetURL(ctx context.Context, userID int, sprea
 
 	c.logger.Debug("Successfully extracted spreadsheet ID",
 		"user_id", userID,
-		"spreadsheet_id", spreadsheetID)
+		"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID))
 
 	// Step 2: Validate user has access to the spreadsheet
 	c.logger.Debug("Validating spreadsheet access",
 		"user_id", userID,
-		"spreadsheet_id", spreadsheetID)
+		"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID))
 
 	err = c.sheetsService.ValidateSpreadsheetAccess(ctx, userID, spreadsheetID)
 	if err != nil {
@@ -122,7 +130,7 @@ func (c *ConfigService) SetSpreadsheetURL(ctx context.Context, userID int, sprea
 		c.logger.Error("Unexpected error during spreadsheet validation",
 			"error", err,
 			"user_id", userID,
-			"spreadsheet_id", spreadsheetID)
+			"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID))
 		return &ConfigError{
 			Type:    ConfigErrorValidation,
 			Message: "Failed to validate spreadsheet access. Please try again.",
@@ -132,19 +140,19 @@ func (c *ConfigService) SetSpreadsheetURL(ctx context.Context, userID int, sprea
 
 	c.logger.Debug("Spreadsheet access validation successful",
 		"user_id", userID,
-		"spreadsheet_id", spreadsheetID)
+		"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID))
 
 	// Step 3: Save spreadsheet ID to database
 	c.logger.Debug("Saving spreadsheet ID to database",
 		"user_id", userID,
-		"spreadsheet_id", spreadsheetID)
+		"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID))
 
 	err = c.userRepository.UpdateSpreadsheetID(ctx, userID, spreadsheetID)
 	if err != nil {
 		c.logger.Error("Failed to save spreadsheet ID to database",
 			"error", err,
 			"user_id", userID,
-			"spreadsheet_id", spreadsheetID)
+			"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID))
 		return &ConfigError{
 			Type:    ConfigErrorDatabase,
 			Message: "Failed to save spreadsheet configuration. Please try again.",
@@ -155,7 +163,7 @@ func (c *ConfigService) SetSpreadsheetURL(ctx context.Context, userID int, sprea
 	duration := time.Since(startTime)
 	c.logger.Info("Spreadsheet configuration completed successfully",
 		"user_id", userID,
-		"spreadsheet_id", spreadsheetID,
+		"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID),
 		"configuration_duration_ms", duration.Milliseconds())
 
 	return nil
@@ -201,36 +209,22 @@ func (c *ConfigService) extractSpreadsheetID(url string) (string, error) {
 	// https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit
 	// https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}
 	
-	// Regular expression to extract spreadsheet ID
-	// The spreadsheet ID is a string of alphanumeric characters, hyphens, and underscores
-	patterns := []string{
-		`https://docs\.google\.com/spreadsheets/d/([a-zA-Z0-9-_]+)`,
-		`docs\.google\.com/spreadsheets/d/([a-zA-Z0-9-_]+)`,
-	}
-
-	for _, pattern := range patterns {
+	// Use pre-compiled regex patterns for better performance
+	for i, regex := range spreadsheetURLPatterns {
 		c.logger.Debug("Testing URL pattern",
-			"pattern", pattern)
-
-		regex, err := regexp.Compile(pattern)
-		if err != nil {
-			c.logger.Error("Failed to compile regex pattern",
-				"pattern", pattern,
-				"error", err)
-			continue
-		}
+			"pattern_index", i)
 
 		matches := regex.FindStringSubmatch(url)
 		if len(matches) >= 2 {
 			spreadsheetID := matches[1]
 			c.logger.Debug("Successfully extracted spreadsheet ID",
-				"spreadsheet_id", spreadsheetID,
-				"pattern", pattern)
+				"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID),
+				"pattern_index", i)
 			
 			// Validate spreadsheet ID format
 			if len(spreadsheetID) < 10 || len(spreadsheetID) > 100 {
 				c.logger.Warn("Spreadsheet ID has unusual length",
-					"spreadsheet_id", spreadsheetID,
+					"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID),
 					"length", len(spreadsheetID))
 			}
 
@@ -259,4 +253,18 @@ func (c *ConfigService) sanitizeURL(url string) string {
 		return url[:30] + "..."
 	}
 	return url
+}
+
+// sanitizeSpreadsheetID masks sensitive spreadsheet ID for logging while preserving troubleshooting context
+func (c *ConfigService) sanitizeSpreadsheetID(spreadsheetID string) string {
+	if len(spreadsheetID) <= 8 {
+		// For very short IDs, mask all but first 2 characters
+		return spreadsheetID[:2] + strings.Repeat("*", len(spreadsheetID)-2)
+	}
+	
+	// For normal IDs, show first 4 and last 4 characters with asterisks in between
+	prefix := spreadsheetID[:4]
+	suffix := spreadsheetID[len(spreadsheetID)-4:]
+	middle := strings.Repeat("*", len(spreadsheetID)-8)
+	return prefix + middle + suffix
 }

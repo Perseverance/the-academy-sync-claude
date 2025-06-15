@@ -124,8 +124,8 @@ func main() {
 	sessionRepository := database.NewSessionRepository(db)
 
 	// Initialize services
-	sheetsService := services.NewSheetsService(userRepository, log.WithContext("component", "sheets_service"))
-	configService := services.NewConfigService(userRepository, sheetsService, log.WithContext("component", "config_service"))
+	sheetsService := services.NewSheetsService(userRepository, log)
+	configService := services.NewConfigService(userRepository, sheetsService, log)
 
 	// Initialize middleware
 	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository, oauthService, userRepository, log.WithContext("component", "auth_middleware"))
