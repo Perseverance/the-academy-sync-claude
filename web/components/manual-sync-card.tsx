@@ -46,7 +46,7 @@ export function ManualSyncCard({ status, onSync }: ManualSyncCardProps) {
       if (onSync) {
         onSync()
       }
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Manual sync failed:', error)
       
       let errorMessage = "Failed to trigger sync. Please try again."
@@ -65,6 +65,12 @@ export function ManualSyncCard({ status, onSync }: ManualSyncCardProps) {
           default:
             errorMessage = error.message || errorMessage
         }
+      } else if (error instanceof Error) {
+        // Handle standard Error instances
+        errorMessage = error.message || errorMessage
+      } else if (typeof error === 'string') {
+        // Handle string errors
+        errorMessage = error
       }
 
       setLastSyncResult({

@@ -60,6 +60,9 @@ type Config struct {
 
 	// Fail-fast configuration
 	FailFastEnabled bool `json:"fail_fast_enabled"`
+	
+	// Automation engine configuration
+	MaxWorkers int `json:"max_workers"`
 }
 
 // Load loads configuration based on the environment.
@@ -127,6 +130,9 @@ func loadFromEnv() (*Config, error) {
 
 		// Fail-fast
 		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
+		
+		// Automation engine
+		MaxWorkers: getMaxWorkers(),
 	}
 
 	// Build database URL if not provided
@@ -249,6 +255,9 @@ func loadFromSecretManager() (*Config, error) {
 
 		// Fail-fast
 		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
+		
+		// Automation engine
+		MaxWorkers: getMaxWorkers(),
 	}
 
 	// Build database URL if not provided from secrets
@@ -349,6 +358,9 @@ func loadFromEnvForProduction() (*Config, error) {
 
 		// Fail-fast
 		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
+		
+		// Automation engine
+		MaxWorkers: getMaxWorkers(),
 	}
 
 	// Build database URL if not provided
@@ -456,6 +468,25 @@ func getEnvBool(key string, defaultValue bool) bool {
 			return true
 		case "false", "0", "no", "off":
 			return false
+		}
+	}
+	return defaultValue
+}
+
+// getMaxWorkers gets the MAX_WORKERS environment variable with bounds checking
+func getMaxWorkers() int {
+	workers := getEnvInt("MAX_WORKERS", 20)
+	if workers < 1 {
+		workers = 1 // Ensure at least 1 worker
+	}
+	return workers
+}
+
+// getEnvInt gets an integer environment variable with a fallback default value.
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
 		}
 	}
 	return defaultValue

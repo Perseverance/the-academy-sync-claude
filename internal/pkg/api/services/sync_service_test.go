@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 )
@@ -88,7 +89,7 @@ func TestSyncService_TriggerManualSync(t *testing.T) {
 
 	t.Run("UserNotFound", func(t *testing.T) {
 		mockConfig := &MockConfigService{
-			validateUserResult: fmt.Errorf("user not found: 999"),
+			validateUserResult: fmt.Errorf("%w: 999", automation.ErrUserNotFound),
 		}
 		mockQueue := &MockQueueClient{}
 		
@@ -116,7 +117,7 @@ func TestSyncService_TriggerManualSync(t *testing.T) {
 
 	t.Run("UserNotConfigured", func(t *testing.T) {
 		mockConfig := &MockConfigService{
-			validateUserResult: fmt.Errorf("user missing essential configuration: [strava_refresh_token]"),
+			validateUserResult: fmt.Errorf("%w: missing strava_refresh_token", automation.ErrUserNotConfigured),
 		}
 		mockQueue := &MockQueueClient{}
 		

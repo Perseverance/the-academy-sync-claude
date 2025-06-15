@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -146,7 +145,7 @@ func main() {
 	if queueClient != nil {
 		// Redis job queue mode
 		log.Info("🚀 Starting Redis job queue processing mode")
-		startJobQueueProcessing(queueClient, worker, log)
+		startJobQueueProcessing(queueClient, worker, log, cfg)
 	} else {
 		// Test mode with periodic processing
 		log.Info("🧪 Starting test mode with periodic processing")
@@ -154,20 +153,10 @@ func main() {
 	}
 }
 
-// getEnvInt returns an integer environment variable with a default value
-func getEnvInt(key string, defaultValue int) int {
-	if value := os.Getenv(key); value != "" {
-		if intValue, err := strconv.Atoi(value); err == nil {
-			return intValue
-		}
-	}
-	return defaultValue
-}
-
 // startJobQueueProcessing processes jobs from Redis queue using worker pool pattern
-func startJobQueueProcessing(queueClient *queue.Client, worker *processing.Worker, log *logger.Logger) {
-	// Make worker count configurable via environment variable
-	maxWorkers := getEnvInt("MAX_WORKERS", 20)
+func startJobQueueProcessing(queueClient *queue.Client, worker *processing.Worker, log *logger.Logger, cfg *config.Config) {
+	// Use centralized configuration for worker count
+	maxWorkers := cfg.MaxWorkers
 	
 	// Create unbuffered channel for job distribution
 	jobChan := make(chan *queue.Job)

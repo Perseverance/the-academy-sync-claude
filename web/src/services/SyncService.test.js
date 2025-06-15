@@ -69,8 +69,10 @@ describe('SyncService', () => {
     it('should throw SyncError when user not authenticated', async () => {
       localStorageMock.getItem.mockReturnValue(null);
 
-      await expect(SyncService.triggerManualSync()).rejects.toThrow(SyncError);
-      await expect(SyncService.triggerManualSync()).rejects.toThrow('Authentication required');
+      const error = await SyncService.triggerManualSync().catch(e => e);
+      
+      expect(error).toBeInstanceOf(SyncError);
+      expect(error.message).toContain('Authentication required');
     });
 
     it('should handle 401 unauthorized response', async () => {
@@ -101,14 +103,11 @@ describe('SyncService', () => {
         json: async () => errorResponse
       });
 
-      await expect(SyncService.triggerManualSync()).rejects.toThrow(SyncError);
+      const error = await SyncService.triggerManualSync().catch(e => e);
       
-      try {
-        await SyncService.triggerManualSync();
-      } catch (error) {
-        expect(error.code).toBe('USER_NOT_CONFIGURED');
-        expect(error.status).toBe(400);
-      }
+      expect(error).toBeInstanceOf(SyncError);
+      expect(error.code).toBe('USER_NOT_CONFIGURED');
+      expect(error.status).toBe(400);
     });
 
     it('should handle 503 service unavailable response', async () => {
@@ -119,28 +118,22 @@ describe('SyncService', () => {
         statusText: 'Service Unavailable'
       });
 
-      await expect(SyncService.triggerManualSync()).rejects.toThrow(SyncError);
+      const error = await SyncService.triggerManualSync().catch(e => e);
       
-      try {
-        await SyncService.triggerManualSync();
-      } catch (error) {
-        expect(error.type).toBe('SERVICE_ERROR');
-        expect(error.status).toBe(503);
-      }
+      expect(error).toBeInstanceOf(SyncError);
+      expect(error.type).toBe('SERVICE_ERROR');
+      expect(error.status).toBe(503);
     });
 
     it('should handle network errors', async () => {
       localStorageMock.getItem.mockReturnValue('valid-token');
       fetch.mockRejectedValueOnce(new Error('Network connection failed'));
 
-      await expect(SyncService.triggerManualSync()).rejects.toThrow(SyncError);
+      const error = await SyncService.triggerManualSync().catch(e => e);
       
-      try {
-        await SyncService.triggerManualSync();
-      } catch (error) {
-        expect(error.type).toBe('NETWORK_ERROR');
-        expect(error.message).toContain('Network error');
-      }
+      expect(error).toBeInstanceOf(SyncError);
+      expect(error.type).toBe('NETWORK_ERROR');
+      expect(error.message).toContain('Network error');
     });
   });
 

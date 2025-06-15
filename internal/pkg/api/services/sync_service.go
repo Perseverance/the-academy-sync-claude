@@ -2,9 +2,11 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 )
@@ -96,8 +98,8 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) (*SyncR
 			"user_id", userID,
 			"validation_duration_ms", time.Since(startTime).Milliseconds())
 		
-		// Determine error type based on the validation error
-		if err.Error() == fmt.Sprintf("user not found: %d", userID) {
+		// Use sentinel errors for robust error detection
+		if errors.Is(err, automation.ErrUserNotFound) {
 			return nil, &SyncError{
 				Type:    SyncErrorUserNotFound,
 				Message: fmt.Sprintf("User %d not found", userID),
@@ -106,6 +108,15 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) (*SyncR
 		}
 		
 		// Check if it's a configuration issue
+		if errors.Is(err, automation.ErrUserNotConfigured) {
+			return nil, &SyncError{
+				Type:    SyncErrorUserNotConfigured,
+				Message: "User is not fully configured for automation. Please complete OAuth connections and spreadsheet setup.",
+				Cause:   err,
+			}
+		}
+		
+		// Fallback for other validation errors
 		return nil, &SyncError{
 			Type:    SyncErrorUserNotConfigured,
 			Message: "User is not fully configured for automation. Please complete OAuth connections and spreadsheet setup.",

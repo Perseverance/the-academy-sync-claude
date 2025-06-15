@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"os"
@@ -207,7 +208,39 @@ func main() {
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status": "healthy", "environment": "%s", "service": "backend-api"}`, cfg.Environment)
+		
+		// Basic health status
+		health := map[string]interface{}{
+			"status":      "healthy",
+			"environment": cfg.Environment,
+			"service":     "backend-api",
+			"timestamp":   time.Now().Format(time.RFC3339),
+		}
+		
+		// Add queue health if Redis is configured
+		if queueClient != nil {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			
+			if err := queueClient.HealthCheck(ctx); err != nil {
+				health["queue_status"] = "unhealthy"
+				health["queue_error"] = err.Error()
+				health["status"] = "degraded" // Overall status degraded
+			} else {
+				health["queue_status"] = "healthy"
+			}
+		} else {
+			health["queue_status"] = "disabled"
+		}
+		
+		// Set appropriate HTTP status
+		statusCode := http.StatusOK
+		if health["status"] == "degraded" {
+			statusCode = http.StatusServiceUnavailable
+		}
+		
+		w.WriteHeader(statusCode)
+		json.NewEncoder(w).Encode(health)
 	})
 
 	// Authentication routes (public)

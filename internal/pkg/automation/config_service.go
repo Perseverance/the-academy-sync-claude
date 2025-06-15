@@ -2,11 +2,18 @@ package automation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+)
+
+// Sentinel errors for automation config operations
+var (
+	ErrUserNotFound = errors.New("user not found")
+	ErrUserNotConfigured = errors.New("user not fully configured for automation")
 )
 
 // UserRepository interface for dependency injection and testing
@@ -57,7 +64,7 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 		s.logger.Warn("User not found in database",
 			"user_id", userID,
 			"operation_duration_ms", time.Since(startTime).Milliseconds())
-		return nil, fmt.Errorf("user not found: %d", userID)
+		return nil, fmt.Errorf("%w: %d", ErrUserNotFound, userID)
 	}
 
 	// Retrieve decrypted processing tokens
@@ -154,7 +161,7 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 				"Ensure user has set a valid timezone in their profile",
 				"Confirm that automation is enabled in user settings",
 			})
-		return nil, fmt.Errorf("configuration validation failed: %w", err)
+		return nil, fmt.Errorf("%w: %w", ErrUserNotConfigured, err)
 	}
 
 	// Log comprehensive token validity status for debugging
