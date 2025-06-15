@@ -253,6 +253,14 @@ func (h *StravaHandler) StravaCallback(w http.ResponseWriter, r *http.Request) {
 		"user_id", userID,
 		"athlete_id", athleteInfo.ID)
 
+	// Check if all prerequisites are now met and enable automation if ready
+	if err := h.userRepository.CheckAndEnableAutomationIfReady(r.Context(), userID); err != nil {
+		h.logger.Warn("Failed to check/enable automation after Strava connection",
+			"error", err,
+			"user_id", userID)
+		// Don't fail the Strava connection for this error
+	}
+
 	// Redirect to frontend dashboard (clean URL - frontend will detect connection automatically)
 	dashboardURL := h.frontendURL + "/dashboard"
 	h.logger.Info("Strava OAuth callback successful, redirecting to dashboard", 

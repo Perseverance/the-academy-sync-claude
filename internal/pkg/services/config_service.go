@@ -162,6 +162,15 @@ func (c *ConfigService) SetSpreadsheetURL(ctx context.Context, userID int, sprea
 		}
 	}
 
+	// Check if all prerequisites are now met and enable automation if ready
+	err = c.userRepository.CheckAndEnableAutomationIfReady(ctx, userID)
+	if err != nil {
+		c.logger.Warn("Failed to check/enable automation after spreadsheet setup",
+			"error", err,
+			"user_id", userID)
+		// Don't fail the spreadsheet configuration for this error
+	}
+
 	duration := time.Since(startTime)
 	c.logger.Info("Spreadsheet configuration completed successfully",
 		"user_id", userID,

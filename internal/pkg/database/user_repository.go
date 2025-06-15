@@ -480,3 +480,67 @@ func (r *UserRepository) GetProcessingConfigForUser(ctx context.Context, userID 
 
 	return result, nil
 }
+
+// UpdateAutomationSettings updates the user's automation and email notification preferences
+func (r *UserRepository) UpdateAutomationSettings(ctx context.Context, userID int, automationEnabled, emailNotificationsEnabled bool) error {
+	query := `
+		UPDATE users 
+		SET automation_enabled = $1, email_notifications_enabled = $2, updated_at = $3 
+		WHERE id = $4
+	`
+
+	now := time.Now()
+	result, err := r.db.ExecContext(ctx, query, automationEnabled, emailNotificationsEnabled, now, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
+}
+
+// CheckAndEnableAutomationIfReady checks if user has all prerequisites and enables automation if so
+func (r *UserRepository) CheckAndEnableAutomationIfReady(ctx context.Context, userID int) error {
+	// Check if user has all prerequisites for automation
+	query := `
+		SELECT 
+			google_refresh_token IS NOT NULL AND length(google_refresh_token) > 0,
+			strava_refresh_token IS NOT NULL AND length(strava_refresh_token) > 0,
+			strava_athlete_id IS NOT NULL,
+			spreadsheet_id IS NOT NULL AND spreadsheet_id != '',
+			timezone IS NOT NULL AND timezone != '',
+			automation_enabled
+		FROM users 
+		WHERE id = $1
+	`
+
+	var hasGoogle, hasStrava, hasAthleteID, hasSpreadsheet, hasTimezone, isAutomationEnabled bool
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(
+		&hasGoogle, &hasStrava, &hasAthleteID, &hasSpreadsheet, &hasTimezone, &isAutomationEnabled,
+	)
+	if err != nil {
+		return err
+	}
+
+	// If all prerequisites are met and automation is not yet enabled, enable it
+	allPrerequisitesMet := hasGoogle && hasStrava && hasAthleteID && hasSpreadsheet && hasTimezone
+	if allPrerequisitesMet && !isAutomationEnabled {
+		updateQuery := `
+			UPDATE users 
+			SET automation_enabled = true, updated_at = $1 
+			WHERE id = $2
+		`
+		_, err = r.db.ExecContext(ctx, updateQuery, time.Now(), userID)
+		return err
+	}
+
+	return nil
+}

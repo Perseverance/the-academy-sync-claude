@@ -254,10 +254,8 @@ func (s *ConfigService) ValidateUserCanBeProcessed(ctx context.Context, userID i
 		missingFields = append(missingFields, "timezone")
 	}
 
-	// Check if automation is enabled
-	if !user.AutomationEnabled {
-		missingFields = append(missingFields, "automation_enabled")
-	}
+	// Note: automation_enabled will be automatically set when all prerequisites are met
+	// We don't check it here as a requirement since it's derived from the other fields
 
 	// Validate timezone if present
 	if user.Timezone != "" {

@@ -241,6 +241,14 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.logger.Debug("Updated existing user tokens successfully", "user_id", user.ID)
+
+		// Check if all prerequisites are now met and enable automation if ready
+		if err := h.userRepository.CheckAndEnableAutomationIfReady(r.Context(), user.ID); err != nil {
+			h.logger.Warn("Failed to check/enable automation after Google OAuth update",
+				"error", err,
+				"user_id", user.ID)
+			// Don't fail the OAuth for this error
+		}
 	} else {
 		h.logger.Info("Creating new user", "google_user_id", userInfo.ID)
 		// Create new user
@@ -261,6 +269,14 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		h.logger.Info("Created new user successfully", "user_id", user.ID)
+
+		// Check if all prerequisites are now met and enable automation if ready
+		if err := h.userRepository.CheckAndEnableAutomationIfReady(r.Context(), user.ID); err != nil {
+			h.logger.Warn("Failed to check/enable automation after new user creation",
+				"error", err,
+				"user_id", user.ID)
+			// Don't fail the user creation for this error
+		}
 	}
 
 	// Create session
