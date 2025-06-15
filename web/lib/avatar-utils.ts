@@ -8,7 +8,17 @@ export function getCachedAvatarUrl(url: string | undefined | null): string {
   // Add daily cache parameter (changes once per day)
   const dailyCacheKey = Math.floor(Date.now() / (1000 * 60 * 60 * 24))
   
-  // Check if URL already has query parameters
-  const separator = url.includes('?') ? '&' : '?'
-  return `${url}${separator}t=${dailyCacheKey}`
+  // Check if URL contains a hash fragment
+  const hashIndex = url.indexOf('#')
+  let baseUrl = url
+  let hashFragment = ''
+  
+  if (hashIndex !== -1) {
+    baseUrl = url.substring(0, hashIndex)
+    hashFragment = url.substring(hashIndex)
+  }
+  
+  // Check if base URL already has query parameters
+  const separator = baseUrl.includes('?') ? '&' : '?'
+  return `${baseUrl}${separator}t=${dailyCacheKey}${hashFragment}`
 }
