@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"fmt"
 	"os"
+	"strconv"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -16,6 +17,7 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
 )
 
@@ -112,6 +114,20 @@ func main() {
 	userRepository := database.NewUserRepository(db, encryptionService)
 	configService := automation.NewConfigService(userRepository, log)
 
+	// Initialize Redis queue client (optional)
+	var queueClient *queue.Client
+	if cfg.RedisURL != "" {
+		var err error
+		queueClient, err = queue.NewClient(cfg.RedisURL, log)
+		if err != nil {
+			log.Critical("Failed to initialize Redis queue client", "error", err)
+			os.Exit(3)
+		}
+		log.Info("Redis queue client initialized successfully")
+	} else {
+		log.Info("Redis URL not configured - running in test mode with periodic processing")
+	}
+
 	// Initialize processing worker
 	worker := processing.NewWorker(
 		configService,
@@ -124,33 +140,182 @@ func main() {
 	)
 
 	log.Info("Automation engine initialized successfully, starting processing loop",
-		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "")
+		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "",
+		"redis_configured", queueClient != nil)
 
-	// Main processing loop
+	if queueClient != nil {
+		// Redis job queue mode
+		log.Info("🚀 Starting Redis job queue processing mode")
+		startJobQueueProcessing(queueClient, worker, log)
+	} else {
+		// Test mode with periodic processing
+		log.Info("🧪 Starting test mode with periodic processing")
+		startTestModeProcessing(worker, log, cfg)
+	}
+}
+
+// getEnvInt returns an integer environment variable with a default value
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
+// startJobQueueProcessing processes jobs from Redis queue using worker pool pattern
+func startJobQueueProcessing(queueClient *queue.Client, worker *processing.Worker, log *logger.Logger) {
+	// Make worker count configurable via environment variable
+	maxWorkers := getEnvInt("MAX_WORKERS", 20)
+	
+	// Create unbuffered channel for job distribution
+	jobChan := make(chan *queue.Job)
+	
+	log.Info("🚀 Starting job queue processing with worker pool",
+		"max_workers", maxWorkers,
+		"queue_name", queue.JobsQueueName)
+	
+	// Start worker pool
+	for i := 0; i < maxWorkers; i++ {
+		go func(workerID int) {
+			log.Debug("🔧 Worker started",
+				"worker_id", workerID)
+			
+			for job := range jobChan {
+				processJob(job, worker, log, workerID)
+			}
+			
+			log.Debug("🔧 Worker stopped",
+				"worker_id", workerID)
+		}(i)
+	}
+	
+	// Job dequeue goroutine - feeds jobs to worker pool
+	go func() {
+		jobCount := 0
+		
+		for {
+			jobCount++
+			log.Debug("📥 Waiting for job from Redis queue",
+				"job_number", jobCount,
+				"queue_name", queue.JobsQueueName,
+				"active_workers", maxWorkers)
+			
+			// Create context for dequeue operation
+			ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+			
+			// Dequeue job (blocking operation)
+			job, err := queueClient.DequeueJob(ctx)
+			cancel()
+			
+			if err != nil {
+				log.Error("Failed to dequeue job from Redis",
+					"error", err,
+					"job_number", jobCount)
+				time.Sleep(5 * time.Second) // Wait before retrying
+				continue
+			}
+			
+			if job == nil {
+				// No job available (timeout) - this is normal
+				log.Debug("No job available, continuing to wait",
+					"job_number", jobCount)
+				continue
+			}
+			
+			log.Debug("📤 Job dequeued, sending to worker pool",
+				"job_number", jobCount,
+				"user_id", job.UserID,
+				"trace_id", job.TraceID,
+				"trigger_type", job.TriggerType,
+				"job_age_seconds", time.Since(job.CreatedAt).Seconds())
+			
+			// Send job to available worker (blocks until worker is free)
+			jobChan <- job
+		}
+	}()
+	
+	// Keep main goroutine alive - in production this would handle shutdown signals
+	select {}
+}
+
+// processJob handles individual job processing within a worker
+func processJob(job *queue.Job, worker *processing.Worker, log *logger.Logger, workerID int) {
+	jobStartTime := time.Now()
+	
+	log.Info("🎯 Worker processing job",
+		"worker_id", workerID,
+		"user_id", job.UserID,
+		"trace_id", job.TraceID,
+		"trigger_type", job.TriggerType,
+		"job_created_at", job.CreatedAt.Format(time.RFC3339),
+		"job_age_seconds", time.Since(job.CreatedAt).Seconds())
+	
+	// Create context for job processing with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	
+	// Process user with job context
+	result := worker.ProcessUser(ctx, job.UserID)
+	
+	jobDuration := time.Since(jobStartTime)
+	totalJobAge := time.Since(job.CreatedAt)
+	
+	if result.Success {
+		log.Info("✅ Worker completed job successfully",
+			"worker_id", workerID,
+			"user_id", job.UserID,
+			"trace_id", job.TraceID,
+			"trigger_type", job.TriggerType,
+			"job_results", map[string]interface{}{
+				"activities_count":        result.ActivitiesCount,
+				"user_processing_time_ms": result.ProcessingTime.Milliseconds(),
+				"total_job_time_ms":       jobDuration.Milliseconds(),
+				"total_job_age_ms":        totalJobAge.Milliseconds(),
+				"success":                 true,
+			})
+	} else {
+		log.Warn("⚠️ Worker job processing failed",
+			"worker_id", workerID,
+			"user_id", job.UserID,
+			"trace_id", job.TraceID,
+			"trigger_type", job.TriggerType,
+			"job_results", map[string]interface{}{
+				"error":                   result.Error,
+				"error_type":              result.ErrorType,
+				"requires_reauth":         result.RequiresReauth,
+				"user_processing_time_ms": result.ProcessingTime.Milliseconds(),
+				"total_job_time_ms":       jobDuration.Milliseconds(),
+				"total_job_age_ms":        totalJobAge.Milliseconds(),
+				"success":                 false,
+			})
+	}
+}
+
+// startTestModeProcessing runs periodic test processing
+func startTestModeProcessing(worker *processing.Worker, log *logger.Logger, cfg *config.Config) {
 	cycleCount := 0
 	for {
 		cycleCount++
 		cycleStartTime := time.Now()
 		
-		log.Debug("🔄 Starting automation processing cycle",
+		log.Debug("🔄 Starting automation test processing cycle",
 			"cycle_number", cycleCount,
 			"cycle_start_time", cycleStartTime.Format(time.RFC3339),
 			"environment", cfg.Environment,
 			"next_cycle_in_seconds", 60)
 		
-		// For now, we'll implement a simple test cycle
-		// In the future, this would be replaced with job queue processing
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		
 		// Test processing with user ID 1 (if exists)
-		// This is a placeholder - real implementation would process from job queue
 		testUserID := 1
 		
 		log.Debug("🧪 Starting test processing for development user",
 			"test_user_id", testUserID,
 			"cycle_number", cycleCount,
 			"timeout_minutes", 5,
-			"note", "This is a development test - production will use job queue")
+			"note", "This is a development test - production will use Redis job queue")
 		
 		result := worker.ProcessUser(ctx, testUserID)
 		
@@ -189,7 +354,7 @@ func main() {
 		cancel()
 		
 		// Wait before next cycle
-		log.Debug("💤 Automation processing cycle completed, waiting for next cycle",
+		log.Debug("💤 Test processing cycle completed, waiting for next cycle",
 			"cycle_number", cycleCount,
 			"cycle_duration_ms", cycleDuration.Milliseconds(),
 			"next_cycle_at", time.Now().Add(60*time.Second).Format(time.RFC3339),

@@ -14,11 +14,14 @@ import (
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/handlers"
 	authMiddleware "github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/middleware"
+	apiServices "github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/services"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/config"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/services"
 )
@@ -123,9 +126,32 @@ func main() {
 	userRepository := database.NewUserRepository(db, encryptionService)
 	sessionRepository := database.NewSessionRepository(db)
 
+	// Initialize Redis queue client
+	var queueClient *queue.Client
+	if cfg.RedisURL != "" {
+		var err error
+		queueClient, err = queue.NewClient(cfg.RedisURL, log)
+		if err != nil {
+			log.Critical("Failed to initialize Redis queue client", "error", err)
+			os.Exit(1)
+		}
+		log.Info("Redis queue client initialized successfully")
+	} else {
+		log.Warn("Redis URL not configured - manual sync functionality will be disabled")
+	}
+
 	// Initialize services
 	sheetsService := services.NewSheetsService(userRepository, log)
 	configService := services.NewConfigService(userRepository, sheetsService, log)
+	
+	// Initialize automation config service for sync validation
+	automationConfigService := automation.NewConfigService(userRepository, log)
+	
+	// Initialize sync service (only if Redis is available)
+	var syncService *apiServices.SyncService
+	if queueClient != nil {
+		syncService = apiServices.NewSyncService(automationConfigService, queueClient, log)
+	}
 
 	// Initialize middleware
 	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository, oauthService, userRepository, log.WithContext("component", "auth_middleware"))
@@ -156,6 +182,15 @@ func main() {
 		configService,
 		log.WithContext("component", "config_handler"),
 	)
+
+	// Initialize sync handler (only if sync service is available)
+	var syncHandler *handlers.SyncHandler
+	if syncService != nil {
+		syncHandler = handlers.NewSyncHandler(
+			syncService,
+			log.WithContext("component", "sync_handler"),
+		)
+	}
 
 	// Create router
 	r := chi.NewRouter()
@@ -216,6 +251,12 @@ func main() {
 			r.Post("/spreadsheet", configHandler.SetSpreadsheet)      // Set spreadsheet URL
 			r.Delete("/spreadsheet", configHandler.ClearSpreadsheet)  // Clear spreadsheet configuration
 		})
+
+		// Manual sync routes (only if sync handler is available)
+		if syncHandler != nil {
+			r.Post("/sync", syncHandler.TriggerManualSync)        // Trigger manual sync
+			r.Get("/sync/status", syncHandler.GetQueueStatus)     // Get queue status (debugging)
+		}
 
 		// Future protected endpoints will go here
 		// r.Route("/automation", func(r chi.Router) { ... })
