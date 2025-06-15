@@ -95,6 +95,7 @@ func (r *UserRepository) GetUserByGoogleID(ctx context.Context, googleID string)
 		SELECT id, google_id, email, name, profile_picture_url,
 			   google_access_token, google_refresh_token, google_token_expiry,
 			   strava_access_token, strava_refresh_token, strava_token_expiry, strava_athlete_id,
+			   strava_athlete_name, strava_profile_picture_url,
 			   spreadsheet_id, timezone, email_notifications_enabled, automation_enabled,
 			   created_at, updated_at, last_login_at
 		FROM users WHERE google_id = $1
@@ -105,6 +106,7 @@ func (r *UserRepository) GetUserByGoogleID(ctx context.Context, googleID string)
 		&user.ID, &user.GoogleID, &user.Email, &user.Name, &user.ProfilePictureURL,
 		&user.GoogleAccessToken, &user.GoogleRefreshToken, &user.GoogleTokenExpiry,
 		&user.StravaAccessToken, &user.StravaRefreshToken, &user.StravaTokenExpiry, &user.StravaAthleteID,
+		&user.StravaAthleteName, &user.StravaProfilePictureURL,
 		&user.SpreadsheetID, &user.Timezone, &user.EmailNotificationsEnabled, &user.AutomationEnabled,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
 	)
@@ -125,6 +127,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id int) (*User, error)
 		SELECT id, google_id, email, name, profile_picture_url,
 			   google_access_token, google_refresh_token, google_token_expiry,
 			   strava_access_token, strava_refresh_token, strava_token_expiry, strava_athlete_id,
+			   strava_athlete_name, strava_profile_picture_url,
 			   spreadsheet_id, timezone, email_notifications_enabled, automation_enabled,
 			   created_at, updated_at, last_login_at
 		FROM users WHERE id = $1
@@ -135,6 +138,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id int) (*User, error)
 		&user.ID, &user.GoogleID, &user.Email, &user.Name, &user.ProfilePictureURL,
 		&user.GoogleAccessToken, &user.GoogleRefreshToken, &user.GoogleTokenExpiry,
 		&user.StravaAccessToken, &user.StravaRefreshToken, &user.StravaTokenExpiry, &user.StravaAthleteID,
+		&user.StravaAthleteName, &user.StravaProfilePictureURL,
 		&user.SpreadsheetID, &user.Timezone, &user.EmailNotificationsEnabled, &user.AutomationEnabled,
 		&user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
 	)
@@ -249,4 +253,94 @@ func (r *UserRepository) DecryptToken(encryptedToken []byte) (string, error) {
 	}
 	
 	return r.encryptor.Decrypt(encryptedToken)
+}
+
+// UpdateStravaConnection updates the user's Strava connection with encrypted tokens and profile information
+func (r *UserRepository) UpdateStravaConnection(ctx context.Context, userID int, accessToken, refreshToken string, expiry *time.Time, athleteID int64, athleteName, profilePictureURL string) error {
+	// Encrypt Strava tokens
+	encryptedAccessToken, err := r.encryptor.Encrypt(accessToken)
+	if err != nil {
+		return err
+	}
+
+	encryptedRefreshToken, err := r.encryptor.Encrypt(refreshToken)
+	if err != nil {
+		return err
+	}
+
+	query := `
+		UPDATE users 
+		SET strava_access_token = $1, 
+		    strava_refresh_token = $2, 
+		    strava_token_expiry = $3, 
+		    strava_athlete_id = $4, 
+		    strava_athlete_name = $5,
+		    strava_profile_picture_url = $6,
+		    updated_at = $7 
+		WHERE id = $8
+	`
+
+	now := time.Now()
+	_, err = r.db.ExecContext(ctx, query, 
+		encryptedAccessToken, 
+		encryptedRefreshToken, 
+		expiry, 
+		athleteID, 
+		athleteName,
+		profilePictureURL,
+		now, 
+		userID)
+	
+	return err
+}
+
+// RemoveStravaConnection removes the user's Strava connection by clearing tokens and athlete ID
+func (r *UserRepository) RemoveStravaConnection(ctx context.Context, userID int) error {
+	query := `
+		UPDATE users 
+		SET strava_access_token = NULL, 
+		    strava_refresh_token = NULL, 
+		    strava_token_expiry = NULL, 
+		    strava_athlete_id = NULL, 
+		    strava_athlete_name = NULL,
+		    strava_profile_picture_url = NULL,
+		    updated_at = $1 
+		WHERE id = $2
+	`
+
+	now := time.Now()
+	_, err := r.db.ExecContext(ctx, query, now, userID)
+	return err
+}
+
+// GetDecryptedStravaTokens retrieves and decrypts a user's Strava OAuth tokens
+func (r *UserRepository) GetDecryptedStravaTokens(ctx context.Context, userID int) (accessToken, refreshToken string, expiry *time.Time, athleteID *int64, err error) {
+	query := `
+		SELECT strava_access_token, strava_refresh_token, strava_token_expiry, strava_athlete_id
+		FROM users WHERE id = $1
+	`
+
+	var encryptedAccessToken, encryptedRefreshToken []byte
+	err = r.db.QueryRowContext(ctx, query, userID).Scan(&encryptedAccessToken, &encryptedRefreshToken, &expiry, &athleteID)
+	if err != nil {
+		return "", "", nil, nil, err
+	}
+
+	// Handle case where user has no Strava connection
+	if len(encryptedAccessToken) == 0 || len(encryptedRefreshToken) == 0 {
+		return "", "", nil, athleteID, nil
+	}
+
+	// Decrypt tokens
+	accessToken, err = r.encryptor.Decrypt(encryptedAccessToken)
+	if err != nil {
+		return "", "", nil, nil, err
+	}
+
+	refreshToken, err = r.encryptor.Decrypt(encryptedRefreshToken)
+	if err != nil {
+		return "", "", nil, nil, err
+	}
+
+	return accessToken, refreshToken, expiry, athleteID, nil
 }

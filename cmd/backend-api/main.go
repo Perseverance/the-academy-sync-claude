@@ -106,9 +106,17 @@ func main() {
 	jwtService := auth.NewJWTService(cfg.JWTSecret)
 	encryptionService := auth.NewEncryptionService(cfg.EncryptionSecret) // Use separate encryption secret
 	
-	// Construct OAuth redirect URL using configurable base URL
-	redirectURL := fmt.Sprintf("%s/api/auth/google/callback", cfg.BaseURL)
-	oauthService := auth.NewOAuthService(cfg.GoogleClientID, cfg.GoogleClientSecret, redirectURL)
+	// Construct OAuth redirect URLs using configurable base URL
+	googleRedirectURL := fmt.Sprintf("%s/api/auth/google/callback", cfg.BaseURL)
+	stravaRedirectURL := fmt.Sprintf("%s/api/connections/strava/callback", cfg.BaseURL)
+	oauthService := auth.NewOAuthService(
+		cfg.GoogleClientID, 
+		cfg.GoogleClientSecret, 
+		googleRedirectURL, 
+		cfg.StravaClientID, 
+		cfg.StravaClientSecret, 
+		stravaRedirectURL,
+	)
 
 	// Initialize repositories
 	userRepository := database.NewUserRepository(db, encryptionService)
@@ -129,6 +137,14 @@ func main() {
 		cfg.FrontendURL,
 		isDevelopment,
 		log.WithContext("component", "auth_handler"),
+	)
+
+	stravaHandler := handlers.NewStravaHandler(
+		oauthService,
+		userRepository,
+		cfg.FrontendURL,
+		isDevelopment,
+		log.WithContext("component", "strava_handler"),
 	)
 
 	// Create router
@@ -163,6 +179,19 @@ func main() {
 		})
 	})
 
+	// Connection routes - mixed public and protected
+	r.Route("/api/connections", func(r chi.Router) {
+		// Public OAuth callback (Strava redirects here directly)
+		r.Get("/strava/callback", stravaHandler.StravaCallback) // Handle Strava OAuth callback (public)
+		
+		// Protected Strava endpoints (require authentication)
+		r.Group(func(r chi.Router) {
+			r.Use(authMW.RequireAuth)
+			r.Get("/strava", stravaHandler.StravaAuthURL)      // Get Strava OAuth URL
+			r.Delete("/strava", stravaHandler.DisconnectStrava) // Disconnect Strava account
+		})
+	})
+
 	// Protected API routes (authentication required)
 	r.Route("/api", func(r chi.Router) {
 		r.Use(authMW.RequireAuth)
@@ -180,7 +209,8 @@ func main() {
 	log.Info("Backend API server starting", 
 		"port", cfg.Port,
 		"base_url", cfg.BaseURL,
-		"google_oauth_redirect_url", redirectURL)
+		"google_oauth_redirect_url", googleRedirectURL,
+		"strava_oauth_redirect_url", stravaRedirectURL)
 	
 	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
 		log.Critical("Server failed to start", "error", err)

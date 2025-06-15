@@ -22,17 +22,29 @@ type GoogleUserInfo struct {
 	Locale        string `json:"locale"`
 }
 
-// OAuthService handles Google OAuth 2.0 authentication
-type OAuthService struct {
-	config *oauth2.Config
+// StravaUserInfo represents the athlete information returned by Strava's API
+type StravaUserInfo struct {
+	ID        int64  `json:"id"`
+	FirstName string `json:"firstname"`
+	LastName  string `json:"lastname"`
+	Profile   string `json:"profile"`
+	City      string `json:"city"`
+	State     string `json:"state"`
+	Country   string `json:"country"`
 }
 
-// NewOAuthService creates a new OAuth service with Google configuration
-func NewOAuthService(clientID, clientSecret, redirectURL string) *OAuthService {
-	config := &oauth2.Config{
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-		RedirectURL:  redirectURL,
+// OAuthService handles OAuth 2.0 authentication for Google and Strava
+type OAuthService struct {
+	googleConfig *oauth2.Config
+	stravaConfig *oauth2.Config
+}
+
+// NewOAuthService creates a new OAuth service with Google and Strava configurations
+func NewOAuthService(googleClientID, googleClientSecret, googleRedirectURL, stravaClientID, stravaClientSecret, stravaRedirectURL string) *OAuthService {
+	googleConfig := &oauth2.Config{
+		ClientID:     googleClientID,
+		ClientSecret: googleClientSecret,
+		RedirectURL:  googleRedirectURL,
 		Scopes: []string{
 			"openid",
 			"profile",
@@ -42,19 +54,38 @@ func NewOAuthService(clientID, clientSecret, redirectURL string) *OAuthService {
 		Endpoint: google.Endpoint,
 	}
 
+	stravaConfig := &oauth2.Config{
+		ClientID:     stravaClientID,
+		ClientSecret: stravaClientSecret,
+		RedirectURL:  stravaRedirectURL,
+		Scopes: []string{
+			"activity:read_all", // Read all activities from Strava
+		},
+		Endpoint: oauth2.Endpoint{
+			AuthURL:  "https://www.strava.com/oauth/authorize",
+			TokenURL: "https://www.strava.com/api/v3/oauth/token",
+		},
+	}
+
 	return &OAuthService{
-		config: config,
+		googleConfig: googleConfig,
+		stravaConfig: stravaConfig,
 	}
 }
 
 // GetAuthURL generates the Google OAuth authorization URL
 func (o *OAuthService) GetAuthURL(state string) string {
-	return o.config.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
+	return o.googleConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("prompt", "consent"))
 }
 
-// ExchangeCodeForToken exchanges an authorization code for OAuth tokens
+// GetStravaAuthURL generates the Strava OAuth authorization URL
+func (o *OAuthService) GetStravaAuthURL(state string) string {
+	return o.stravaConfig.AuthCodeURL(state, oauth2.AccessTypeOffline, oauth2.SetAuthURLParam("approval_prompt", "force"))
+}
+
+// ExchangeCodeForToken exchanges an authorization code for Google OAuth tokens
 func (o *OAuthService) ExchangeCodeForToken(ctx context.Context, code string) (*oauth2.Token, error) {
-	token, err := o.config.Exchange(ctx, code)
+	token, err := o.googleConfig.Exchange(ctx, code)
 	if err != nil {
 		return nil, fmt.Errorf("failed to exchange code for token: %w", err)
 	}
@@ -62,9 +93,19 @@ func (o *OAuthService) ExchangeCodeForToken(ctx context.Context, code string) (*
 	return token, nil
 }
 
+// ExchangeStravaCodeForToken exchanges an authorization code for Strava OAuth tokens
+func (o *OAuthService) ExchangeStravaCodeForToken(ctx context.Context, code string) (*oauth2.Token, error) {
+	token, err := o.stravaConfig.Exchange(ctx, code)
+	if err != nil {
+		return nil, fmt.Errorf("failed to exchange Strava code for token: %w", err)
+	}
+
+	return token, nil
+}
+
 // GetUserInfo retrieves user information from Google using the access token
 func (o *OAuthService) GetUserInfo(ctx context.Context, token *oauth2.Token) (*GoogleUserInfo, error) {
-	client := o.config.Client(ctx, token)
+	client := o.googleConfig.Client(ctx, token)
 
 	resp, err := client.Get("https://www.googleapis.com/oauth2/v2/userinfo")
 	if err != nil {
@@ -89,16 +130,58 @@ func (o *OAuthService) GetUserInfo(ctx context.Context, token *oauth2.Token) (*G
 	return &userInfo, nil
 }
 
-// RefreshToken refreshes an OAuth token using the refresh token
+// GetStravaUserInfo retrieves athlete information from Strava using the access token
+func (o *OAuthService) GetStravaUserInfo(ctx context.Context, token *oauth2.Token) (*StravaUserInfo, error) {
+	client := o.stravaConfig.Client(ctx, token)
+
+	resp, err := client.Get("https://www.strava.com/api/v3/athlete")
+	if err != nil {
+		return nil, fmt.Errorf("failed to get Strava athlete info: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("failed to get Strava athlete info: status %d", resp.StatusCode)
+	}
+
+	var athleteInfo StravaUserInfo
+	if err := json.NewDecoder(resp.Body).Decode(&athleteInfo); err != nil {
+		return nil, fmt.Errorf("failed to decode Strava athlete info: %w", err)
+	}
+
+	// Validate that we got essential athlete information
+	if athleteInfo.ID == 0 {
+		return nil, fmt.Errorf("invalid athlete info: missing athlete ID")
+	}
+
+	return &athleteInfo, nil
+}
+
+// RefreshToken refreshes a Google OAuth token using the refresh token
 func (o *OAuthService) RefreshToken(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
 	token := &oauth2.Token{
 		RefreshToken: refreshToken,
 	}
 
-	tokenSource := o.config.TokenSource(ctx, token)
+	tokenSource := o.googleConfig.TokenSource(ctx, token)
 	newToken, err := tokenSource.Token()
 	if err != nil {
-		return nil, fmt.Errorf("failed to refresh token: %w", err)
+		return nil, fmt.Errorf("failed to refresh Google token: %w", err)
+	}
+
+	return newToken, nil
+}
+
+// RefreshStravaToken refreshes a Strava OAuth token using the refresh token
+func (o *OAuthService) RefreshStravaToken(ctx context.Context, refreshToken string) (*oauth2.Token, error) {
+	token := &oauth2.Token{
+		RefreshToken: refreshToken,
+	}
+
+	tokenSource := o.stravaConfig.TokenSource(ctx, token)
+	newToken, err := tokenSource.Token()
+	if err != nil {
+		return nil, fmt.Errorf("failed to refresh Strava token: %w", err)
 	}
 
 	return newToken, nil

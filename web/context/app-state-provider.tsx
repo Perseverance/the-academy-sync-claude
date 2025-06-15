@@ -5,6 +5,7 @@ import { createContext, useContext, useState, useEffect } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import type { LogEntry } from "@/components/activity-log" // Assuming LogEntry type is in ActivityLog
 import { authService, type User } from "@/services/auth"
+import { stravaService } from "@/services/strava"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
 export type SpreadsheetConfigStatus = "Configured" | "NotConfigured" | "Disabled"
@@ -88,6 +89,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           googleStatus: isAuthenticated ? "Connected" : "NotConnected",
           // Initialize Strava status based on user data
           stravaStatus: user?.has_strava_connection ? "Connected" : "NotConnected",
+          stravaUserName: user?.strava_athlete_name,
+          stravaAvatarUrl: user?.strava_profile_picture_url,
           // Initialize spreadsheet status based on user data
           spreadsheetStatus: user?.has_sheets_connection ? "Configured" : 
                              user?.has_strava_connection ? "NotConfigured" : "Disabled",
@@ -182,33 +185,41 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }
 
   const connectStrava = async () => {
-    // Simulate OAuth flow and success
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setState((s) => ({
-      ...s,
-      stravaStatus: "Connected",
-      stravaUserName: "Strava Runner",
-      stravaAvatarUrl: "/placeholder.svg?width=40&height=40",
-    }))
+    try {
+      // Initiate Strava OAuth flow - this will redirect to Strava
+      await stravaService.initiateStravaConnection()
+      // Note: After successful OAuth, user will be redirected back to our app
+      // The Strava connection status will be updated when the user returns from callback
+    } catch (error) {
+      console.error('Error during Strava connection:', error)
+      // Could show a toast notification here in the future
+    }
   }
 
   const disconnectStrava = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setState((s) => ({
-      ...s,
-      stravaStatus: "NotConnected",
-      stravaUserName: undefined,
-      stravaAvatarUrl: undefined,
-      // Spreadsheet and sync become disabled as per flow
-      spreadsheetStatus: "Disabled",
-      spreadsheetUrl: undefined,
-      manualSyncStatus: "Disabled",
-    }))
+    try {
+      await stravaService.disconnectStrava()
+      
+      // Update local state to reflect disconnection
+      setState((s) => ({
+        ...s,
+        stravaStatus: "NotConnected",
+        stravaUserName: undefined,
+        stravaAvatarUrl: undefined,
+        // Spreadsheet and sync become disabled as per flow
+        spreadsheetStatus: "Disabled",
+        spreadsheetUrl: undefined,
+        manualSyncStatus: "Disabled",
+      }))
+    } catch (error) {
+      console.error('Error during Strava disconnection:', error)
+      // Could show a toast notification here in the future
+    }
   }
 
   const reauthorizeStrava = async () => {
-    await new Promise((resolve) => setTimeout(resolve, 1500))
-    setState((s) => ({ ...s, stravaStatus: "Connected" })) // Assume reauth is successful
+    // For now, reauthorization uses the same flow as initial connection
+    await connectStrava()
   }
 
   const saveSpreadsheet = async (url: string) => {

@@ -18,6 +18,8 @@ type User struct {
 	StravaRefreshToken       []byte    `json:"-" db:"strava_refresh_token"`       // Encrypted, never sent to client
 	StravaTokenExpiry        *time.Time `json:"-" db:"strava_token_expiry"`       // Never sent to client
 	StravaAthleteID          *int64    `json:"strava_athlete_id" db:"strava_athlete_id"`
+	StravaAthleteName        *string   `json:"strava_athlete_name" db:"strava_athlete_name"`
+	StravaProfilePictureURL  *string   `json:"strava_profile_picture_url" db:"strava_profile_picture_url"`
 	SpreadsheetID            *string   `json:"spreadsheet_id" db:"spreadsheet_id"`
 	Timezone                 string    `json:"timezone" db:"timezone"`
 	EmailNotificationsEnabled bool      `json:"email_notifications_enabled" db:"email_notifications_enabled"`
@@ -76,6 +78,8 @@ type PublicUser struct {
 	Name                      string `json:"name"`
 	ProfilePictureURL         *string `json:"profile_picture_url"`
 	StravaAthleteID           *int64 `json:"strava_athlete_id"`
+	StravaAthleteName         *string `json:"strava_athlete_name"`
+	StravaProfilePictureURL   *string `json:"strava_profile_picture_url"`
 	SpreadsheetID             *string `json:"spreadsheet_id"`
 	Timezone                  string `json:"timezone"`
 	EmailNotificationsEnabled bool   `json:"email_notifications_enabled"`
@@ -92,6 +96,8 @@ func (u *User) ToPublicUser() *PublicUser {
 		Name:                      u.Name,
 		ProfilePictureURL:         u.ProfilePictureURL,
 		StravaAthleteID:           u.StravaAthleteID,
+		StravaAthleteName:         u.StravaAthleteName,
+		StravaProfilePictureURL:   u.StravaProfilePictureURL,
 		SpreadsheetID:             u.SpreadsheetID,
 		Timezone:                  u.Timezone,
 		EmailNotificationsEnabled: u.EmailNotificationsEnabled,
