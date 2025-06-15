@@ -42,15 +42,15 @@ Once these steps are complete, you can proceed to create the GCS bucket.
 **Example `gcloud` command to create such a bucket:**
 
 ```sh
-gcloud storage buckets create gs://your-unique-project-name-tfstate \
+gcloud storage buckets create gs://the-academy-sync-claude-tfstate \
     --project=your-gcp-project-id \
     --location=europe-central2 \
     --uniform-bucket-level-access \
     --public-access-prevention
-gcloud storage buckets update gs://your-unique-project-name-tfstate --versioning
+gcloud storage buckets update gs://the-academy-sync-claude-tfstate --versioning
 ```
 
-Replace `your-unique-project-name-tfstate` and `your-gcp-project-id` with your actual values.
+Replace `your-gcp-project-id` with your actual project ID. The bucket name `the-academy-sync-claude-tfstate` is used as an example.
 
 ### Updating `backend.tf`
 
@@ -59,13 +59,13 @@ Once the bucket is created, you need to update the `terraform/backend.tf` file:
 ```terraform
 terraform {
   backend "gcs" {
-    bucket  = "your-gcs-bucket-name-here"  // TODO: Replace with your actual GCS bucket name
-    prefix  = "the-academy-sync/state"
+    bucket  = "the-academy-sync-claude-tfstate"
+    prefix  = "tf-state/${terraform.workspace}" // Example, assuming workspace usage is now standard
   }
 }
 ```
 
-Replace `"your-gcs-bucket-name-here"` with the actual name of the GCS bucket you created.
+The `bucket` attribute should be set to the name of the GCS bucket you created (e.g., `the-academy-sync-claude-tfstate`). The `prefix` is configured to support Terraform workspaces.
 
 ### Initializing Terraform
 
@@ -135,4 +135,4 @@ To deploy or make changes to an environment, first select the appropriate worksp
    terraform apply -var-file="prod.tfvars"
    ```
 
-Remember to replace `"your-gcs-bucket-name-here"` in the `backend.tf` file and the project IDs in `staging.tfvars` and `prod.tfvars` with your actual values.
+Remember to ensure the `bucket` in `backend.tf` is set to your GCS bucket name (e.g., `the-academy-sync-claude-tfstate`) and update the project IDs in `staging.tfvars` and `prod.tfvars` with your actual values.
