@@ -158,21 +158,70 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 		"user_id", userID)
 
 	if err := config.Validate(); err != nil {
-		s.logger.Error("Processing configuration validation failed",
+		s.logger.Error("❌ Processing configuration validation failed",
 			"error", err,
 			"user_id", userID,
-			"config_summary", config.String(),
-			"operation_duration_ms", time.Since(startTime).Milliseconds())
+			"step", "config_validation",
+			"validation_failure", map[string]interface{}{
+				"error_type":     fmt.Sprintf("%T", err),
+				"error_message":  err.Error(),
+				"config_summary": config.String(),
+				"validation_checklist": map[string]interface{}{
+					"has_google_refresh":   config.GoogleRefreshToken != "",
+					"has_strava_refresh":   config.StravaRefreshToken != "",
+					"has_athlete_id":       config.StravaAthleteID != nil,
+					"has_spreadsheet_id":   config.SpreadsheetID != "",
+					"has_timezone":         config.Timezone != "",
+					"automation_enabled":   config.AutomationEnabled,
+					"valid_timezone":       func() bool {
+						if config.Timezone == "" {
+							return false
+						}
+						_, err := time.LoadLocation(config.Timezone)
+						return err == nil
+					}(),
+				},
+			},
+			"operation_duration_ms", time.Since(startTime).Milliseconds(),
+			"troubleshooting_tips", []string{
+				"Check that user has completed OAuth flow for both Google and Strava",
+				"Verify user has configured a Google Spreadsheet ID",
+				"Ensure user has set a valid timezone in their profile",
+				"Confirm that automation is enabled in user settings",
+			})
 		return nil, fmt.Errorf("configuration validation failed: %w", err)
 	}
 
-	// Log token validity status for debugging
-	s.logger.Debug("Token validity status",
+	// Log comprehensive token validity status for debugging
+	s.logger.Debug("🔍 Token validity analysis for user",
 		"user_id", userID,
-		"google_token_valid", config.HasValidGoogleToken(),
-		"strava_token_valid", config.HasValidStravaToken(),
-		"google_token_expiry", config.GoogleTokenExpiry,
-		"strava_token_expiry", config.StravaTokenExpiry)
+		"token_analysis", map[string]interface{}{
+			"google": map[string]interface{}{
+				"has_access_token":    googleAccessToken != "",
+				"has_refresh_token":   googleRefreshToken != "",
+				"token_valid":         config.HasValidGoogleToken(),
+				"token_expiry":        config.GoogleTokenExpiry,
+				"minutes_until_expiry": func() float64 {
+					if config.GoogleTokenExpiry != nil {
+						return time.Until(*config.GoogleTokenExpiry).Minutes()
+					}
+					return -1
+				}(),
+			},
+			"strava": map[string]interface{}{
+				"has_access_token":     stravaAccessToken != "",
+				"has_refresh_token":    stravaRefreshToken != "",
+				"token_valid":          config.HasValidStravaToken(),
+				"token_expiry":         config.StravaTokenExpiry,
+				"athlete_id":           config.StravaAthleteID,
+				"minutes_until_expiry": func() float64 {
+					if config.StravaTokenExpiry != nil {
+						return time.Until(*config.StravaTokenExpiry).Minutes()
+					}
+					return -1
+				}(),
+			},
+		})
 
 	operationDuration := time.Since(startTime)
 	s.logger.Info("Successfully retrieved and validated processing configuration",
