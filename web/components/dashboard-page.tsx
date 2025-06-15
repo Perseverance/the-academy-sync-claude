@@ -9,6 +9,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { GoogleLogo } from "@/components/icons/google-logo"
 import { StravaLogo } from "@/components/icons/strava-logo" // Import new StravaLogo
 import { LogOut, Settings } from "lucide-react"
+import { getCachedAvatarUrl } from "@/lib/avatar-utils"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -41,7 +42,7 @@ export function DashboardPage() {
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-10 w-10 rounded-full p-0">
                 <Avatar className="h-9 w-9">
-                  <AvatarImage src={state.user.profile_picture_url || "/placeholder.svg"} alt={state.user.name} />
+                  <AvatarImage src={getCachedAvatarUrl(state.user.profile_picture_url)} alt={state.user.name} />
                   <AvatarFallback>{state.user.name.charAt(0)}</AvatarFallback>
                 </Avatar>
               </Button>
