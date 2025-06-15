@@ -54,7 +54,7 @@ func (m *MockUserRepository) AddProcessingTokens(userID int, tokens *database.Pr
 func TestConfigService_GetProcessingConfigForUser(t *testing.T) {
 	log := logger.New("test")
 	mockRepo := NewMockUserRepository()
-	configService := NewConfigService(mockRepo, log)
+	configService := NewConfigService(mockRepo, nil, log) // nil token refresh for tests
 
 	// Test case 1: User not found
 	t.Run("UserNotFound", func(t *testing.T) {
