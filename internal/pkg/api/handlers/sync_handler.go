@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"net/http"
@@ -84,14 +85,21 @@ func (h *SyncHandler) TriggerManualSync(w http.ResponseWriter, r *http.Request) 
 		"client_ip", clientIP,
 		"estimated_completion_seconds", response.EstimatedCompletionSeconds)
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusAccepted) // 202 Accepted
-	if err := json.NewEncoder(w).Encode(response); err != nil {
+	// Encode response to buffer first to catch any encoding errors
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
 		h.logger.Error("Failed to encode manual sync response",
 			"error", err,
 			"user_id", userID,
 			"client_ip", clientIP)
+		h.writeErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to encode response")
+		return
 	}
+
+	// Only set headers and write status after successful encoding
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted) // 202 Accepted
+	w.Write(buf.Bytes())
 }
 
 // GetQueueStatus handles GET /api/sync/status requests (for debugging)
@@ -141,14 +149,21 @@ func (h *SyncHandler) GetQueueStatus(w http.ResponseWriter, r *http.Request) {
 		"client_ip", clientIP,
 		"queue_length", status["queue_length"])
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(status); err != nil {
+	// Encode response to buffer first to catch any encoding errors
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(status); err != nil {
 		h.logger.Error("Failed to encode queue status response",
 			"error", err,
 			"user_id", userID,
 			"client_ip", clientIP)
+		h.writeErrorResponse(w, http.StatusInternalServerError, "INTERNAL_ERROR", "Failed to encode response")
+		return
 	}
+
+	// Only set headers and write status after successful encoding
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	w.Write(buf.Bytes())
 }
 
 // getStatusCodeForSyncError maps sync error types to HTTP status codes

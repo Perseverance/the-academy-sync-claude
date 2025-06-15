@@ -129,16 +129,23 @@ func main() {
 
 	// Initialize Redis queue client
 	var queueClient *queue.Client
+	var redisHealthy bool = true
 	if cfg.RedisURL != "" {
 		var err error
 		queueClient, err = queue.NewClient(cfg.RedisURL, log)
 		if err != nil {
-			log.Critical("Failed to initialize Redis queue client", "error", err)
-			os.Exit(1)
+			log.Error("Failed to initialize Redis queue client - manual sync functionality will be disabled", 
+				"error", err,
+				"redis_url_configured", true,
+				"degraded_services", []string{"manual_sync"})
+			redisHealthy = false
+			queueClient = nil // Ensure it's nil for safety
+		} else {
+			log.Info("Redis queue client initialized successfully")
 		}
-		log.Info("Redis queue client initialized successfully")
 	} else {
 		log.Warn("Redis URL not configured - manual sync functionality will be disabled")
+		redisHealthy = false
 	}
 
 	// Initialize services
@@ -224,7 +231,7 @@ func main() {
 			"timestamp":   time.Now().Format(time.RFC3339),
 		}
 		
-		// Add queue health if Redis is configured
+		// Add queue health status
 		if queueClient != nil {
 			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 			defer cancel()
@@ -233,11 +240,20 @@ func main() {
 				health["queue_status"] = "unhealthy"
 				health["queue_error"] = err.Error()
 				health["status"] = "degraded" // Overall status degraded
+				health["degraded_services"] = []string{"manual_sync"}
 			} else {
 				health["queue_status"] = "healthy"
 			}
 		} else {
-			health["queue_status"] = "disabled"
+			if cfg.RedisURL != "" && !redisHealthy {
+				health["queue_status"] = "failed_initialization"
+				health["status"] = "degraded"
+				health["degraded_services"] = []string{"manual_sync"}
+				health["queue_error"] = "Redis client initialization failed during startup"
+			} else {
+				health["queue_status"] = "disabled"
+				health["degraded_services"] = []string{"manual_sync"}
+			}
 		}
 		
 		// Set appropriate HTTP status

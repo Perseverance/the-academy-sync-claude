@@ -117,8 +117,8 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) (*SyncR
 		
 		// Fallback for other validation errors
 		return nil, &SyncError{
-			Type:    SyncErrorUserNotConfigured,
-			Message: "User is not fully configured for automation. Please complete OAuth connections and spreadsheet setup.",
+			Type:    SyncErrorValidation,
+			Message: "User validation failed. Please check your configuration and try again.",
 			Cause:   err,
 		}
 	}

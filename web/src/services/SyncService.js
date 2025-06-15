@@ -36,12 +36,13 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL
  * Custom error class for sync API errors
  */
 export class SyncError extends Error {
-  constructor(message, code, type, status) {
+  constructor(message, code, type, status, cause = null) {
     super(message);
     this.name = 'SyncError';
     this.code = code;
     this.type = type;
     this.status = status;
+    this.cause = cause; // Preserve original error context
   }
 }
 
@@ -116,7 +117,8 @@ async function makeAuthenticatedRequest(endpoint, options = {}) {
       'Network error: Unable to connect to sync service',
       'NETWORK_ERROR',
       'NETWORK_ERROR',
-      0
+      0,
+      error // Preserve the original error as the cause
     );
   }
 }

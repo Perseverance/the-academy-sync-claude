@@ -7,7 +7,7 @@ import type { LogEntry } from "@/components/activity-log" // Assuming LogEntry t
 import { authService, type User } from "@/services/auth"
 import { stravaService } from "@/services/strava"
 import { configService } from "@/services/config"
-import { SyncService } from "@/src/services/SyncService"
+import { SyncService } from "@/services/SyncService"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
 export type SpreadsheetConfigStatus = "Configured" | "NotConfigured" | "Disabled"
