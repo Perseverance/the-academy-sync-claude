@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"regexp"
 	"strings"
@@ -91,8 +92,9 @@ func (c *ConfigService) SetSpreadsheetURL(ctx context.Context, userID int, sprea
 
 	err = c.sheetsService.ValidateSpreadsheetAccess(ctx, userID, spreadsheetID)
 	if err != nil {
-		// Convert SheetsService errors to ConfigService errors
-		if sheetsErr, ok := err.(*SpreadsheetValidationError); ok {
+		// Convert SheetsService errors to ConfigService errors using errors.As for safe unwrapping
+		var sheetsErr *SpreadsheetValidationError
+		if errors.As(err, &sheetsErr) {
 			switch sheetsErr.Type {
 			case ErrorTypePermissionDenied:
 				return &ConfigError{
