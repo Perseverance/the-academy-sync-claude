@@ -82,13 +82,8 @@ func (c *ProcessingConfig) Validate() error {
 		}
 	}
 	
-	// Validate that Google token expiry is in the future if present
-	if c.GoogleTokenExpiry != nil && time.Now().After(*c.GoogleTokenExpiry) {
-		return &ValidationError{
-			Field:   "google_token_expiry",
-			Message: "token has expired and requires refresh",
-		}
-	}
+	// Note: We don't validate Google token expiry here since tokens 
+	// should be refreshed before validation via the TokenRefreshService
 	
 	// Validate Strava OAuth tokens - refresh token is essential
 	if c.StravaRefreshToken == "" {
@@ -115,13 +110,8 @@ func (c *ProcessingConfig) Validate() error {
 		}
 	}
 	
-	// Validate that Strava token expiry is in the future if present
-	if c.StravaTokenExpiry != nil && time.Now().After(*c.StravaTokenExpiry) {
-		return &ValidationError{
-			Field:   "strava_token_expiry",
-			Message: "token has expired and requires refresh",
-		}
-	}
+	// Note: We don't validate Strava token expiry here since tokens 
+	// should be refreshed before validation via the TokenRefreshService
 	
 	// Validate target configuration
 	if c.SpreadsheetID == "" {

@@ -36,6 +36,9 @@ type Config struct {
 	RedisHost string `json:"redis_host"`
 	RedisPort string `json:"redis_port"`
 
+	// Worker pool configuration
+	WorkerPoolSize int `json:"worker_pool_size"`
+
 	// OAuth credentials
 	GoogleClientID     string `json:"google_client_id"`
 	GoogleClientSecret string `json:"google_client_secret"`
@@ -102,6 +105,9 @@ func loadFromEnv() (*Config, error) {
 		RedisURL:  getEnv("REDIS_URL", ""),
 		RedisHost: getEnv("REDIS_HOST", "localhost"),
 		RedisPort: getEnv("REDIS_PORT", "6380"),
+
+		// Worker pool
+		WorkerPoolSize: getEnvInt("MAX_WORKERS", 20),
 
 		// OAuth
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
@@ -247,6 +253,9 @@ func loadFromSecretManager() (*Config, error) {
 		RedisHost: getEnv("REDIS_HOST", "localhost"),
 		RedisPort: getEnv("REDIS_PORT", "6379"),
 
+		// Worker pool
+		WorkerPoolSize: getEnvInt("MAX_WORKERS", 20),
+
 		// Fail-fast
 		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
 	}
@@ -324,6 +333,9 @@ func loadFromEnvForProduction() (*Config, error) {
 		RedisURL:  getEnv("REDIS_URL", ""),
 		RedisHost: getEnv("REDIS_HOST", "localhost"),
 		RedisPort: getEnv("REDIS_PORT", "6379"),
+
+		// Worker pool
+		WorkerPoolSize: getEnvInt("MAX_WORKERS", 20),
 
 		// OAuth
 		GoogleClientID:     getEnv("GOOGLE_CLIENT_ID", ""),
@@ -456,6 +468,17 @@ func getEnvBool(key string, defaultValue bool) bool {
 			return true
 		case "false", "0", "no", "off":
 			return false
+		}
+	}
+	return defaultValue
+}
+
+// getEnvInt gets an integer environment variable with a fallback default value.
+// For example, MAX_WORKERS with a default of 20 workers.
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
 		}
 	}
 	return defaultValue

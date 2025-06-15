@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,11 +16,14 @@ import (
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/handlers"
 	authMiddleware "github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/middleware"
+	apiServices "github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/services"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/config"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/services"
 )
@@ -78,7 +83,9 @@ func main() {
 		"log_level", cfg.LogLevel)
 	log.Info("Configuration status", 
 		"database_configured", cfg.DatabaseURL != "",
-		"google_oauth_configured", cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "")
+		"google_oauth_configured", cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "",
+		"redis_configured", cfg.RedisURL != "",
+		"worker_pool_size", cfg.WorkerPoolSize)
 
 	// Dependency Health Check - US046 Fail Fast Mechanism
 	// Validate critical dependencies before proceeding with initialization
@@ -123,9 +130,86 @@ func main() {
 	userRepository := database.NewUserRepository(db, encryptionService)
 	sessionRepository := database.NewSessionRepository(db)
 
+	// Initialize Redis queue client with graceful degradation
+	var queueClient *queue.Client
+	var redisHealthy bool = true
+	if cfg.RedisURL != "" {
+		var err error
+		queueClient, err = queue.NewClient(cfg.RedisURL, log)
+		if err != nil {
+			log.Error("Failed to initialize Redis queue client - manual sync functionality will be disabled", 
+				"error", err,
+				"redis_url_configured", true,
+				"degraded_services", []string{"manual_sync"})
+			redisHealthy = false
+			queueClient = nil
+		} else {
+			log.Info("Redis queue client initialized successfully", "redis_configured", true)
+		}
+	} else {
+		log.Info("Redis not configured - manual sync functionality will be disabled", 
+			"redis_url_configured", false)
+		redisHealthy = false
+	}
+
 	// Initialize services
 	sheetsService := services.NewSheetsService(userRepository, log)
 	configService := services.NewConfigService(userRepository, sheetsService, log)
+	
+	// Initialize token refresh service for OAuth token management
+	tokenRefreshService := automation.NewTokenRefreshService(
+		userRepository,
+		cfg.GoogleClientID,
+		cfg.GoogleClientSecret,
+		cfg.StravaClientID,
+		cfg.StravaClientSecret,
+		log,
+	)
+	
+	// Initialize automation config service with token refresh
+	automationConfigService := automation.NewConfigService(userRepository, tokenRefreshService, log)
+	
+	syncService := apiServices.NewSyncService(automationConfigService, queueClient, log)
+
+	// Initialize and start worker pool if Redis is available
+	var workerPool *automation.WorkerPool
+	if queueClient != nil {
+		// Create manual sync processor
+		manualSyncProcessor := automation.NewManualSyncProcessor(
+			automationConfigService,
+			tokenRefreshService,
+			log,
+		)
+
+		// Initialize worker pool with configurable size
+		workerPoolConfig := automation.WorkerPoolConfig{
+			RedisURL:     cfg.RedisURL,
+			QueueName:    "jobs_queue",
+			WorkerCount:  cfg.WorkerPoolSize,
+			PollInterval: 5 * time.Second,
+		}
+
+		var err error
+		workerPool, err = automation.NewWorkerPool(
+			workerPoolConfig,
+			[]automation.JobProcessor{manualSyncProcessor},
+			log,
+		)
+		if err != nil {
+			log.Error("Failed to initialize worker pool - manual sync processing will be disabled",
+				"error", err)
+		} else {
+			// Start worker pool in background goroutines
+			go func() {
+				log.Info("Starting worker pool for job processing")
+				workerPool.Start()
+			}()
+			
+			log.Info("Worker pool initialized and started successfully",
+				"worker_count", cfg.WorkerPoolSize,
+				"queue_name", "jobs_queue")
+		}
+	}
 
 	// Initialize middleware
 	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository, oauthService, userRepository, log.WithContext("component", "auth_middleware"))
@@ -157,6 +241,11 @@ func main() {
 		log.WithContext("component", "config_handler"),
 	)
 
+	syncHandler := handlers.NewSyncHandler(
+		syncService,
+		log.WithContext("component", "sync_handler"),
+	)
+
 	// Create router
 	r := chi.NewRouter()
 
@@ -172,7 +261,21 @@ func main() {
 
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		fmt.Fprintf(w, `{"status": "healthy", "environment": "%s", "service": "backend-api"}`, cfg.Environment)
+		status := "healthy"
+		degradedServices := []string{}
+		
+		if !redisHealthy {
+			status = "degraded"
+			degradedServices = append(degradedServices, "manual_sync")
+		}
+		
+		if len(degradedServices) > 0 {
+			fmt.Fprintf(w, `{"status": "%s", "environment": "%s", "service": "backend-api", "degraded_services": ["%s"], "redis_healthy": %t}`, 
+				status, cfg.Environment, degradedServices[0], redisHealthy)
+		} else {
+			fmt.Fprintf(w, `{"status": "%s", "environment": "%s", "service": "backend-api", "redis_healthy": %t}`, 
+				status, cfg.Environment, redisHealthy)
+		}
 	})
 
 	// Authentication routes (public)
@@ -217,19 +320,66 @@ func main() {
 			r.Delete("/spreadsheet", configHandler.ClearSpreadsheet)  // Clear spreadsheet configuration
 		})
 
+		// Manual sync routes
+		r.Route("/sync", func(r chi.Router) {
+			r.Post("/", syncHandler.TriggerManualSync)     // Trigger manual sync
+			r.Get("/status", syncHandler.GetQueueStatus)   // Get queue status
+		})
+
 		// Future protected endpoints will go here
 		// r.Route("/automation", func(r chi.Router) { ... })
 		// r.Route("/notifications", func(r chi.Router) { ... })
 	})
 
-	log.Info("Backend API server starting", 
-		"port", cfg.Port,
-		"base_url", cfg.BaseURL,
-		"google_oauth_redirect_url", googleRedirectURL,
-		"strava_oauth_redirect_url", stravaRedirectURL)
-	
-	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
-		log.Critical("Server failed to start", "error", err)
-		os.Exit(1)
+	// Create HTTP server
+	server := &http.Server{
+		Addr:    ":" + cfg.Port,
+		Handler: r,
 	}
+
+	// Channel to listen for interrupt or terminate signals
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+
+	// Start server in a goroutine
+	go func() {
+		log.Info("Backend API server starting", 
+			"port", cfg.Port,
+			"base_url", cfg.BaseURL,
+			"google_oauth_redirect_url", googleRedirectURL,
+			"strava_oauth_redirect_url", stravaRedirectURL)
+		
+		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Critical("Server failed to start", "error", err)
+			os.Exit(1)
+		}
+	}()
+
+	log.Info("Backend API server started successfully - listening for requests")
+
+	// Block until we receive a signal
+	<-quit
+	log.Info("Shutdown signal received - beginning graceful shutdown")
+
+	// Create a deadline for shutdown operations
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	// Gracefully shutdown the server
+	if err := server.Shutdown(ctx); err != nil {
+		log.Error("Server forced to shutdown", "error", err)
+	}
+
+	// Stop worker pool if it's running
+	if workerPool != nil {
+		log.Info("Stopping worker pool...")
+		workerPool.Stop()
+	}
+
+	// Close database connection
+	if err := db.Close(); err != nil {
+		log.Error("Error closing database connection", "error", err)
+	}
+
+	log.Info("Backend API server stopped gracefully")
 }

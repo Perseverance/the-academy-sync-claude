@@ -7,6 +7,7 @@ import type { LogEntry } from "@/components/activity-log" // Assuming LogEntry t
 import { authService, type User } from "@/services/auth"
 import { stravaService } from "@/services/strava"
 import { configService } from "@/services/config"
+import { SyncService } from "@/services/SyncService"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
 export type SpreadsheetConfigStatus = "Configured" | "NotConfigured" | "Disabled"
@@ -257,22 +258,39 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const triggerManualSync = async () => {
     setState((s) => ({ ...s, manualSyncStatus: "Processing" }))
-    await new Promise((resolve) => setTimeout(resolve, 3000)) // Simulate sync
-    // Add a new log entry
-    const newLog: LogEntry = {
-      id: String(Date.now()),
-      date: new Date().toISOString(),
-      status: Math.random() > 0.3 ? "Success" : "Failure",
-      summary:
-        Math.random() > 0.3
-          ? "Manual sync completed: 2 new activities."
-          : "Manual sync failed: Could not reach Google Sheets.",
+    
+    try {
+      // Call the actual sync API
+      const response = await SyncService.triggerManualSync()
+      
+      console.log('Manual sync triggered successfully:', {
+        job_id: response.job_id,
+        estimated_completion: response.estimated_completion_seconds
+      })
+      
+      // Keep the status as "Processing" - it will be updated when sync completes
+      // The actual completion will be logged when the backend processing finishes
+      setState((s) => ({
+        ...s,
+        manualSyncStatus: "Ready" // Reset to Ready state for UI, but no log entry yet
+      }))
+    } catch (error) {
+      console.error('Manual sync failed to start:', error)
+      
+      // Only log immediate failures (API call failures, not processing failures)
+      const newLog: LogEntry = {
+        id: String(Date.now()),
+        date: new Date().toISOString(),
+        status: "Failure",
+        summary: `Failed to start manual sync: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      }
+      
+      setState((s) => ({
+        ...s,
+        manualSyncStatus: "Ready",
+        activityLogs: [newLog, ...s.activityLogs.slice(0, 19)], // Keep last 20 logs
+      }))
     }
-    setState((s) => ({
-      ...s,
-      manualSyncStatus: "Ready",
-      activityLogs: [newLog, ...s.activityLogs.slice(0, 19)], // Keep last 20 logs
-    }))
   }
 
   const setGoogleStatus = (status: ServiceStatus) => {

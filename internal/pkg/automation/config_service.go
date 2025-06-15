@@ -20,15 +20,17 @@ type UserRepository interface {
 // This service implements US022 requirements for securely retrieving all necessary
 // operational configurations from the database for a specific user's processing run.
 type ConfigService struct {
-	userRepository UserRepository
-	logger         *logger.Logger
+	userRepository      UserRepository
+	tokenRefreshService *TokenRefreshService
+	logger              *logger.Logger
 }
 
 // NewConfigService creates a new configuration service
-func NewConfigService(userRepository UserRepository, logger *logger.Logger) *ConfigService {
+func NewConfigService(userRepository UserRepository, tokenRefreshService *TokenRefreshService, logger *logger.Logger) *ConfigService {
 	return &ConfigService{
-		userRepository: userRepository,
-		logger:         logger.WithContext("component", "config_service"),
+		userRepository:      userRepository,
+		tokenRefreshService: tokenRefreshService,
+		logger:              logger.WithContext("component", "config_service"),
 	}
 }
 
@@ -117,6 +119,30 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 	s.logger.Debug("Built processing configuration from user data",
 		"user_id", userID,
 		"config_summary", config.String())
+
+	// Refresh tokens if needed and token refresh service is available
+	if s.tokenRefreshService != nil {
+		s.logger.Debug("Checking if token refresh is needed", "user_id", userID)
+		
+		refreshedConfig, err := s.tokenRefreshService.RefreshTokensIfNeeded(ctx, config)
+		if err != nil {
+			s.logger.Error("Failed to refresh tokens",
+				"error", err,
+				"user_id", userID,
+				"operation_duration_ms", time.Since(startTime).Milliseconds())
+			return nil, fmt.Errorf("failed to refresh tokens: %w", err)
+		}
+		
+		// Use the refreshed config
+		config = refreshedConfig
+		
+		s.logger.Debug("Token refresh check completed",
+			"user_id", userID,
+			"has_valid_google_token", config.HasValidGoogleToken(),
+			"has_valid_strava_token", config.HasValidStravaToken())
+	} else {
+		s.logger.Debug("Token refresh service not available, skipping token refresh", "user_id", userID)
+	}
 
 	// Validate configuration completeness
 	s.logger.Debug("Validating processing configuration completeness",

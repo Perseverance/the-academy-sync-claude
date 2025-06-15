@@ -323,7 +323,7 @@ func (r *UserRepository) UpdateStravaConnection(ctx context.Context, userID int,
 	`
 
 	now := time.Now()
-	_, err = r.db.ExecContext(ctx, query, 
+	result, err := r.db.ExecContext(ctx, query, 
 		encryptedAccessToken, 
 		encryptedRefreshToken, 
 		expiry, 
@@ -332,8 +332,21 @@ func (r *UserRepository) UpdateStravaConnection(ctx context.Context, userID int,
 		profilePictureURL,
 		now, 
 		userID)
+	if err != nil {
+		return err
+	}
 	
-	return err
+	// Check that exactly one row was affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows // No user found with the given ID
+	}
+	
+	return nil
 }
 
 // RemoveStravaConnection removes the user's Strava connection by clearing tokens and athlete ID
@@ -351,8 +364,22 @@ func (r *UserRepository) RemoveStravaConnection(ctx context.Context, userID int)
 	`
 
 	now := time.Now()
-	_, err := r.db.ExecContext(ctx, query, now, userID)
-	return err
+	result, err := r.db.ExecContext(ctx, query, now, userID)
+	if err != nil {
+		return err
+	}
+	
+	// Check that exactly one row was affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows // No user found with the given ID
+	}
+	
+	return nil
 }
 
 // GetDecryptedStravaTokens retrieves and decrypts a user's Strava OAuth tokens
@@ -507,4 +534,82 @@ func (r *UserRepository) GetProcessingConfigForUser(ctx context.Context, userID 
 	}
 
 	return result, nil
+}
+
+// UpdateGoogleTokens updates the Google OAuth tokens for a user
+func (r *UserRepository) UpdateGoogleTokens(ctx context.Context, userID int, accessToken, refreshToken string, expiry *time.Time) error {
+	// Encrypt tokens
+	encryptedAccessToken, err := r.encryptor.Encrypt(accessToken)
+	if err != nil {
+		return err
+	}
+
+	encryptedRefreshToken, err := r.encryptor.Encrypt(refreshToken)
+	if err != nil {
+		return err
+	}
+
+	query := `
+		UPDATE users 
+		SET google_access_token = $1, 
+		    google_refresh_token = $2, 
+		    google_token_expiry = $3,
+		    updated_at = NOW()
+		WHERE id = $4
+	`
+
+	result, err := r.db.ExecContext(ctx, query, encryptedAccessToken, encryptedRefreshToken, expiry, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows // No user found with the given ID
+	}
+
+	return nil
+}
+
+// UpdateStravaTokens updates the Strava OAuth tokens for a user
+func (r *UserRepository) UpdateStravaTokens(ctx context.Context, userID int, accessToken, refreshToken string, expiry *time.Time) error {
+	// Encrypt tokens
+	encryptedAccessToken, err := r.encryptor.Encrypt(accessToken)
+	if err != nil {
+		return err
+	}
+
+	encryptedRefreshToken, err := r.encryptor.Encrypt(refreshToken)
+	if err != nil {
+		return err
+	}
+
+	query := `
+		UPDATE users 
+		SET strava_access_token = $1, 
+		    strava_refresh_token = $2, 
+		    strava_token_expiry = $3,
+		    updated_at = NOW()
+		WHERE id = $4
+	`
+
+	result, err := r.db.ExecContext(ctx, query, encryptedAccessToken, encryptedRefreshToken, expiry, userID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows // No user found with the given ID
+	}
+
+	return nil
 }

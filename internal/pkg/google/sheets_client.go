@@ -286,8 +286,8 @@ func (c *SheetsClient) ValidateAccess(ctx context.Context, spreadsheetID string)
 		"sheet_count", len(spreadsheet.Sheets),
 		"user_id", c.userID)
 	
-	// Test write access by attempting to read a range
-	testRange := "A1:A1"
+	// Test write access by attempting to read a range from the training plan sheet
+	testRange := "Тренировъчен План!A1:A1"
 	c.logger.Debug("Testing write access permissions",
 		"spreadsheet_id", spreadsheetID,
 		"test_range", testRange,
@@ -371,8 +371,8 @@ func (c *SheetsClient) WriteActivities(ctx context.Context, spreadsheetID string
 	// Convert activities to spreadsheet rows
 	rows := c.convertActivitiesToRows(activities)
 	
-	// Prepare the range for writing (assume we're writing to Sheet1, starting from A2)
-	writeRange := "Sheet1!A2:I" + fmt.Sprintf("%d", len(rows)+1)
+	// Prepare the range for writing (use the training plan sheet, starting from A2)
+	writeRange := "Тренировъчен План!A2:I" + fmt.Sprintf("%d", len(rows)+1)
 	
 	c.logger.Debug("Preparing to write activity data to spreadsheet",
 		"user_id", c.userID,
