@@ -12,6 +12,7 @@ import (
 // UserRepository interface for dependency injection and testing
 type UserRepository interface {
 	GetUserByID(ctx context.Context, userID int) (*database.User, error)
+	GetProcessingConfigForUser(ctx context.Context, userID int) (*database.ProcessingTokens, error)
 	DecryptToken(encryptedToken []byte) (string, error)
 }
 
@@ -42,7 +43,7 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 	s.logger.Debug("Starting user configuration retrieval for processing run",
 		"user_id", userID)
 
-	// Retrieve complete user record from database
+	// Retrieve complete user record for automation preferences
 	user, err := s.userRepository.GetUserByID(ctx, userID)
 	if err != nil {
 		s.logger.Error("Failed to retrieve user record from database",
@@ -59,85 +60,49 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 		return nil, fmt.Errorf("user not found: %d", userID)
 	}
 
-	s.logger.Debug("Retrieved user record from database",
-		"user_id", userID,
-		"email", user.Email,
-		"has_strava_athlete_id", user.StravaAthleteID != nil,
-		"has_spreadsheet_id", user.SpreadsheetID != nil,
-		"automation_enabled", user.AutomationEnabled)
-
-	// Decrypt Google OAuth tokens
-	s.logger.Debug("Decrypting Google OAuth tokens",
+	// Retrieve decrypted processing tokens
+	s.logger.Debug("Retrieving decrypted processing tokens",
 		"user_id", userID)
 	
-	googleAccessToken, err := s.userRepository.DecryptToken(user.GoogleAccessToken)
+	tokens, err := s.userRepository.GetProcessingConfigForUser(ctx, userID)
 	if err != nil {
-		s.logger.Error("Failed to decrypt Google access token",
+		s.logger.Error("Failed to retrieve processing tokens from database",
 			"error", err,
-			"user_id", userID)
-		return nil, fmt.Errorf("failed to decrypt Google access token: %w", err)
+			"user_id", userID,
+			"operation_duration_ms", time.Since(startTime).Milliseconds())
+		return nil, fmt.Errorf("failed to retrieve processing tokens: %w", err)
 	}
 
-	googleRefreshToken, err := s.userRepository.DecryptToken(user.GoogleRefreshToken)
-	if err != nil {
-		s.logger.Error("Failed to decrypt Google refresh token",
-			"error", err,
-			"user_id", userID)
-		return nil, fmt.Errorf("failed to decrypt Google refresh token: %w", err)
-	}
-
-	s.logger.Debug("Successfully decrypted Google OAuth tokens",
+	s.logger.Debug("Successfully retrieved decrypted processing tokens",
 		"user_id", userID,
-		"has_google_access_token", googleAccessToken != "",
-		"has_google_refresh_token", googleRefreshToken != "",
-		"google_token_expiry", user.GoogleTokenExpiry)
-
-	// Decrypt Strava OAuth tokens
-	s.logger.Debug("Decrypting Strava OAuth tokens",
-		"user_id", userID)
-
-	stravaAccessToken, err := s.userRepository.DecryptToken(user.StravaAccessToken)
-	if err != nil {
-		s.logger.Error("Failed to decrypt Strava access token",
-			"error", err,
-			"user_id", userID)
-		return nil, fmt.Errorf("failed to decrypt Strava access token: %w", err)
-	}
-
-	stravaRefreshToken, err := s.userRepository.DecryptToken(user.StravaRefreshToken)
-	if err != nil {
-		s.logger.Error("Failed to decrypt Strava refresh token",
-			"error", err,
-			"user_id", userID)
-		return nil, fmt.Errorf("failed to decrypt Strava refresh token: %w", err)
-	}
-
-	s.logger.Debug("Successfully decrypted Strava OAuth tokens",
-		"user_id", userID,
-		"has_strava_access_token", stravaAccessToken != "",
-		"has_strava_refresh_token", stravaRefreshToken != "",
-		"strava_token_expiry", user.StravaTokenExpiry,
-		"strava_athlete_id", user.StravaAthleteID)
+		"has_google_access_token", tokens.GoogleAccessToken != "",
+		"has_google_refresh_token", tokens.GoogleRefreshToken != "",
+		"has_strava_access_token", tokens.StravaAccessToken != "",
+		"has_strava_refresh_token", tokens.StravaRefreshToken != "",
+		"has_strava_athlete_id", tokens.StravaAthleteID != nil,
+		"has_spreadsheet_id", tokens.SpreadsheetID != nil,
+		"google_token_expiry", tokens.GoogleTokenExpiry,
+		"strava_token_expiry", tokens.StravaTokenExpiry)
 
 	// Build processing configuration
 	config := &ProcessingConfig{
 		UserID: user.ID,
-		Email:  user.Email,
+		Email:  tokens.Email,
 
 		// Google OAuth tokens (decrypted)
-		GoogleAccessToken:  googleAccessToken,
-		GoogleRefreshToken: googleRefreshToken,
-		GoogleTokenExpiry:  user.GoogleTokenExpiry,
+		GoogleAccessToken:  tokens.GoogleAccessToken,
+		GoogleRefreshToken: tokens.GoogleRefreshToken,
+		GoogleTokenExpiry:  tokens.GoogleTokenExpiry,
 
 		// Strava OAuth tokens (decrypted)
-		StravaAccessToken:  stravaAccessToken,
-		StravaRefreshToken: stravaRefreshToken,
-		StravaTokenExpiry:  user.StravaTokenExpiry,
-		StravaAthleteID:    user.StravaAthleteID,
+		StravaAccessToken:  tokens.StravaAccessToken,
+		StravaRefreshToken: tokens.StravaRefreshToken,
+		StravaTokenExpiry:  tokens.StravaTokenExpiry,
+		StravaAthleteID:    tokens.StravaAthleteID,
 
 		// Target configuration
 		SpreadsheetID: "",
-		Timezone:      user.Timezone,
+		Timezone:      tokens.Timezone,
 
 		// User preferences
 		EmailNotificationsEnabled: user.EmailNotificationsEnabled,
@@ -145,8 +110,8 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 	}
 
 	// Handle spreadsheet ID (can be nil)
-	if user.SpreadsheetID != nil {
-		config.SpreadsheetID = *user.SpreadsheetID
+	if tokens.SpreadsheetID != nil {
+		config.SpreadsheetID = *tokens.SpreadsheetID
 	}
 
 	s.logger.Debug("Built processing configuration from user data",
@@ -197,8 +162,8 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 		"user_id", userID,
 		"token_analysis", map[string]interface{}{
 			"google": map[string]interface{}{
-				"has_access_token":    googleAccessToken != "",
-				"has_refresh_token":   googleRefreshToken != "",
+				"has_access_token":    config.GoogleAccessToken != "",
+				"has_refresh_token":   config.GoogleRefreshToken != "",
 				"token_valid":         config.HasValidGoogleToken(),
 				"token_expiry":        config.GoogleTokenExpiry,
 				"minutes_until_expiry": func() float64 {
@@ -209,8 +174,8 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 				}(),
 			},
 			"strava": map[string]interface{}{
-				"has_access_token":     stravaAccessToken != "",
-				"has_refresh_token":    stravaRefreshToken != "",
+				"has_access_token":     config.StravaAccessToken != "",
+				"has_refresh_token":    config.StravaRefreshToken != "",
 				"token_valid":          config.HasValidStravaToken(),
 				"token_expiry":         config.StravaTokenExpiry,
 				"athlete_id":           config.StravaAthleteID,
@@ -280,6 +245,18 @@ func (s *ConfigService) ValidateUserCanBeProcessed(ctx context.Context, userID i
 
 	if user.Timezone == "" {
 		missingFields = append(missingFields, "timezone")
+	}
+
+	// Check if automation is enabled
+	if !user.AutomationEnabled {
+		missingFields = append(missingFields, "automation_enabled")
+	}
+
+	// Validate timezone if present
+	if user.Timezone != "" {
+		if _, err := time.LoadLocation(user.Timezone); err != nil {
+			missingFields = append(missingFields, "valid_timezone")
+		}
 	}
 
 	if len(missingFields) > 0 {

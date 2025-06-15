@@ -11,12 +11,14 @@ import (
 
 // MockUserRepository implements a mock user repository for testing
 type MockUserRepository struct {
-	users map[int]*database.User
+	users  map[int]*database.User
+	tokens map[int]*database.ProcessingTokens
 }
 
 func NewMockUserRepository() *MockUserRepository {
 	return &MockUserRepository{
-		users: make(map[int]*database.User),
+		users:  make(map[int]*database.User),
+		tokens: make(map[int]*database.ProcessingTokens),
 	}
 }
 
@@ -28,6 +30,14 @@ func (m *MockUserRepository) GetUserByID(ctx context.Context, userID int) (*data
 	return user, nil
 }
 
+func (m *MockUserRepository) GetProcessingConfigForUser(ctx context.Context, userID int) (*database.ProcessingTokens, error) {
+	tokens, exists := m.tokens[userID]
+	if !exists {
+		return nil, nil
+	}
+	return tokens, nil
+}
+
 func (m *MockUserRepository) DecryptToken(encryptedToken []byte) (string, error) {
 	// For testing, just return the token as string
 	return string(encryptedToken), nil
@@ -35,6 +45,10 @@ func (m *MockUserRepository) DecryptToken(encryptedToken []byte) (string, error)
 
 func (m *MockUserRepository) AddUser(userID int, user *database.User) {
 	m.users[userID] = user
+}
+
+func (m *MockUserRepository) AddProcessingTokens(userID int, tokens *database.ProcessingTokens) {
+	m.tokens[userID] = tokens
 }
 
 func TestConfigService_GetProcessingConfigForUser(t *testing.T) {
@@ -61,22 +75,26 @@ func TestConfigService_GetProcessingConfigForUser(t *testing.T) {
 		athleteID := int64(12345)
 
 		user := &database.User{
-			ID:                   1,
-			Email:               "test@example.com",
-			GoogleAccessToken:   []byte("google-access-token"),
-			GoogleRefreshToken:  []byte("google-refresh-token"),
-			GoogleTokenExpiry:   &futureExpiry,
-			StravaAccessToken:   []byte("strava-access-token"),
-			StravaRefreshToken:  []byte("strava-refresh-token"),
-			StravaTokenExpiry:   &futureExpiry,
-			StravaAthleteID:     &athleteID,
-			SpreadsheetID:       &spreadsheetID,
-			Timezone:           "America/New_York",
+			ID:                        1,
 			EmailNotificationsEnabled: true,
-			AutomationEnabled:  true,
+			AutomationEnabled:         true,
+		}
+
+		tokens := &database.ProcessingTokens{
+			GoogleAccessToken:  "google-access-token",
+			GoogleRefreshToken: "google-refresh-token",
+			GoogleTokenExpiry:  &futureExpiry,
+			StravaAccessToken:  "strava-access-token",
+			StravaRefreshToken: "strava-refresh-token",
+			StravaTokenExpiry:  &futureExpiry,
+			StravaAthleteID:    &athleteID,
+			SpreadsheetID:      &spreadsheetID,
+			Timezone:           "America/New_York",
+			Email:              "test@example.com",
 		}
 
 		mockRepo.AddUser(1, user)
+		mockRepo.AddProcessingTokens(1, tokens)
 
 		config, err := configService.GetProcessingConfigForUser(context.Background(), 1)
 		if err != nil {
@@ -117,22 +135,26 @@ func TestConfigService_GetProcessingConfigForUser(t *testing.T) {
 		spreadsheetID := "test-spreadsheet-id"
 
 		user := &database.User{
-			ID:                   2,
-			Email:               "test2@example.com",
-			GoogleAccessToken:   []byte("google-access-token"),
-			GoogleRefreshToken:  []byte("google-refresh-token"),
-			GoogleTokenExpiry:   &futureExpiry,
-			StravaAccessToken:   []byte{}, // Empty
-			StravaRefreshToken:  []byte{}, // Empty
-			StravaTokenExpiry:   nil,
-			StravaAthleteID:     nil, // Missing
-			SpreadsheetID:       &spreadsheetID,
-			Timezone:           "America/New_York",
+			ID:                        2,
 			EmailNotificationsEnabled: true,
-			AutomationEnabled:  true,
+			AutomationEnabled:         true,
+		}
+
+		tokens := &database.ProcessingTokens{
+			GoogleAccessToken:  "google-access-token",
+			GoogleRefreshToken: "google-refresh-token",
+			GoogleTokenExpiry:  &futureExpiry,
+			StravaAccessToken:  "", // Empty
+			StravaRefreshToken: "", // Empty
+			StravaTokenExpiry:  nil,
+			StravaAthleteID:    nil, // Missing
+			SpreadsheetID:      &spreadsheetID,
+			Timezone:           "America/New_York",
+			Email:              "test2@example.com",
 		}
 
 		mockRepo.AddUser(2, user)
+		mockRepo.AddProcessingTokens(2, tokens)
 
 		config, err := configService.GetProcessingConfigForUser(context.Background(), 2)
 		if err == nil {
