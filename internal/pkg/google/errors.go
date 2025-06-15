@@ -1,6 +1,7 @@
 package google
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 )
@@ -26,10 +27,19 @@ func (e *AuthError) Error() string {
 	return fmt.Sprintf("google auth error (%s): %s", e.Type, e.Message)
 }
 
+func (e *AuthError) Unwrap() error {
+	return e.Cause
+}
+
 // IsReauthRequired checks if an error indicates that user re-authorization is required
 func IsReauthRequired(err error) bool {
 	if err == nil {
 		return false
+	}
+	
+	// First check if this is our specific error type (supports wrapped errors)
+	if errors.Is(err, ErrReauthRequired) {
+		return true
 	}
 	
 	// Check for our specific error type
@@ -63,6 +73,10 @@ func (e *APIError) Error() string {
 		e.StatusCode, e.Type, e.Message)
 }
 
+func (e *APIError) Unwrap() error {
+	return e.Cause
+}
+
 // NetworkError represents network-related errors during API calls
 type NetworkError struct {
 	Operation string
@@ -76,6 +90,10 @@ func (e *NetworkError) Error() string {
 			e.Operation, e.Message, e.Cause)
 	}
 	return fmt.Sprintf("google network error during %s: %s", e.Operation, e.Message)
+}
+
+func (e *NetworkError) Unwrap() error {
+	return e.Cause
 }
 
 // ValidationError represents data validation errors for Google APIs
@@ -93,6 +111,10 @@ func (e *ValidationError) Error() string {
 	return fmt.Sprintf("google validation error for %s: %s", e.Field, e.Message)
 }
 
+func (e *ValidationError) Unwrap() error {
+	return e.Cause
+}
+
 // SheetsError represents Google Sheets-specific errors
 type SheetsError struct {
 	SpreadsheetID string
@@ -108,4 +130,8 @@ func (e *SheetsError) Error() string {
 	}
 	return fmt.Sprintf("google sheets error (spreadsheet %s, type %s): %s", 
 		e.SpreadsheetID, e.Type, e.Message)
+}
+
+func (e *SheetsError) Unwrap() error {
+	return e.Cause
 }

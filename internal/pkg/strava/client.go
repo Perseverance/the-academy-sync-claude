@@ -62,7 +62,7 @@ func NewClient(userID int, refreshToken string, logger *logger.Logger) *Client {
 	oauthConfig := &oauth2.Config{
 		Endpoint: oauth2.Endpoint{
 			AuthURL:  "https://www.strava.com/oauth/authorize",
-			TokenURL: "https://www.strava.com/api/v3/oauth/token",
+			TokenURL: "https://www.strava.com/oauth/token",
 		},
 		// Note: Client ID and Secret should be injected via config
 		// For now, we'll set them when needed in token refresh
