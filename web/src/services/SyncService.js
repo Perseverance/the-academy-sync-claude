@@ -54,16 +54,9 @@ export class SyncError extends Error {
  * @throws {SyncError} If request fails or returns error status
  */
 async function makeAuthenticatedRequest(endpoint, options = {}) {
-  const token = localStorage.getItem('authToken');
-  
-  if (!token) {
-    throw new SyncError('Authentication required', 'UNAUTHORIZED', 'AUTH_ERROR', 401);
-  }
-
   const url = `${API_BASE}${endpoint}`;
   const headers = {
     'Content-Type': 'application/json',
-    'Authorization': `Bearer ${token}`,
     ...options.headers,
   };
 
@@ -71,12 +64,12 @@ async function makeAuthenticatedRequest(endpoint, options = {}) {
     const response = await fetch(url, {
       ...options,
       headers,
+      credentials: 'include', // Use cookie-based authentication like AuthService
     });
 
     // Handle different response statuses
     if (response.status === 401) {
-      // Token might be expired, clear it
-      localStorage.removeItem('authToken');
+      // User session has expired or is invalid
       throw new SyncError('Authentication required', 'UNAUTHORIZED', 'AUTH_ERROR', 401);
     }
 

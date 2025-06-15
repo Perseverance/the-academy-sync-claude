@@ -8,7 +8,7 @@ import { SyncService, SyncError } from './SyncService';
 // Mock fetch for testing
 global.fetch = jest.fn();
 
-// Mock localStorage
+// Mock localStorage (still needed for other potential uses)
 const localStorageMock = {
   getItem: jest.fn(),
   removeItem: jest.fn(),
@@ -43,7 +43,6 @@ describe('SyncService', () => {
         estimated_completion_seconds: 60
       };
 
-      localStorageMock.getItem.mockReturnValue('mock-auth-token');
       fetch.mockResolvedValueOnce({
         ok: true,
         status: 202,
@@ -57,9 +56,9 @@ describe('SyncService', () => {
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'Content-Type': 'application/json',
-            'Authorization': 'Bearer mock-auth-token'
-          })
+            'Content-Type': 'application/json'
+          }),
+          credentials: 'include'
         })
       );
 
@@ -67,7 +66,11 @@ describe('SyncService', () => {
     });
 
     it('should throw SyncError when user not authenticated', async () => {
-      localStorageMock.getItem.mockReturnValue(null);
+      fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized'
+      });
 
       const error = await SyncService.triggerManualSync().catch(e => e);
       
@@ -76,7 +79,6 @@ describe('SyncService', () => {
     });
 
     it('should handle 401 unauthorized response', async () => {
-      localStorageMock.getItem.mockReturnValue('expired-token');
       fetch.mockResolvedValueOnce({
         ok: false,
         status: 401,
@@ -84,9 +86,6 @@ describe('SyncService', () => {
       });
 
       await expect(SyncService.triggerManualSync()).rejects.toThrow(SyncError);
-      
-      // Should remove token from localStorage
-      expect(localStorageMock.removeItem).toHaveBeenCalledWith('authToken');
     });
 
     it('should handle 400 user not configured response', async () => {
@@ -96,7 +95,6 @@ describe('SyncService', () => {
         type: 'USER_NOT_CONFIGURED'
       };
 
-      localStorageMock.getItem.mockReturnValue('valid-token');
       fetch.mockResolvedValueOnce({
         ok: false,
         status: 400,
@@ -111,7 +109,6 @@ describe('SyncService', () => {
     });
 
     it('should handle 503 service unavailable response', async () => {
-      localStorageMock.getItem.mockReturnValue('valid-token');
       fetch.mockResolvedValueOnce({
         ok: false,
         status: 503,
@@ -126,7 +123,6 @@ describe('SyncService', () => {
     });
 
     it('should handle network errors', async () => {
-      localStorageMock.getItem.mockReturnValue('valid-token');
       fetch.mockRejectedValueOnce(new Error('Network connection failed'));
 
       const error = await SyncService.triggerManualSync().catch(e => e);
@@ -146,7 +142,6 @@ describe('SyncService', () => {
         status_time: '2024-01-15T10:30:00Z'
       };
 
-      localStorageMock.getItem.mockReturnValue('valid-token');
       fetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -160,8 +155,9 @@ describe('SyncService', () => {
         expect.objectContaining({
           method: 'GET',
           headers: expect.objectContaining({
-            'Authorization': 'Bearer valid-token'
-          })
+            'Content-Type': 'application/json'
+          }),
+          credentials: 'include'
         })
       );
 
@@ -169,7 +165,11 @@ describe('SyncService', () => {
     });
 
     it('should throw SyncError when unauthorized', async () => {
-      localStorageMock.getItem.mockReturnValue(null);
+      fetch.mockResolvedValueOnce({
+        ok: false,
+        status: 401,
+        statusText: 'Unauthorized'
+      });
 
       await expect(SyncService.getQueueStatus()).rejects.toThrow(SyncError);
     });
@@ -177,7 +177,6 @@ describe('SyncService', () => {
 
   describe('isManualSyncAvailable', () => {
     it('should return true when queue status is available', async () => {
-      localStorageMock.getItem.mockReturnValue('valid-token');
       fetch.mockResolvedValueOnce({
         ok: true,
         status: 200,
@@ -190,7 +189,6 @@ describe('SyncService', () => {
     });
 
     it('should return false when queue status fails', async () => {
-      localStorageMock.getItem.mockReturnValue('valid-token');
       fetch.mockResolvedValueOnce({
         ok: false,
         status: 503
