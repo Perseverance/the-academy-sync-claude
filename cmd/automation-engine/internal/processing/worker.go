@@ -352,71 +352,35 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 		})
 	
 	// Step 6: Write activities to Google Sheets
+	// TODO: Implement actual Google Sheets writing functionality
+	// This is subject to a separate story and should not be implemented yet
 	if len(activities) > 0 {
-		w.logger.Debug("📝 Step 6/6: Writing activities to Google Sheets",
+		w.logger.Debug("📝 Step 6/6: Simulating Google Sheets write (TODO: implement actual writing)",
 			"user_id", userID,
 			"step", "sheets_activity_write",
 			"write_parameters", map[string]interface{}{
 				"activity_count":   len(activities),
 				"spreadsheet_id":   config.SpreadsheetID,
-				"target_sheet":     "Sheet1",
+				"target_sheet":     "Тренировъчен План",
 				"write_range":      fmt.Sprintf("A2:I%d", len(activities)+1),
 			})
 		
-		if err := sheetsClient.WriteActivities(ctx, config.SpreadsheetID, activities); err != nil {
-			processingDuration := time.Since(startTime)
-			
-			// Check if this requires re-authorization
-			if google.IsReauthRequired(err) {
-				w.logger.Warn("🔐 Google Sheets write requires user re-authorization",
-					"user_id", userID,
-					"step", "sheets_activity_write",
-					"error", err,
-					"error_analysis", map[string]interface{}{
-						"error_type":           fmt.Sprintf("%T", err),
-						"requires_reauth":      true,
-						"spreadsheet_id":       config.SpreadsheetID,
-						"activity_count":       len(activities),
-						"google_token_expired": !config.HasValidGoogleToken(),
-					},
-					"processing_duration_ms", processingDuration.Milliseconds(),
-					"action_required", "User must re-authorize Google Sheets access")
-				
-				result.ProcessingTime = processingDuration
-				result.Error = "Google Sheets write requires re-authorization"
-				result.ErrorType = "GOOGLE_REAUTH_REQUIRED"
-				result.RequiresReauth = true
-				return result
-			}
-			
-			w.logger.Error("❌ Failed to write activities to Google Sheets",
-				"error", err,
-				"user_id", userID,
-				"step", "sheets_activity_write",
-				"error_details", map[string]interface{}{
-					"error_type":       fmt.Sprintf("%T", err),
-					"error_string":     err.Error(),
-					"activity_count":   len(activities),
-					"spreadsheet_id":   config.SpreadsheetID,
-					"has_valid_token":  config.HasValidGoogleToken(),
-					"token_expiry":     config.GoogleTokenExpiry,
-					"write_range":      fmt.Sprintf("A2:I%d", len(activities)+1),
-				},
-				"processing_duration_ms", processingDuration.Milliseconds())
-			
-			result.ProcessingTime = processingDuration
-			result.Error = fmt.Sprintf("Sheets write failed: %v", err)
-			result.ErrorType = "SHEETS_WRITE_ERROR"
-			return result
-		}
+		// TODO: Replace this simulation with actual sheets writing
+		// The implementation should:
+		// 1. Use the corrected Google Sheets client
+		// 2. Write to the "Тренировъчен План" sheet
+		// 3. Handle re-authorization errors
+		// 4. Provide proper error logging and recovery
 		
-		w.logger.Info("✅ Step 6/6: Successfully wrote activities to Google Sheets",
+		time.Sleep(300 * time.Millisecond) // Simulate processing time
+		
+		w.logger.Info("✅ Step 6/6: Simulated Google Sheets write completed (TODO: implement actual writing)",
 			"user_id", userID,
 			"step", "sheets_activity_write",
 			"write_results", map[string]interface{}{
 				"activity_count":   len(activities),
 				"spreadsheet_id":   config.SpreadsheetID,
-				"write_successful": true,
+				"write_simulated":  true,
 			})
 	} else {
 		w.logger.Info("ℹ️ Step 6/6: No new activities to write to Google Sheets",
