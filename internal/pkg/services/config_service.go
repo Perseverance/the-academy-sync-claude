@@ -257,14 +257,27 @@ func (c *ConfigService) sanitizeURL(url string) string {
 
 // sanitizeSpreadsheetID masks sensitive spreadsheet ID for logging while preserving troubleshooting context
 func (c *ConfigService) sanitizeSpreadsheetID(spreadsheetID string) string {
-	if len(spreadsheetID) <= 8 {
-		// For very short IDs, mask all but first 2 characters
-		return spreadsheetID[:2] + strings.Repeat("*", len(spreadsheetID)-2)
+	length := len(spreadsheetID)
+	
+	// Handle edge cases for ultra-short IDs
+	if length == 0 {
+		return "[empty]"
+	}
+	if length == 1 {
+		return "*"
+	}
+	if length == 2 {
+		return spreadsheetID[:1] + "*"
+	}
+	
+	if length <= 8 {
+		// For short IDs (3-8 chars), mask all but first 2 characters
+		return spreadsheetID[:2] + strings.Repeat("*", length-2)
 	}
 	
 	// For normal IDs, show first 4 and last 4 characters with asterisks in between
 	prefix := spreadsheetID[:4]
-	suffix := spreadsheetID[len(spreadsheetID)-4:]
-	middle := strings.Repeat("*", len(spreadsheetID)-8)
+	suffix := spreadsheetID[length-4:]
+	middle := strings.Repeat("*", length-8)
 	return prefix + middle + suffix
 }
