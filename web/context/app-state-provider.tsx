@@ -1,11 +1,12 @@
 "use client"
 
 import type React from "react"
-import { createContext, useContext, useState, useEffect } from "react"
+import { createContext, useContext, useState, useEffect, useRef } from "react"
 import { useRouter, usePathname } from "next/navigation"
 import type { LogEntry } from "@/components/activity-log" // Assuming LogEntry type is in ActivityLog
 import { authService, type User } from "@/services/auth"
 import { stravaService } from "@/services/strava"
+import { configService } from "@/services/config"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
 export type SpreadsheetConfigStatus = "Configured" | "NotConfigured" | "Disabled"
@@ -64,6 +65,7 @@ const mockLogs: LogEntry[] = [
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
+  const isMountedRef = useRef(true)
 
   const [state, setState] = useState<AppState>({
     user: null,
@@ -94,6 +96,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           // Initialize spreadsheet status based on user data
           spreadsheetStatus: user?.has_sheets_connection ? "Configured" : 
                              user?.has_strava_connection ? "NotConfigured" : "Disabled",
+          // Convert spreadsheet_id to Google Sheets URL
+          spreadsheetUrl: user?.spreadsheet_id ? 
+                         `https://docs.google.com/spreadsheets/d/${user.spreadsheet_id}` : undefined,
           // Use activity logs from user data, fallback to mock data if empty
           activityLogs: user?.recent_activity_logs?.length ? user.recent_activity_logs : mockLogs,
           isLogsLoading: false
@@ -223,8 +228,27 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }
 
   const saveSpreadsheet = async (url: string) => {
-    await new Promise((resolve) => setTimeout(resolve, 1000))
-    setState((s) => ({ ...s, spreadsheetStatus: "Configured", spreadsheetUrl: url }))
+    try {
+      // Call the real API to save the spreadsheet configuration
+      await configService.setSpreadsheetUrl(url)
+      
+      // Check if component is still mounted before updating state
+      if (!isMountedRef.current) {
+        return
+      }
+      
+      // For now, use the provided URL as canonical until API returns canonical URL
+      // TODO: Update when backend returns canonical spreadsheet URL in response
+      setState((s) => ({ 
+        ...s, 
+        spreadsheetStatus: "Configured", 
+        spreadsheetUrl: url 
+      }))
+    } catch (error) {
+      console.error('Failed to save spreadsheet configuration:', error)
+      // Let the component handle the error display
+      throw error
+    }
   }
 
   const changeSpreadsheet = () => {
@@ -283,6 +307,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     triggerManualSync,
     setGoogleStatus,
   }
+
+  // Cleanup effect to mark component as unmounted
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false
+    }
+  }, [])
 
   return <AppStateContext.Provider value={{ state, actions }}>{children}</AppStateContext.Provider>
 }
