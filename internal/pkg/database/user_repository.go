@@ -14,6 +14,20 @@ type UserRepository struct {
 	encryptor *auth.EncryptionService
 }
 
+// ProcessingTokens contains all decrypted tokens and configuration needed for automation processing
+type ProcessingTokens struct {
+	GoogleAccessToken  string
+	GoogleRefreshToken string
+	GoogleTokenExpiry  *time.Time
+	StravaAccessToken  string
+	StravaRefreshToken string
+	StravaTokenExpiry  *time.Time
+	StravaAthleteID    *int64
+	SpreadsheetID      *string
+	Timezone           string
+	Email              string
+}
+
 // NewUserRepository creates a new user repository
 func NewUserRepository(db *sql.DB, encryptor *auth.EncryptionService) *UserRepository {
 	return &UserRepository{
@@ -400,56 +414,69 @@ func (r *UserRepository) ClearSpreadsheetID(ctx context.Context, userID int) err
 // GetProcessingConfigForUser retrieves all necessary data for automation processing for a specific user
 // This method is optimized for the automation engine and fetches all required fields in a single query.
 // It returns decrypted tokens ready for use by API clients.
-func (r *UserRepository) GetProcessingConfigForUser(ctx context.Context, userID int) (accessToken, refreshToken string, expiry *time.Time, stravaAccessToken, stravaRefreshToken string, stravaExpiry *time.Time, athleteID *int64, spreadsheetID *string, timezone, email string, err error) {
+func (r *UserRepository) GetProcessingConfigForUser(ctx context.Context, userID int) (*ProcessingTokens, error) {
 	query := `
 		SELECT google_access_token, google_refresh_token, google_token_expiry,
 			   strava_access_token, strava_refresh_token, strava_token_expiry, strava_athlete_id,
-			   spreadsheet_id, timezone, email
+			   spreadsheet_id, COALESCE(timezone, ''), COALESCE(email, '')
 		FROM users WHERE id = $1
 	`
 
 	var encryptedGoogleAccessToken, encryptedGoogleRefreshToken []byte
 	var encryptedStravaAccessToken, encryptedStravaRefreshToken []byte
+	var googleExpiry, stravaExpiry *time.Time
+	var athleteID *int64
+	var spreadsheetID *string
+	var timezone, email string
 
-	err = r.db.QueryRowContext(ctx, query, userID).Scan(
-		&encryptedGoogleAccessToken, &encryptedGoogleRefreshToken, &expiry,
+	err := r.db.QueryRowContext(ctx, query, userID).Scan(
+		&encryptedGoogleAccessToken, &encryptedGoogleRefreshToken, &googleExpiry,
 		&encryptedStravaAccessToken, &encryptedStravaRefreshToken, &stravaExpiry, &athleteID,
 		&spreadsheetID, &timezone, &email,
 	)
 
 	if err != nil {
-		return "", "", nil, "", "", nil, nil, nil, "", "", err
+		return nil, err
+	}
+
+	result := &ProcessingTokens{
+		GoogleTokenExpiry: googleExpiry,
+		StravaTokenExpiry: stravaExpiry,
+		StravaAthleteID:   athleteID,
+		SpreadsheetID:     spreadsheetID,
+		Timezone:          timezone,
+		Email:             email,
 	}
 
 	// Decrypt Google tokens
 	if len(encryptedGoogleAccessToken) > 0 {
-		accessToken, err = r.encryptor.Decrypt(encryptedGoogleAccessToken)
+		result.GoogleAccessToken, err = r.encryptor.Decrypt(encryptedGoogleAccessToken)
 		if err != nil {
-			return "", "", nil, "", "", nil, nil, nil, "", "", err
+			return nil, err
 		}
 	}
 
 	if len(encryptedGoogleRefreshToken) > 0 {
-		refreshToken, err = r.encryptor.Decrypt(encryptedGoogleRefreshToken)
+		result.GoogleRefreshToken, err = r.encryptor.Decrypt(encryptedGoogleRefreshToken)
 		if err != nil {
-			return "", "", nil, "", "", nil, nil, nil, "", "", err
+			return nil, err
 		}
 	}
 
 	// Decrypt Strava tokens
 	if len(encryptedStravaAccessToken) > 0 {
-		stravaAccessToken, err = r.encryptor.Decrypt(encryptedStravaAccessToken)
+		result.StravaAccessToken, err = r.encryptor.Decrypt(encryptedStravaAccessToken)
 		if err != nil {
-			return "", "", nil, "", "", nil, nil, nil, "", "", err
+			return nil, err
 		}
 	}
 
 	if len(encryptedStravaRefreshToken) > 0 {
-		stravaRefreshToken, err = r.encryptor.Decrypt(encryptedStravaRefreshToken)
+		result.StravaRefreshToken, err = r.encryptor.Decrypt(encryptedStravaRefreshToken)
 		if err != nil {
-			return "", "", nil, "", "", nil, nil, nil, "", "", err
+			return nil, err
 		}
 	}
 
-	return accessToken, refreshToken, expiry, stravaAccessToken, stravaRefreshToken, stravaExpiry, athleteID, spreadsheetID, timezone, email, nil
+	return result, nil
 }
