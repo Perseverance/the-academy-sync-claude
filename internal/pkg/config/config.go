@@ -14,6 +14,11 @@ import (
 	"github.com/joho/godotenv"
 )
 
+const (
+	// MaxAllowedWorkers defines the upper limit for concurrent workers to prevent resource exhaustion
+	MaxAllowedWorkers = 100 // Based on typical server capacity and goroutine overhead
+)
+
 // Config represents the application configuration with all required settings.
 type Config struct {
 	// Environment settings
@@ -445,6 +450,14 @@ func (c *Config) validate() error {
 		}
 	}
 
+	// Validate MaxWorkers is within reasonable bounds
+	if c.MaxWorkers < 1 {
+		errors = append(errors, "MAX_WORKERS must be at least 1")
+	}
+	if c.MaxWorkers > MaxAllowedWorkers {
+		errors = append(errors, fmt.Sprintf("MAX_WORKERS must not exceed %d to prevent resource exhaustion", MaxAllowedWorkers))
+	}
+
 	if len(errors) > 0 {
 		return fmt.Errorf("validation errors: %s", strings.Join(errors, ", "))
 	}
@@ -478,6 +491,9 @@ func getMaxWorkers() int {
 	workers := getEnvInt("MAX_WORKERS", 20)
 	if workers < 1 {
 		workers = 1 // Ensure at least 1 worker
+	}
+	if workers > MaxAllowedWorkers {
+		workers = MaxAllowedWorkers // Cap at maximum allowed to prevent resource exhaustion
 	}
 	return workers
 }

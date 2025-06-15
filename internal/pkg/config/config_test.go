@@ -142,6 +142,7 @@ func TestValidateConfig(t *testing.T) {
 			config: Config{
 				Environment: "local",
 				Port:        "8080",
+				MaxWorkers:  20,
 			},
 			expectError: false,
 		},
@@ -152,6 +153,8 @@ func TestValidateConfig(t *testing.T) {
 				Port:        "8080",
 				JWTSecret:   "secret",
 				EncryptionSecret: "this-is-a-32-character-encryption-secret-key",
+				BaseURL:     "https://example.com",
+				MaxWorkers:  20,
 			},
 			expectError: false,
 		},
@@ -208,6 +211,26 @@ func TestValidateConfig(t *testing.T) {
 			},
 			expectError: true,
 			errorMsg:    "port must be a valid number",
+		},
+		{
+			name: "max workers too low",
+			config: Config{
+				Environment: "local",
+				Port:        "8080",
+				MaxWorkers:  0,
+			},
+			expectError: true,
+			errorMsg:    "MAX_WORKERS must be at least 1",
+		},
+		{
+			name: "max workers too high",
+			config: Config{
+				Environment: "local",
+				Port:        "8080",
+				MaxWorkers:  150,
+			},
+			expectError: true,
+			errorMsg:    "MAX_WORKERS must not exceed 100",
 		},
 	}
 

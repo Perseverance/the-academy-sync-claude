@@ -184,7 +184,7 @@ export class SyncService {
    */
   static async isManualSyncAvailable() {
     try {
-      await this.getQueueStatus();
+      await SyncService.getQueueStatus();
       return true;
     } catch (error) {
       // If queue status fails, manual sync is probably not available

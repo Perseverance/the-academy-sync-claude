@@ -240,7 +240,11 @@ func main() {
 		}
 		
 		w.WriteHeader(statusCode)
-		json.NewEncoder(w).Encode(health)
+		if err := json.NewEncoder(w).Encode(health); err != nil {
+			log.Error("Failed to encode health response", "error", err)
+			// At this point, we've already written the status code, so we can't change it
+			// But we should log the error for debugging
+		}
 	})
 
 	// Authentication routes (public)

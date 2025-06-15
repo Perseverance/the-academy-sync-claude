@@ -228,7 +228,7 @@ func (s *ConfigService) ValidateUserCanBeProcessed(ctx context.Context, userID i
 	if user == nil {
 		s.logger.Warn("User not found for validation",
 			"user_id", userID)
-		return fmt.Errorf("user not found: %d", userID)
+		return fmt.Errorf("%w: %d", ErrUserNotFound, userID)
 	}
 
 	// Check essential fields without decryption
@@ -270,7 +270,7 @@ func (s *ConfigService) ValidateUserCanBeProcessed(ctx context.Context, userID i
 		s.logger.Warn("User missing essential configuration for processing",
 			"user_id", userID,
 			"missing_fields", missingFields)
-		return fmt.Errorf("user missing essential configuration: %v", missingFields)
+		return fmt.Errorf("%w: missing fields %v", ErrUserNotConfigured, missingFields)
 	}
 
 	s.logger.Debug("User passed quick processing validation",
