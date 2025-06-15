@@ -20,6 +20,7 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/services"
 )
 
 // performStartupHealthChecks validates critical dependencies and fails fast if any are unavailable
@@ -122,6 +123,10 @@ func main() {
 	userRepository := database.NewUserRepository(db, encryptionService)
 	sessionRepository := database.NewSessionRepository(db)
 
+	// Initialize services
+	sheetsService := services.NewSheetsService(userRepository, log.WithContext("component", "sheets_service"))
+	configService := services.NewConfigService(userRepository, sheetsService, log.WithContext("component", "config_service"))
+
 	// Initialize middleware
 	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository, oauthService, userRepository, log.WithContext("component", "auth_middleware"))
 
@@ -145,6 +150,11 @@ func main() {
 		cfg.FrontendURL,
 		isDevelopment,
 		log.WithContext("component", "strava_handler"),
+	)
+
+	configHandler := handlers.NewConfigHandler(
+		configService,
+		log.WithContext("component", "config_handler"),
 	)
 
 	// Create router
@@ -199,6 +209,12 @@ func main() {
 		// User routes
 		r.Route("/users", func(r chi.Router) {
 			r.Get("/me", authHandler.GetCurrentUser) // Duplicate for convenience
+		})
+
+		// Configuration routes
+		r.Route("/config", func(r chi.Router) {
+			r.Post("/spreadsheet", configHandler.SetSpreadsheet)      // Set spreadsheet URL
+			r.Delete("/spreadsheet", configHandler.ClearSpreadsheet)  // Clear spreadsheet configuration
 		})
 
 		// Future protected endpoints will go here
