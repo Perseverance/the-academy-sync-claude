@@ -204,15 +204,43 @@ func (r *UserRepository) UpdateUserTokens(ctx context.Context, req *UpdateUserTo
 		}
 	}
 
-	_, err = r.db.ExecContext(ctx, query, args...)
-	return err
+	result, err := r.db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return err
+	}
+	
+	// Check that exactly one row was affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows // No user found with the given ID
+	}
+	
+	return nil
 }
 
 // UpdateLastLoginAt updates the user's last login timestamp
 func (r *UserRepository) UpdateLastLoginAt(ctx context.Context, userID int) error {
 	query := `UPDATE users SET last_login_at = $1, updated_at = $2 WHERE id = $3`
-	_, err := r.db.ExecContext(ctx, query, time.Now(), time.Now(), userID)
-	return err
+	result, err := r.db.ExecContext(ctx, query, time.Now(), time.Now(), userID)
+	if err != nil {
+		return err
+	}
+	
+	// Check that exactly one row was affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows // No user found with the given ID
+	}
+	
+	return nil
 }
 
 // GetDecryptedGoogleTokens retrieves and decrypts a user's Google OAuth tokens
