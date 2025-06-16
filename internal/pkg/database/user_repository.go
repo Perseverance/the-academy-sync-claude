@@ -298,6 +298,7 @@ func (r *UserRepository) DecryptToken(encryptedToken []byte) (string, error) {
 }
 
 // UpdateStravaConnection updates the user's Strava connection with encrypted tokens and profile information
+// It also enables automation if the user already has a spreadsheet configured
 func (r *UserRepository) UpdateStravaConnection(ctx context.Context, userID int, accessToken, refreshToken string, expiry *time.Time, athleteID int64, athleteName, profilePictureURL string) error {
 	// Encrypt Strava tokens
 	encryptedAccessToken, err := r.encryptor.Encrypt(accessToken)
@@ -310,20 +311,60 @@ func (r *UserRepository) UpdateStravaConnection(ctx context.Context, userID int,
 		return err
 	}
 
-	query := `
-		UPDATE users 
-		SET strava_access_token = $1, 
-		    strava_refresh_token = $2, 
-		    strava_token_expiry = $3, 
-		    strava_athlete_id = $4, 
-		    strava_athlete_name = $5,
-		    strava_profile_picture_url = $6,
-		    updated_at = $7 
-		WHERE id = $8
+	// First, check if user has spreadsheet configured
+	var hasSpreadsheet bool
+	checkQuery := `
+		SELECT 
+			CASE 
+				WHEN spreadsheet_id IS NOT NULL AND spreadsheet_id != '' 
+				THEN true 
+				ELSE false 
+			END as has_spreadsheet
+		FROM users 
+		WHERE id = $1
 	`
+	
+	err = r.db.QueryRowContext(ctx, checkQuery, userID).Scan(&hasSpreadsheet)
+	if err != nil {
+		return err
+	}
 
+	// Update Strava connection and potentially enable automation
+	var query string
+	var args []interface{}
 	now := time.Now()
-	_, err = r.db.ExecContext(ctx, query, 
+	
+	if hasSpreadsheet {
+		// User has all requirements: Google auth (implicit), Strava connection, and Spreadsheet
+		// Enable automation automatically
+		query = `
+			UPDATE users 
+			SET strava_access_token = $1, 
+			    strava_refresh_token = $2, 
+			    strava_token_expiry = $3, 
+			    strava_athlete_id = $4, 
+			    strava_athlete_name = $5,
+			    strava_profile_picture_url = $6,
+			    automation_enabled = true,
+			    updated_at = $7 
+			WHERE id = $8
+		`
+	} else {
+		// Just update Strava connection
+		query = `
+			UPDATE users 
+			SET strava_access_token = $1, 
+			    strava_refresh_token = $2, 
+			    strava_token_expiry = $3, 
+			    strava_athlete_id = $4, 
+			    strava_athlete_name = $5,
+			    strava_profile_picture_url = $6,
+			    updated_at = $7 
+			WHERE id = $8
+		`
+	}
+
+	args = []interface{}{
 		encryptedAccessToken, 
 		encryptedRefreshToken, 
 		expiry, 
@@ -331,12 +372,16 @@ func (r *UserRepository) UpdateStravaConnection(ctx context.Context, userID int,
 		athleteName,
 		profilePictureURL,
 		now, 
-		userID)
+		userID,
+	}
+
+	_, err = r.db.ExecContext(ctx, query, args...)
 	
 	return err
 }
 
 // RemoveStravaConnection removes the user's Strava connection by clearing tokens and athlete ID
+// It also disables automation since Strava connection is required
 func (r *UserRepository) RemoveStravaConnection(ctx context.Context, userID int) error {
 	query := `
 		UPDATE users 
@@ -346,6 +391,7 @@ func (r *UserRepository) RemoveStravaConnection(ctx context.Context, userID int)
 		    strava_athlete_id = NULL, 
 		    strava_athlete_name = NULL,
 		    strava_profile_picture_url = NULL,
+		    automation_enabled = false,
 		    updated_at = $1 
 		WHERE id = $2
 	`
@@ -387,16 +433,53 @@ func (r *UserRepository) GetDecryptedStravaTokens(ctx context.Context, userID in
 	return accessToken, refreshToken, expiry, athleteID, nil
 }
 
-// UpdateSpreadsheetID updates the user's Google Spreadsheet ID
+// UpdateSpreadsheetID updates the user's Google Spreadsheet ID and enables automation if all requirements are met
 func (r *UserRepository) UpdateSpreadsheetID(ctx context.Context, userID int, spreadsheetID string) error {
-	query := `
-		UPDATE users 
-		SET spreadsheet_id = $1, updated_at = $2 
-		WHERE id = $3
+	// First, check if user has Strava connection
+	var hasStravaConnection bool
+	checkQuery := `
+		SELECT 
+			CASE 
+				WHEN strava_refresh_token IS NOT NULL AND LENGTH(strava_refresh_token) > 0 
+				THEN true 
+				ELSE false 
+			END as has_strava
+		FROM users 
+		WHERE id = $1
 	`
+	
+	err := r.db.QueryRowContext(ctx, checkQuery, userID).Scan(&hasStravaConnection)
+	if err != nil {
+		return err
+	}
 
+	// Update spreadsheet ID and potentially enable automation
+	var query string
+	var args []interface{}
 	now := time.Now()
-	result, err := r.db.ExecContext(ctx, query, spreadsheetID, now, userID)
+	
+	if hasStravaConnection && spreadsheetID != "" {
+		// User has all requirements: Google auth (implicit), Strava connection, and Spreadsheet
+		// Enable automation automatically
+		query = `
+			UPDATE users 
+			SET spreadsheet_id = $1, 
+			    automation_enabled = true,
+			    updated_at = $2 
+			WHERE id = $3
+		`
+		args = []interface{}{spreadsheetID, now, userID}
+	} else {
+		// Just update spreadsheet ID
+		query = `
+			UPDATE users 
+			SET spreadsheet_id = $1, updated_at = $2 
+			WHERE id = $3
+		`
+		args = []interface{}{spreadsheetID, now, userID}
+	}
+
+	result, err := r.db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return err
 	}

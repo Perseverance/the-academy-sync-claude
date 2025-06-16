@@ -135,6 +135,24 @@ func TestTriggerManualSync(t *testing.T) {
 		assert.Contains(t, response["error"], "Spreadsheet configuration required")
 	})
 
+	t.Run("sync already in progress", func(t *testing.T) {
+		handler, mockService := setupSyncHandlerTest()
+		mockService.triggerError = services.ErrSyncAlreadyInProgress
+
+		req := httptest.NewRequest("POST", "/api/sync", nil)
+		req = addUserToContext(req, 123, "test@example.com")
+		rr := httptest.NewRecorder()
+
+		handler.TriggerManualSync(rr, req)
+
+		assert.Equal(t, http.StatusConflict, rr.Code)
+
+		var response map[string]interface{}
+		err := json.NewDecoder(rr.Body).Decode(&response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "sync is already in progress")
+	})
+
 	t.Run("redis connection error", func(t *testing.T) {
 		handler, mockService := setupSyncHandlerTest()
 		// Simulate a Redis connection error

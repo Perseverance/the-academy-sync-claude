@@ -205,7 +205,7 @@ func startWorkerPool(queueClient *queue.Client, worker *processing.Worker, maxWo
 		wg.Add(1)
 		go func(workerID int) {
 			defer wg.Done()
-			runWorker(ctx, workerID, jobs, worker, log)
+			runWorker(ctx, workerID, jobs, queueClient, worker, log)
 		}(i + 1)
 	}
 
@@ -228,7 +228,7 @@ func startWorkerPool(queueClient *queue.Client, worker *processing.Worker, maxWo
 }
 
 // runWorker processes jobs from the jobs channel
-func runWorker(ctx context.Context, workerID int, jobs <-chan *queue.Job, worker *processing.Worker, log *logger.Logger) {
+func runWorker(ctx context.Context, workerID int, jobs <-chan *queue.Job, queueClient *queue.Client, worker *processing.Worker, log *logger.Logger) {
 	workerLog := log.WithContext("worker_id", workerID)
 	workerLog.Info("Worker started")
 
@@ -243,13 +243,13 @@ func runWorker(ctx context.Context, workerID int, jobs <-chan *queue.Job, worker
 				return
 			}
 
-			processJob(ctx, workerID, job, worker, workerLog)
+			processJob(ctx, workerID, job, queueClient, worker, workerLog)
 		}
 	}
 }
 
 // processJob processes a single job
-func processJob(ctx context.Context, workerID int, job *queue.Job, worker *processing.Worker, log *logger.Logger) {
+func processJob(ctx context.Context, workerID int, job *queue.Job, queueClient *queue.Client, worker *processing.Worker, log *logger.Logger) {
 	startTime := time.Now()
 	
 	log.Info("Processing job",
@@ -258,6 +258,20 @@ func processJob(ctx context.Context, workerID int, job *queue.Job, worker *proce
 		"user_id", job.UserID,
 		"trace_id", job.TraceID,
 		"age_seconds", time.Since(job.CreatedAt).Seconds())
+
+	// Ensure we release the processing lock when done
+	defer func() {
+		if err := queueClient.ReleaseUserProcessingLock(ctx, job.UserID); err != nil {
+			log.Error("Failed to release user processing lock",
+				"error", err,
+				"user_id", job.UserID,
+				"job_id", job.ID)
+		} else {
+			log.Debug("Released user processing lock",
+				"user_id", job.UserID,
+				"job_id", job.ID)
+		}
+	}()
 
 	// Create context with timeout for job processing
 	jobCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)

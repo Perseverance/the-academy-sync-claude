@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
@@ -20,6 +21,9 @@ var (
 	
 	// ErrSpreadsheetRequired is returned when manual sync is attempted without spreadsheet configuration
 	ErrSpreadsheetRequired = errors.New("spreadsheet configuration required for manual sync")
+	
+	// ErrSyncAlreadyInProgress is returned when a sync is already processing for the user
+	ErrSyncAlreadyInProgress = errors.New("sync already in progress for this user")
 )
 
 // UserRepository interface for testability
@@ -87,7 +91,24 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) error {
 		return ErrSpreadsheetRequired
 	}
 
-	// Step 4: Create job data
+	// Step 4: Check if user is already being processed
+	// Try to acquire a processing lock with 10-minute TTL
+	lockAcquired, err := s.queueClient.AcquireUserProcessingLock(ctx, userID, 10*time.Minute)
+	if err != nil {
+		s.logger.Error("Failed to check processing lock",
+			"error", err,
+			"user_id", userID)
+		return fmt.Errorf("failed to check processing status: %w", err)
+	}
+
+	if !lockAcquired {
+		s.logger.Warn("Manual sync attempted while sync already in progress",
+			"user_id", userID,
+			"email", user.Email)
+		return ErrSyncAlreadyInProgress
+	}
+
+	// Step 5: Create job data
 	jobData := map[string]interface{}{
 		"trigger_type": "manual",
 		"email":        user.Email,
@@ -98,9 +119,16 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) error {
 		"user_id", userID,
 		"spreadsheet_id", *user.SpreadsheetID)
 
-	// Step 5: Enqueue the job
+	// Step 6: Enqueue the job
 	job, err := s.queueClient.EnqueueJob(ctx, queue.JobTypeManualSync, userID, jobData)
 	if err != nil {
+		// Release the lock if enqueue fails
+		if releaseErr := s.queueClient.ReleaseUserProcessingLock(ctx, userID); releaseErr != nil {
+			s.logger.Error("Failed to release processing lock after enqueue failure",
+				"error", releaseErr,
+				"user_id", userID)
+		}
+		
 		s.logger.Error("Failed to enqueue manual sync job",
 			"error", err,
 			"user_id", userID)
