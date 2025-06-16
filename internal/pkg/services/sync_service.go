@@ -2,11 +2,24 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
+)
+
+// Sentinel errors for sync service
+var (
+	// ErrUserNotFound is returned when the user does not exist
+	ErrUserNotFound = errors.New("user not found")
+	
+	// ErrStravaConnectionRequired is returned when manual sync is attempted without Strava connection
+	ErrStravaConnectionRequired = errors.New("strava connection required for manual sync")
+	
+	// ErrSpreadsheetRequired is returned when manual sync is attempted without spreadsheet configuration
+	ErrSpreadsheetRequired = errors.New("spreadsheet configuration required for manual sync")
 )
 
 // UserRepository interface for testability
@@ -47,7 +60,7 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) error {
 	if user == nil {
 		s.logger.Warn("User not found for manual sync",
 			"user_id", userID)
-		return fmt.Errorf("user not found")
+		return ErrUserNotFound
 	}
 
 	s.logger.Debug("User fetched for sync validation",
@@ -62,7 +75,7 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) error {
 		s.logger.Warn("Manual sync attempted without Strava connection",
 			"user_id", userID,
 			"email", user.Email)
-		return fmt.Errorf("strava connection required for manual sync")
+		return ErrStravaConnectionRequired
 	}
 
 	// Step 3: Validate user has configured spreadsheet
@@ -71,7 +84,7 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) error {
 			"user_id", userID,
 			"email", user.Email,
 			"has_strava", true)
-		return fmt.Errorf("spreadsheet configuration required for manual sync")
+		return ErrSpreadsheetRequired
 	}
 
 	// Step 4: Create job data

@@ -13,6 +13,7 @@ import (
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/middleware"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/services"
 )
 
 type mockSyncService struct {
@@ -82,7 +83,7 @@ func TestTriggerManualSync(t *testing.T) {
 
 	t.Run("user not found", func(t *testing.T) {
 		handler, mockService := setupSyncHandlerTest()
-		mockService.triggerError = fmt.Errorf("user not found")
+		mockService.triggerError = services.ErrUserNotFound
 
 		req := httptest.NewRequest("POST", "/api/sync", nil)
 		req = addUserToContext(req, 999, "test@example.com")
@@ -100,7 +101,7 @@ func TestTriggerManualSync(t *testing.T) {
 
 	t.Run("strava connection required", func(t *testing.T) {
 		handler, mockService := setupSyncHandlerTest()
-		mockService.triggerError = fmt.Errorf("strava connection required for manual sync")
+		mockService.triggerError = services.ErrStravaConnectionRequired
 
 		req := httptest.NewRequest("POST", "/api/sync", nil)
 		req = addUserToContext(req, 123, "test@example.com")
@@ -118,7 +119,7 @@ func TestTriggerManualSync(t *testing.T) {
 
 	t.Run("spreadsheet configuration required", func(t *testing.T) {
 		handler, mockService := setupSyncHandlerTest()
-		mockService.triggerError = fmt.Errorf("spreadsheet configuration required for manual sync")
+		mockService.triggerError = services.ErrSpreadsheetRequired
 
 		req := httptest.NewRequest("POST", "/api/sync", nil)
 		req = addUserToContext(req, 123, "test@example.com")

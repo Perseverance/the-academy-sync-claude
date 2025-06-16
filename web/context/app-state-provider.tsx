@@ -276,12 +276,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         description: "Manual sync has been triggered successfully and is now processing.",
       })
       
-      // Keep the status as "Processing" - it will be updated when sync completes
-      // The actual completion will be logged when the backend processing finishes
-      setState((s) => ({
-        ...s,
-        manualSyncStatus: "Ready" // Reset to Ready state for UI, but no log entry yet
-      }))
+      // Keep the status as "Processing" until the sync job completes
+      // This prevents duplicate sync requests while the job is running
+      // TODO: Implement webhook or polling to update status when job completes
     } catch (error) {
       console.error('Manual sync failed to start:', error)
       
