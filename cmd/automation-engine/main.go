@@ -182,6 +182,14 @@ func main() {
 			os.Exit(1)
 		}
 		
+		if cfg.MaxWorkers > 1000 {
+			log.Critical("Invalid MAX_WORKERS configuration",
+				"configured_value", cfg.MaxWorkers,
+				"maximum_allowed", 1000,
+				"error", "MAX_WORKERS must not exceed 1000 to prevent resource exhaustion")
+			os.Exit(1)
+		}
+		
 		// Start worker pool
 		startWorkerPool(queueClient, worker, cfg.MaxWorkers, log)
 	} else {
@@ -270,7 +278,11 @@ func processJob(ctx context.Context, workerID int, job *queue.Job, queueClient *
 
 	// Ensure we release the processing lock when done
 	defer func() {
-		if err := queueClient.ReleaseUserProcessingLock(ctx, job.UserID); err != nil {
+		// Use a fresh context with timeout for lock release to ensure it's not affected by cancellation
+		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer releaseCancel()
+		
+		if err := queueClient.ReleaseUserProcessingLock(releaseCtx, job.UserID); err != nil {
 			log.Error("Failed to release user processing lock",
 				"error", err,
 				"user_id", job.UserID,
