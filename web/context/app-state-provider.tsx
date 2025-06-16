@@ -287,27 +287,26 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Manual sync failed to start:', error)
       
-      let errorMessage = 'Unknown error occurred'
+      let errorMessage = 'Failed to trigger sync. Please try again.'
       if (error instanceof SyncError) {
         errorMessage = error.message
       } else if (error instanceof Error) {
         errorMessage = error.message
       }
       
+      // Show error toast
+      // TODO: Create a general error toast utility function to standardize error display
+      toast({
+        title: "Sync Failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      
       // Only update state if component is still mounted
       if (isMountedRef.current) {
-        // Only log immediate failures (API call failures, not processing failures)
-        const newLog: LogEntry = {
-          id: String(Date.now()),
-          date: new Date().toISOString(),
-          status: "Failure",
-          summary: `Failed to start manual sync: ${errorMessage}`,
-        }
-        
         setState((s) => ({
           ...s,
           manualSyncStatus: "Ready",
-          activityLogs: [newLog, ...s.activityLogs.slice(0, 19)], // Keep last 20 logs
         }))
       }
     }
