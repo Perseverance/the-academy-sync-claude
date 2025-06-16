@@ -7,6 +7,8 @@ import type { LogEntry } from "@/components/activity-log" // Assuming LogEntry t
 import { authService, type User } from "@/services/auth"
 import { stravaService } from "@/services/strava"
 import { configService } from "@/services/config"
+import { syncService, SyncError } from "@/services/SyncService"
+import { useToast } from "@/hooks/use-toast"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
 export type SpreadsheetConfigStatus = "Configured" | "NotConfigured" | "Disabled"
@@ -66,6 +68,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const isMountedRef = useRef(true)
+  const { toast } = useToast()
 
   const [state, setState] = useState<AppState>({
     user: null,
@@ -257,22 +260,52 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   const triggerManualSync = async () => {
     setState((s) => ({ ...s, manualSyncStatus: "Processing" }))
-    await new Promise((resolve) => setTimeout(resolve, 3000)) // Simulate sync
-    // Add a new log entry
-    const newLog: LogEntry = {
-      id: String(Date.now()),
-      date: new Date().toISOString(),
-      status: Math.random() > 0.3 ? "Success" : "Failure",
-      summary:
-        Math.random() > 0.3
-          ? "Manual sync completed: 2 new activities."
-          : "Manual sync failed: Could not reach Google Sheets.",
+    
+    try {
+      // Call the actual sync API
+      const response = await syncService.triggerManualSync()
+      
+      console.log('Manual sync triggered successfully:', {
+        status: response.status,
+        message: response.message
+      })
+      
+      // Show success toast notification
+      toast({
+        title: "Sync Started",
+        description: "Manual sync has been triggered successfully and is now processing.",
+      })
+      
+      // Keep the status as "Processing" - it will be updated when sync completes
+      // The actual completion will be logged when the backend processing finishes
+      setState((s) => ({
+        ...s,
+        manualSyncStatus: "Ready" // Reset to Ready state for UI, but no log entry yet
+      }))
+    } catch (error) {
+      console.error('Manual sync failed to start:', error)
+      
+      let errorMessage = 'Unknown error occurred'
+      if (error instanceof SyncError) {
+        errorMessage = error.message
+      } else if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      
+      // Only log immediate failures (API call failures, not processing failures)
+      const newLog: LogEntry = {
+        id: String(Date.now()),
+        date: new Date().toISOString(),
+        status: "Failure",
+        summary: `Failed to start manual sync: ${errorMessage}`,
+      }
+      
+      setState((s) => ({
+        ...s,
+        manualSyncStatus: "Ready",
+        activityLogs: [newLog, ...s.activityLogs.slice(0, 19)], // Keep last 20 logs
+      }))
     }
-    setState((s) => ({
-      ...s,
-      manualSyncStatus: "Ready",
-      activityLogs: [newLog, ...s.activityLogs.slice(0, 19)], // Keep last 20 logs
-    }))
   }
 
   const setGoogleStatus = (status: ServiceStatus) => {

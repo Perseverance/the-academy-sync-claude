@@ -60,6 +60,9 @@ type Config struct {
 
 	// Fail-fast configuration
 	FailFastEnabled bool `json:"fail_fast_enabled"`
+
+	// Worker pool configuration
+	MaxWorkers int `json:"max_workers"`
 }
 
 // Load loads configuration based on the environment.
@@ -67,13 +70,26 @@ type Config struct {
 // In production environments, it loads from Google Secret Manager.
 func Load() (*Config, error) {
 	env := getEnv("APP_ENV", getEnv("GO_ENV", "local"))
+	
+	// Debug logging to help identify environment detection issues
+	fmt.Printf("Debug: Environment detection - APP_ENV='%s', GO_ENV='%s', detected='%s'\n", 
+		os.Getenv("APP_ENV"), os.Getenv("GO_ENV"), env)
+	fmt.Printf("Debug: All environment variables that could affect this:\n")
+	fmt.Printf("  - APP_ENV: '%s'\n", os.Getenv("APP_ENV"))
+	fmt.Printf("  - GO_ENV: '%s'\n", os.Getenv("GO_ENV"))
+	fmt.Printf("  - NODE_ENV: '%s'\n", os.Getenv("NODE_ENV"))
+	fmt.Printf("  - ENVIRONMENT: '%s'\n", os.Getenv("ENVIRONMENT"))
+	fmt.Printf("  - SERVICE_NAME: '%s'\n", os.Getenv("SERVICE_NAME"))
 
 	switch env {
 	case "local", "development", "dev":
+		fmt.Printf("Debug: Loading configuration from environment variables (local/dev mode)\n")
 		return loadFromEnv()
 	case "production", "prod", "staging":
+		fmt.Printf("Debug: Loading configuration from Google Secret Manager (production mode)\n")
 		return loadFromSecretManager()
 	default:
+		fmt.Printf("Debug: Unknown environment '%s', defaulting to local configuration\n", env)
 		return loadFromEnv() // Default to local for unknown environments
 	}
 }
@@ -127,6 +143,9 @@ func loadFromEnv() (*Config, error) {
 
 		// Fail-fast
 		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
+
+		// Worker pool
+		MaxWorkers: getEnvInt("MAX_WORKERS", 20),
 	}
 
 	// Build database URL if not provided
@@ -166,16 +185,16 @@ func loadFromSecretManager() (*Config, error) {
 	
 	projectID := getEnv("GCP_PROJECT_ID", "")
 	if projectID == "" {
+		fmt.Printf("Error: GCP_PROJECT_ID is required for production environments with Secret Manager\n")
 		return nil, fmt.Errorf("GCP_PROJECT_ID environment variable is required for Secret Manager")
 	}
 
 	// Try to create Secret Manager client
 	client, err := secretmanager.NewClient(ctx)
 	if err != nil {
-		// If Secret Manager is not available, fall back to environment variables
-		// This allows graceful degradation in environments without Secret Manager access
-		fmt.Printf("Warning: Could not create Secret Manager client (%v), falling back to environment variables\n", err)
-		return loadFromEnvForProduction()
+		// In production, Secret Manager should be available - fail fast if not accessible
+		fmt.Printf("Error: Could not create Secret Manager client in production environment: %v\n", err)
+		return nil, fmt.Errorf("failed to create Secret Manager client: %w", err)
 	}
 	defer client.Close()
 
@@ -249,6 +268,9 @@ func loadFromSecretManager() (*Config, error) {
 
 		// Fail-fast
 		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
+
+		// Worker pool
+		MaxWorkers: getEnvInt("MAX_WORKERS", 20),
 	}
 
 	// Build database URL if not provided from secrets
@@ -349,6 +371,9 @@ func loadFromEnvForProduction() (*Config, error) {
 
 		// Fail-fast
 		FailFastEnabled: getEnvBool("FAIL_FAST_ENABLED", false),
+
+		// Worker pool
+		MaxWorkers: getEnvInt("MAX_WORKERS", 20),
 	}
 
 	// Build database URL if not provided
@@ -457,6 +482,22 @@ func getEnvBool(key string, defaultValue bool) bool {
 		case "false", "0", "no", "off":
 			return false
 		}
+	}
+	return defaultValue
+}
+
+// getEnvInt returns an integer value from environment variable or default value
+func getEnvInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			// Validate range for worker pool size
+			if key == "MAX_WORKERS" && (intValue < 1 || intValue > 1000) {
+				fmt.Printf("WARNING: MAX_WORKERS value %d is out of valid range (1-1000), using default %d\n", intValue, defaultValue)
+				return defaultValue
+			}
+			return intValue
+		}
+		fmt.Printf("WARNING: Invalid integer value for %s: %s, using default %d\n", key, value, defaultValue)
 	}
 	return defaultValue
 }

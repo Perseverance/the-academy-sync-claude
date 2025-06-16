@@ -14,7 +14,7 @@ export function ManualSyncCard({ status, onSync }: ManualSyncCardProps) {
   const isDisabled = status === "Disabled"
   const isProcessing = status === "Processing"
 
-  const buttonText = isProcessing ? "Syncing..." : "Manual Sync Now"
+  const buttonText = isProcessing ? "Syncing..." : "Sync Now"
   const ButtonIcon = isProcessing ? Loader2 : RefreshCw
 
   const disabledTooltipText = "Complete Strava connection and Spreadsheet configuration to enable manual sync."
