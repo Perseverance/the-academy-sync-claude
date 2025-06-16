@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/middleware"
@@ -63,12 +64,12 @@ func (h *SyncHandler) TriggerManualSync(w http.ResponseWriter, r *http.Request) 
 			"client_ip", clientIP)
 
 		// Determine appropriate error response
-		switch err.Error() {
-		case "user not found":
+		switch {
+		case errors.Is(err, services.ErrUserNotFound):
 			h.sendJSONError(w, "User not found", http.StatusNotFound)
-		case "strava connection required for manual sync":
+		case errors.Is(err, services.ErrStravaConnectionRequired):
 			h.sendJSONError(w, "Strava connection required. Please connect your Strava account first.", http.StatusBadRequest)
-		case "spreadsheet configuration required for manual sync":
+		case errors.Is(err, services.ErrSpreadsheetRequired):
 			h.sendJSONError(w, "Spreadsheet configuration required. Please configure your Google Spreadsheet first.", http.StatusBadRequest)
 		default:
 			// Check if it's a connection error

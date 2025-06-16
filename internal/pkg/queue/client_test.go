@@ -226,7 +226,7 @@ func TestIsConnectionError(t *testing.T) {
 			expected: false,
 		},
 		{
-			name:     "connection refused error",
+			name:     "redis nil error (key not found)",
 			err:      redis.Nil,
 			expected: false,
 		},

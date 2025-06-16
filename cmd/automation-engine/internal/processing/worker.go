@@ -320,6 +320,8 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 	// 3. Fetch activities since the specified date
 	// 4. Apply proper rate limiting and error handling
 	
+	// TODO: Remove this sleep when actual Strava API integration is implemented
+	// This artificial delay simulates API call time but throttles production throughput
 	time.Sleep(500 * time.Millisecond) // Simulate API call time
 	
 	// Simulate some activities for testing purposes

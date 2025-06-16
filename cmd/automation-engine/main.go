@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -311,7 +312,7 @@ func runJobDistributor(ctx context.Context, queueClient *queue.Client, jobs chan
 			// Try to dequeue a job
 			job, err := queueClient.DequeueJob(ctx)
 			if err != nil {
-				if err == context.Canceled || err == context.DeadlineExceeded {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					log.Info("Context cancelled, job distributor stopping")
 					return
 				}

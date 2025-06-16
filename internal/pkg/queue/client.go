@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-redis/redis/v8"
@@ -207,12 +208,8 @@ func IsConnectionError(err error) bool {
 	}
 	// Check for common Redis connection error patterns
 	errStr := err.Error()
-	return contains(errStr, "connection refused") ||
-		contains(errStr, "no such host") ||
-		contains(errStr, "i/o timeout") ||
-		contains(errStr, "connect: connection refused")
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[:len(substr)] == substr || len(s) > len(substr) && contains(s[1:], substr)
+	return strings.Contains(errStr, "connection refused") ||
+		strings.Contains(errStr, "no such host") ||
+		strings.Contains(errStr, "i/o timeout") ||
+		strings.Contains(errStr, "connect: connection refused")
 }
