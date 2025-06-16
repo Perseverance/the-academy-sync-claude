@@ -40,6 +40,16 @@ type SyncService struct {
 
 // NewSyncService creates a new sync service
 func NewSyncService(userRepo UserRepository, queueClient *queue.Client, logger *logger.Logger) *SyncService {
+	if queueClient == nil {
+		panic("queue client is required for sync service")
+	}
+	if userRepo == nil {
+		panic("user repository is required for sync service")
+	}
+	if logger == nil {
+		panic("logger is required for sync service")
+	}
+	
 	return &SyncService{
 		userRepo:    userRepo,
 		queueClient: queueClient,
