@@ -173,6 +173,15 @@ func main() {
 		}
 		defer queueClient.Close()
 		
+		// Validate MaxWorkers before starting pool
+		if cfg.MaxWorkers <= 0 {
+			log.Critical("Invalid MAX_WORKERS configuration",
+				"configured_value", cfg.MaxWorkers,
+				"minimum_required", 1,
+				"error", "MAX_WORKERS must be at least 1")
+			os.Exit(1)
+		}
+		
 		// Start worker pool
 		startWorkerPool(queueClient, worker, cfg.MaxWorkers, log)
 	} else {
