@@ -71,6 +71,8 @@ func (h *SyncHandler) TriggerManualSync(w http.ResponseWriter, r *http.Request) 
 			h.sendJSONError(w, "Strava connection required. Please connect your Strava account first.", http.StatusBadRequest)
 		case errors.Is(err, services.ErrSpreadsheetRequired):
 			h.sendJSONError(w, "Spreadsheet configuration required. Please configure your Google Spreadsheet first.", http.StatusBadRequest)
+		case errors.Is(err, services.ErrSyncAlreadyInProgress):
+			h.sendJSONError(w, "A sync is already in progress for your account. Please wait for it to complete.", http.StatusConflict)
 		default:
 			// Check if it's a connection error
 			if queue.IsConnectionError(err) {

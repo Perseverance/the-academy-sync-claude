@@ -213,3 +213,68 @@ func IsConnectionError(err error) bool {
 		strings.Contains(errStr, "i/o timeout") ||
 		strings.Contains(errStr, "connect: connection refused")
 }
+
+// AcquireUserProcessingLock attempts to acquire a processing lock for a user
+// Returns true if lock was acquired, false if user is already being processed
+func (c *Client) AcquireUserProcessingLock(ctx context.Context, userID int, ttl time.Duration) (bool, error) {
+	lockKey := fmt.Sprintf("processing:user:%d", userID)
+	
+	// SetNX returns true if the key was set, false if it already existed
+	result, err := c.redis.SetNX(ctx, lockKey, "locked", ttl).Result()
+	if err != nil {
+		c.logger.Error("Failed to acquire user processing lock",
+			"error", err,
+			"user_id", userID,
+			"lock_key", lockKey)
+		return false, fmt.Errorf("failed to acquire processing lock: %w", err)
+	}
+	
+	if result {
+		c.logger.Debug("Acquired user processing lock",
+			"user_id", userID,
+			"lock_key", lockKey,
+			"ttl_seconds", ttl.Seconds())
+	} else {
+		c.logger.Debug("User processing lock already exists",
+			"user_id", userID,
+			"lock_key", lockKey)
+	}
+	
+	return result, nil
+}
+
+// ReleaseUserProcessingLock releases the processing lock for a user
+func (c *Client) ReleaseUserProcessingLock(ctx context.Context, userID int) error {
+	lockKey := fmt.Sprintf("processing:user:%d", userID)
+	
+	err := c.redis.Del(ctx, lockKey).Err()
+	if err != nil {
+		c.logger.Error("Failed to release user processing lock",
+			"error", err,
+			"user_id", userID,
+			"lock_key", lockKey)
+		return fmt.Errorf("failed to release processing lock: %w", err)
+	}
+	
+	c.logger.Debug("Released user processing lock",
+		"user_id", userID,
+		"lock_key", lockKey)
+	
+	return nil
+}
+
+// IsUserProcessingLocked checks if a user has an active processing lock
+func (c *Client) IsUserProcessingLocked(ctx context.Context, userID int) (bool, error) {
+	lockKey := fmt.Sprintf("processing:user:%d", userID)
+	
+	exists, err := c.redis.Exists(ctx, lockKey).Result()
+	if err != nil {
+		c.logger.Error("Failed to check user processing lock",
+			"error", err,
+			"user_id", userID,
+			"lock_key", lockKey)
+		return false, fmt.Errorf("failed to check processing lock: %w", err)
+	}
+	
+	return exists > 0, nil
+}
