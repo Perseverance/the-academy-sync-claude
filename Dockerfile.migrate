@@ -1,0 +1,13 @@
+FROM migrate/migrate:latest
+
+# Install postgresql-client for psql command
+RUN apk add --no-cache postgresql-client
+
+# Copy migration files
+COPY internal/pkg/database/migrations /migrations
+
+# Copy the migration script
+COPY scripts/run-migrations.sh /run-migrations.sh
+RUN chmod +x /run-migrations.sh
+
+ENTRYPOINT ["/run-migrations.sh"]
