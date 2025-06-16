@@ -7,6 +7,8 @@ import type { LogEntry } from "@/components/activity-log" // Assuming LogEntry t
 import { authService, type User } from "@/services/auth"
 import { stravaService } from "@/services/strava"
 import { configService } from "@/services/config"
+import { syncService, SyncError } from "@/services/SyncService"
+import { useToast } from "@/hooks/use-toast"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
 export type SpreadsheetConfigStatus = "Configured" | "NotConfigured" | "Disabled"
@@ -66,6 +68,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
   const isMountedRef = useRef(true)
+  const { toast } = useToast()
 
   const [state, setState] = useState<AppState>({
     user: null,
@@ -256,23 +259,57 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }
 
   const triggerManualSync = async () => {
-    setState((s) => ({ ...s, manualSyncStatus: "Processing" }))
-    await new Promise((resolve) => setTimeout(resolve, 3000)) // Simulate sync
-    // Add a new log entry
-    const newLog: LogEntry = {
-      id: String(Date.now()),
-      date: new Date().toISOString(),
-      status: Math.random() > 0.3 ? "Success" : "Failure",
-      summary:
-        Math.random() > 0.3
-          ? "Manual sync completed: 2 new activities."
-          : "Manual sync failed: Could not reach Google Sheets.",
+    // Only update state if component is still mounted
+    if (isMountedRef.current) {
+      setState((s) => ({ ...s, manualSyncStatus: "Processing" }))
     }
-    setState((s) => ({
-      ...s,
-      manualSyncStatus: "Ready",
-      activityLogs: [newLog, ...s.activityLogs.slice(0, 19)], // Keep last 20 logs
-    }))
+    
+    try {
+      // Call the actual sync API
+      const response = await syncService.triggerManualSync()
+      
+      console.log('Manual sync triggered successfully:', {
+        status: response.status,
+        message: response.message
+      })
+      
+      // Show success toast notification
+      toast({
+        title: "Sync Started",
+        description: "Manual sync has been triggered successfully and is now processing.",
+      })
+      
+      // Reset to Ready state so button is enabled again
+      // The backend processing lock will prevent duplicate requests
+      if (isMountedRef.current) {
+        setState((s) => ({ ...s, manualSyncStatus: "Ready" }))
+      }
+    } catch (error) {
+      console.error('Manual sync failed to start:', error)
+      
+      let errorMessage = 'Failed to trigger sync. Please try again.'
+      if (error instanceof SyncError) {
+        errorMessage = error.message
+      } else if (error instanceof Error) {
+        errorMessage = error.message
+      }
+      
+      // Show error toast
+      // TODO: Create a general error toast utility function to standardize error display
+      toast({
+        title: "Sync Failed",
+        description: errorMessage,
+        variant: "destructive",
+      })
+      
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        setState((s) => ({
+          ...s,
+          manualSyncStatus: "Ready",
+        }))
+      }
+    }
   }
 
   const setGoogleStatus = (status: ServiceStatus) => {

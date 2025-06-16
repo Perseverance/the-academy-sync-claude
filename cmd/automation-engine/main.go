@@ -3,8 +3,12 @@ package main
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	_ "github.com/lib/pq"
@@ -16,6 +20,7 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
 )
 
@@ -52,10 +57,37 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 		return fmt.Errorf("database dependency check failed: %w", err)
 	}
 	
-	// TODO: Add Redis health check when Redis connectivity is implemented
-	// if cfg.RedisURL != "" {
-	//     // Redis health check logic here
-	// }
+	// Redis health check (if Redis is configured)
+	if cfg.RedisURL != "" {
+		log.Info("Performing Redis health check", "redis_url", cfg.RedisURL)
+		
+		err := retry.WithExponentialBackoff(ctx, retry.CriticalConfig(), log, "redis_health_check", func() error {
+			// Create a temporary queue client for health check
+			tempQueueClient, err := queue.NewClient(cfg.RedisURL, "health_check_queue", log)
+			if err != nil {
+				return fmt.Errorf("redis connection failed: %w", err)
+			}
+			defer tempQueueClient.Close()
+			
+			// Perform health check
+			if err := tempQueueClient.HealthCheck(ctx); err != nil {
+				return fmt.Errorf("redis health check failed: %w", err)
+			}
+			
+			return nil
+		})
+		
+		if err != nil {
+			log.Critical("Critical dependency failed: Redis connection unavailable after retries", 
+				"error", err.Error(),
+				"redis_url", cfg.RedisURL)
+			return fmt.Errorf("redis dependency check failed: %w", err)
+		}
+		
+		log.Info("Redis health check passed successfully", "redis_url", cfg.RedisURL)
+	} else {
+		log.Warn("Redis not configured - queue-based sync functionality will be unavailable")
+	}
 	
 	log.Info("All critical dependency health checks passed successfully")
 	return nil
@@ -123,30 +155,244 @@ func main() {
 		log,
 	)
 
-	log.Info("Automation engine initialized successfully, starting processing loop",
-		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "")
+	log.Info("Automation engine initialized successfully",
+		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "",
+		"max_workers", cfg.MaxWorkers)
 
-	// Main processing loop
+	// Initialize Redis queue client if configured
+	if cfg.RedisURL != "" {
+		log.Info("Redis configured - starting worker pool for job processing",
+			"redis_url", cfg.RedisURL,
+			"max_workers", cfg.MaxWorkers)
+		
+		// Initialize queue client
+		queueClient, err := queue.NewClient(cfg.RedisURL, "jobs_queue", log)
+		if err != nil {
+			log.Critical("Failed to initialize Redis queue client", "error", err)
+			os.Exit(1)
+		}
+		defer queueClient.Close()
+		
+		// Validate MaxWorkers before starting pool
+		if cfg.MaxWorkers <= 0 {
+			log.Critical("Invalid MAX_WORKERS configuration",
+				"configured_value", cfg.MaxWorkers,
+				"minimum_required", 1,
+				"error", "MAX_WORKERS must be at least 1")
+			os.Exit(1)
+		}
+		
+		if cfg.MaxWorkers > 1000 {
+			log.Critical("Invalid MAX_WORKERS configuration",
+				"configured_value", cfg.MaxWorkers,
+				"maximum_allowed", 1000,
+				"error", "MAX_WORKERS must not exceed 1000 to prevent resource exhaustion")
+			os.Exit(1)
+		}
+		
+		// Start worker pool
+		startWorkerPool(queueClient, worker, cfg.MaxWorkers, log)
+	} else {
+		log.Warn("Redis not configured - running in test mode with single user processing")
+		// Fall back to test processing for development
+		runTestMode(worker, log)
+	}
+}
+
+// startWorkerPool starts a pool of workers to process jobs from the queue
+func startWorkerPool(queueClient *queue.Client, worker *processing.Worker, maxWorkers int, log *logger.Logger) {
+	log.Info("Starting worker pool",
+		"max_workers", maxWorkers,
+		"queue", "jobs_queue")
+
+	// Create context for graceful shutdown
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	// Set up graceful shutdown
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+
+	// Channel for job distribution to workers
+	jobs := make(chan *queue.Job, maxWorkers*2) // Buffer to prevent blocking
+
+	// Start workers
+	var wg sync.WaitGroup
+	for i := 0; i < maxWorkers; i++ {
+		wg.Add(1)
+		go func(workerID int) {
+			defer wg.Done()
+			runWorker(ctx, workerID, jobs, queueClient, worker, log)
+		}(i + 1)
+	}
+
+	// Start job distributor
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		defer close(jobs)
+		runJobDistributor(ctx, queueClient, jobs, log)
+	}()
+
+	// Wait for shutdown signal
+	<-sigChan
+	log.Info("Shutdown signal received, stopping worker pool")
+
+	cancel() // Signal all workers to stop
+	wg.Wait() // Wait for all workers to finish
+
+	log.Info("Worker pool stopped gracefully")
+}
+
+// runWorker processes jobs from the jobs channel
+func runWorker(ctx context.Context, workerID int, jobs <-chan *queue.Job, queueClient *queue.Client, worker *processing.Worker, log *logger.Logger) {
+	workerLog := log.WithContext("worker_id", workerID)
+	workerLog.Info("Worker started")
+
+	for {
+		select {
+		case <-ctx.Done():
+			workerLog.Info("Worker shutting down")
+			return
+		case job, ok := <-jobs:
+			if !ok {
+				workerLog.Info("Jobs channel closed, worker stopping")
+				return
+			}
+
+			processJob(ctx, workerID, job, queueClient, worker, workerLog)
+		}
+	}
+}
+
+// processJob processes a single job
+func processJob(ctx context.Context, workerID int, job *queue.Job, queueClient *queue.Client, worker *processing.Worker, log *logger.Logger) {
+	startTime := time.Now()
+	
+	log.Info("Processing job",
+		"job_id", job.ID,
+		"job_type", job.Type,
+		"user_id", job.UserID,
+		"trace_id", job.TraceID,
+		"age_seconds", time.Since(job.CreatedAt).Seconds())
+
+	// Ensure we release the processing lock when done
+	defer func() {
+		// Use a fresh context with timeout for lock release to ensure it's not affected by cancellation
+		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer releaseCancel()
+		
+		if err := queueClient.ReleaseUserProcessingLock(releaseCtx, job.UserID); err != nil {
+			log.Error("Failed to release user processing lock",
+				"error", err,
+				"user_id", job.UserID,
+				"job_id", job.ID)
+		} else {
+			log.Debug("Released user processing lock",
+				"user_id", job.UserID,
+				"job_id", job.ID)
+		}
+	}()
+
+	// Create context with timeout for job processing
+	jobCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)
+	defer cancel()
+
+	// Process based on job type
+	var result *processing.ProcessingResult
+	switch job.Type {
+	case queue.JobTypeManualSync, queue.JobTypeScheduledSync:
+		result = worker.ProcessUser(jobCtx, job.UserID)
+	default:
+		log.Error("Unknown job type",
+			"job_id", job.ID,
+			"job_type", job.Type,
+			"user_id", job.UserID)
+		return
+	}
+
+	duration := time.Since(startTime)
+
+	if result.Success {
+		log.Info("Job processed successfully",
+			"job_id", job.ID,
+			"job_type", job.Type,
+			"user_id", job.UserID,
+			"trace_id", job.TraceID,
+			"processing_duration_ms", duration.Milliseconds(),
+			"activities_count", result.ActivitiesCount)
+	} else {
+		log.Error("Job processing failed",
+			"job_id", job.ID,
+			"job_type", job.Type,
+			"user_id", job.UserID,
+			"trace_id", job.TraceID,
+			"processing_duration_ms", duration.Milliseconds(),
+			"error", result.Error,
+			"error_type", result.ErrorType,
+			"requires_reauth", result.RequiresReauth)
+	}
+}
+
+// runJobDistributor fetches jobs from the queue and distributes them to workers
+func runJobDistributor(ctx context.Context, queueClient *queue.Client, jobs chan<- *queue.Job, log *logger.Logger) {
+	log.Info("Job distributor started")
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Info("Job distributor shutting down")
+			return
+		default:
+			// Try to dequeue a job
+			job, err := queueClient.DequeueJob(ctx)
+			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					log.Info("Context cancelled, job distributor stopping")
+					return
+				}
+				log.Error("Failed to dequeue job", "error", err)
+				time.Sleep(5 * time.Second) // Wait before retrying
+				continue
+			}
+
+			if job == nil {
+				// No job available, sleep briefly to avoid busy-spin
+				time.Sleep(100 * time.Millisecond)
+				continue
+			}
+
+			// Try to send job to worker
+			select {
+			case jobs <- job:
+				log.Debug("Job distributed to worker",
+					"job_id", job.ID,
+					"job_type", job.Type,
+					"user_id", job.UserID)
+			case <-ctx.Done():
+				log.Info("Context cancelled while distributing job")
+				return
+			}
+		}
+	}
+}
+
+// runTestMode runs the engine in test mode for development
+func runTestMode(worker *processing.Worker, log *logger.Logger) {
+	log.Info("Starting automation engine in test mode - will process user ID 1 every minute", 
+		"note", "Production mode requires Redis configuration")
+	
+	testUserID := 1
 	cycleCount := 0
+	
 	for {
 		cycleCount++
 		cycleStartTime := time.Now()
 		
-		log.Debug("🔄 Starting automation processing cycle",
-			"cycle_number", cycleCount,
-			"cycle_start_time", cycleStartTime.Format(time.RFC3339),
-			"environment", cfg.Environment,
-			"next_cycle_in_seconds", 60)
-		
-		// For now, we'll implement a simple test cycle
-		// In the future, this would be replaced with job queue processing
+		// Create context for this processing cycle
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
 		
-		// Test processing with user ID 1 (if exists)
-		// This is a placeholder - real implementation would process from job queue
-		testUserID := 1
-		
-		log.Debug("🧪 Starting test processing for development user",
+		log.Info("🔄 Starting test automation processing cycle",
 			"test_user_id", testUserID,
 			"cycle_number", cycleCount,
 			"timeout_minutes", 5,

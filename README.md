@@ -41,6 +41,117 @@ The system follows a microservices architecture deployed on Google Cloud Platfor
 - **Email**: SendGrid
 - **Infrastructure**: Terraform
 
+## Manual Sync Flow
+
+The Academy Sync now includes a comprehensive manual sync feature that allows users to trigger on-demand synchronization of their Strava activities to Google Sheets.
+
+### How Manual Sync Works
+
+1. **User Trigger**: User clicks "Sync Now" button in the web interface
+2. **API Request**: Frontend sends POST request to `/api/sync` endpoint
+3. **Validation**: Backend validates user authentication and configuration:
+   - Checks JWT authentication
+   - Validates Strava connection exists
+   - Validates Google Spreadsheet is configured
+4. **Job Enqueueing**: Valid requests are enqueued to Redis `jobs_queue`
+5. **Worker Processing**: Automation engine workers dequeue and process jobs
+6. **Data Transfer**: Activities are fetched from Strava and written to Google Sheets
+7. **Completion**: Job processing results are logged for monitoring
+
+### Queue-Based Architecture
+
+The manual sync uses a robust Redis-based queue system:
+
+- **Producer**: Backend API enqueues sync jobs
+- **Consumer**: Automation engine dequeues jobs with configurable worker pool
+- **Queue**: Redis `jobs_queue` ensures FIFO processing and persistence
+- **Scaling**: Configurable `MAX_WORKERS` (1-1000, default: 20)
+
+### Worker Processing Pipeline
+
+Each sync job goes through an 8-step processing pipeline:
+
+1. **📋 Step 1/8**: Retrieve user configuration and validate automation settings
+2. **🏃 Step 2/8**: Create Strava API client with OAuth token management
+3. **📊 Step 3/8**: Create Google Sheets API client with OAuth token management
+4. **🔄 Step 4/8**: **Token refresh preparation** - Ensure OAuth tokens are valid
+5. **🔐 Step 5/8**: Validate Google Sheets access and "Тренировъчен План" sheet
+6. **🏃 Step 6/8**: Fetch activities from Strava (7-day lookback)
+7. **📝 Step 7/8**: Write activities to Google Sheets with proper formatting
+8. **🎉 Step 8/8**: Complete processing and log results
+
+### Configuration Requirements
+
+#### Redis Configuration
+
+```bash
+# Required environment variables
+REDIS_URL=redis://redis:6379        # Redis connection string
+MAX_WORKERS=20                       # Worker pool size (1-1000)
+```
+
+#### Worker Pool Scaling
+
+- **Development**: 5-10 workers typically sufficient
+- **Production**: 20-50 workers depending on load
+- **API Rate Limits**: Consider Strava (600 requests/15min) and Google Sheets quotas
+- **Memory Usage**: Each worker uses ~10-20MB of memory
+
+### API Endpoints
+
+#### Manual Sync Trigger
+```http
+POST /api/sync
+Authorization: Bearer <jwt-token>
+Content-Type: application/json
+
+Response (202 Accepted):
+{
+  "status": "accepted",
+  "message": "Sync request has been queued for processing"
+}
+```
+
+#### Sync Status Check
+```http
+GET /api/sync/status
+Authorization: Bearer <jwt-token>
+
+Response (200 OK):
+{
+  "eligible": true,
+  "reason": ""
+}
+```
+
+### Error Handling
+
+The system includes comprehensive error handling:
+
+- **Validation Errors**: 400 Bad Request for missing Strava/Sheets configuration
+- **Authentication Errors**: 401 Unauthorized for invalid/expired tokens
+- **Service Errors**: 503 Service Unavailable for Redis connection issues
+- **OAuth Reauth**: Automatic detection and handling of expired OAuth tokens
+
+### Monitoring and Logging
+
+All sync operations include detailed logging:
+
+- **Queue Operations**: Job enqueue/dequeue with timestamps and trace IDs
+- **Processing Steps**: Step-by-step progress logging with performance metrics
+- **Error Details**: Comprehensive error context for troubleshooting
+- **Token Management**: OAuth token validity and refresh status
+- **API Interactions**: External API call logging and rate limit tracking
+
+### Health Checks
+
+The system performs startup health checks:
+
+- **Database Connectivity**: PostgreSQL connection validation with retries
+- **Redis Connectivity**: Redis queue connection validation with retries
+- **OAuth Configuration**: Google and Strava client credential validation
+- **Fail-Fast Behavior**: System exits if critical dependencies are unavailable
+
 ## Project Structure
 
 ```
@@ -207,6 +318,9 @@ The system automatically detects the environment using the following priority:
 - `REDIS_URL` - Complete Redis connection string (auto-generated if not provided)
 - `REDIS_HOST` - Redis host (default: localhost)
 - `REDIS_PORT` - Redis port (default: 6380 for local, 6379 for production)
+
+#### Worker Pool Configuration
+- `MAX_WORKERS` - Maximum concurrent workers for sync job processing (default: 20, range: 1-1000)
 
 #### OAuth Configuration
 - `GOOGLE_CLIENT_ID` - Google OAuth client ID
@@ -428,21 +542,31 @@ migrate create -ext sql -dir internal/pkg/database/migrations -seq description_o
 
 ### Docker Compose Integration
 
-When using Docker Compose for local development, the database is automatically created. You can run migrations by:
+When using Docker Compose for local development, migrations are automatically applied when you start the services:
 
-1. **Start the database:**
-   ```bash
-   docker-compose up -d postgres
-   ```
+```bash
+# Start all services (migrations will run automatically)
+docker-compose up
 
-2. **Wait for database to be ready, then run migrations:**
-   ```bash
-   # Set the local database URL
-   export DATABASE_URL="postgres://postgres:password@localhost:5433/academy_sync?sslmode=disable"
-   
-   # Apply migrations
-   migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" up
-   ```
+# Or run in the background
+docker-compose up -d
+```
+
+The `migrate` service will:
+1. Wait for PostgreSQL to be ready
+2. Apply all pending migrations
+3. Exit successfully
+4. Allow dependent services (backend-api, automation-engine, etc.) to start
+
+If you need to run migrations manually:
+
+```bash
+# Set the local database URL
+export DATABASE_URL="postgres://postgres:password@localhost:5433/academy_sync?sslmode=disable"
+
+# Apply migrations
+migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" up
+```
 
 ### Common Development Commands
 

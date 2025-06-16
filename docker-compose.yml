@@ -22,6 +22,23 @@ services:
     networks:
       - academy-sync-network
 
+  # Database Migrations
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    container_name: academy-sync-migrate
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-academy_sync}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_HOST: postgres
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - academy-sync-network
+
   # Redis Cache
   redis:
     image: redis:7-alpine
@@ -49,6 +66,7 @@ services:
     container_name: academy-sync-backend-api
     environment:
       SERVICE_NAME: backend-api
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-academy_sync}?sslmode=disable
       REDIS_URL: redis://redis:6379
       PORT: ${BACKEND_API_PORT:-8080}
@@ -60,6 +78,7 @@ services:
       JWT_SECRET: ${JWT_SECRET}
       ENCRYPTION_SECRET: ${ENCRYPTION_SECRET}
       BASE_URL: ${BASE_URL:-http://localhost:8080}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     ports:
       - "${BACKEND_API_PORT:-8080}:8080"
     volumes:
@@ -70,6 +89,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     networks:
       - academy-sync-network
     restart: unless-stopped
@@ -85,14 +106,19 @@ services:
     container_name: academy-sync-automation-engine
     environment:
       SERVICE_NAME: automation-engine
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-academy_sync}?sslmode=disable
       REDIS_URL: redis://redis:6379
       BACKEND_API_URL: http://backend-api:8080
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MAX_WORKERS: ${MAX_WORKERS:-20}
       STRAVA_CLIENT_ID: ${STRAVA_CLIENT_ID}
       STRAVA_CLIENT_SECRET: ${STRAVA_CLIENT_SECRET}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
     volumes:
       - .:/app
       - /app/tmp
@@ -101,6 +127,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       backend-api:
         condition: service_started
     networks:
@@ -118,6 +146,7 @@ services:
     container_name: academy-sync-notification-service
     environment:
       SERVICE_NAME: notification-service
+      APP_ENV: ${APP_ENV:-development}
       DATABASE_URL: postgres://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@postgres:5432/${POSTGRES_DB:-academy_sync}?sslmode=disable
       REDIS_URL: redis://redis:6379
       BACKEND_API_URL: http://backend-api:8080
@@ -127,6 +156,9 @@ services:
       SMTP_USERNAME: ${SMTP_USERNAME}
       SMTP_PASSWORD: ${SMTP_PASSWORD}
       FROM_EMAIL: ${FROM_EMAIL}
+      JWT_SECRET: ${JWT_SECRET}
+      ENCRYPTION_SECRET: ${ENCRYPTION_SECRET}
+      BASE_URL: ${BASE_URL:-http://localhost:8080}
     volumes:
       - .:/app
       - /app/tmp
@@ -135,6 +167,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       backend-api:
         condition: service_started
     networks:
