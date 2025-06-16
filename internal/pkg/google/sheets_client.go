@@ -286,8 +286,37 @@ func (c *SheetsClient) ValidateAccess(ctx context.Context, spreadsheetID string)
 		"sheet_count", len(spreadsheet.Sheets),
 		"user_id", c.userID)
 	
-	// Test write access by attempting to read a range
-	testRange := "A1:A1"
+	// Check if the required sheet "Тренировъчен План" exists
+	targetSheetName := "Тренировъчен План"
+	hasTargetSheet := false
+	for _, sheet := range spreadsheet.Sheets {
+		if sheet.Properties.Title == targetSheetName {
+			hasTargetSheet = true
+			c.logger.Debug("Found target sheet",
+				"sheet_name", targetSheetName,
+				"sheet_id", sheet.Properties.SheetId,
+				"user_id", c.userID)
+			break
+		}
+	}
+	
+	if !hasTargetSheet {
+		c.logger.Error("Required sheet not found in spreadsheet",
+			"required_sheet", targetSheetName,
+			"spreadsheet_id", spreadsheetID,
+			"available_sheets", func() []string {
+				names := make([]string, len(spreadsheet.Sheets))
+				for i, sheet := range spreadsheet.Sheets {
+					names[i] = sheet.Properties.Title
+				}
+				return names
+			}(),
+			"user_id", c.userID)
+		return fmt.Errorf("required sheet '%s' not found in spreadsheet", targetSheetName)
+	}
+	
+	// Test write access by attempting to read a range from the target sheet
+	testRange := fmt.Sprintf("%s!A1:A1", targetSheetName)
 	c.logger.Debug("Testing write access permissions",
 		"spreadsheet_id", spreadsheetID,
 		"test_range", testRange,
