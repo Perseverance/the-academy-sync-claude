@@ -336,7 +336,8 @@ func runJobDistributor(ctx context.Context, queueClient *queue.Client, jobs chan
 			}
 
 			if job == nil {
-				// No job available, continue polling
+				// No job available, sleep briefly to avoid busy-spin
+				time.Sleep(100 * time.Millisecond)
 				continue
 			}
 

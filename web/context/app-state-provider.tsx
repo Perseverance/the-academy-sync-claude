@@ -259,7 +259,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }
 
   const triggerManualSync = async () => {
-    setState((s) => ({ ...s, manualSyncStatus: "Processing" }))
+    // Only update state if component is still mounted
+    if (isMountedRef.current) {
+      setState((s) => ({ ...s, manualSyncStatus: "Processing" }))
+    }
     
     try {
       // Call the actual sync API
@@ -276,9 +279,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         description: "Manual sync has been triggered successfully and is now processing.",
       })
       
-      // Keep the status as "Processing" until the sync job completes
-      // This prevents duplicate sync requests while the job is running
-      // TODO: Implement webhook or polling to update status when job completes
+      // Reset to Ready state so button is enabled again
+      // The backend processing lock will prevent duplicate requests
+      if (isMountedRef.current) {
+        setState((s) => ({ ...s, manualSyncStatus: "Ready" }))
+      }
     } catch (error) {
       console.error('Manual sync failed to start:', error)
       
@@ -289,19 +294,22 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         errorMessage = error.message
       }
       
-      // Only log immediate failures (API call failures, not processing failures)
-      const newLog: LogEntry = {
-        id: String(Date.now()),
-        date: new Date().toISOString(),
-        status: "Failure",
-        summary: `Failed to start manual sync: ${errorMessage}`,
+      // Only update state if component is still mounted
+      if (isMountedRef.current) {
+        // Only log immediate failures (API call failures, not processing failures)
+        const newLog: LogEntry = {
+          id: String(Date.now()),
+          date: new Date().toISOString(),
+          status: "Failure",
+          summary: `Failed to start manual sync: ${errorMessage}`,
+        }
+        
+        setState((s) => ({
+          ...s,
+          manualSyncStatus: "Ready",
+          activityLogs: [newLog, ...s.activityLogs.slice(0, 19)], // Keep last 20 logs
+        }))
       }
-      
-      setState((s) => ({
-        ...s,
-        manualSyncStatus: "Ready",
-        activityLogs: [newLog, ...s.activityLogs.slice(0, 19)], // Keep last 20 logs
-      }))
     }
   }
 
