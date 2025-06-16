@@ -1,7 +1,16 @@
-FROM migrate/migrate:latest
+FROM alpine:3.18
 
-# Install postgresql-client for psql command
-RUN apk add --no-cache postgresql-client
+# Install required packages
+RUN apk add --no-cache \
+    bash \
+    postgresql-client \
+    curl \
+    ca-certificates
+
+# Install migrate tool
+RUN curl -L https://github.com/golang-migrate/migrate/releases/download/v4.16.2/migrate.linux-amd64.tar.gz | tar xvz && \
+    mv migrate /usr/local/bin/migrate && \
+    chmod +x /usr/local/bin/migrate
 
 # Copy migration files
 COPY internal/pkg/database/migrations /migrations
