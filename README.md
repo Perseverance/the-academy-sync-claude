@@ -542,21 +542,31 @@ migrate create -ext sql -dir internal/pkg/database/migrations -seq description_o
 
 ### Docker Compose Integration
 
-When using Docker Compose for local development, the database is automatically created. You can run migrations by:
+When using Docker Compose for local development, migrations are automatically applied when you start the services:
 
-1. **Start the database:**
-   ```bash
-   docker-compose up -d postgres
-   ```
+```bash
+# Start all services (migrations will run automatically)
+docker-compose up
 
-2. **Wait for database to be ready, then run migrations:**
-   ```bash
-   # Set the local database URL
-   export DATABASE_URL="postgres://postgres:password@localhost:5433/academy_sync?sslmode=disable"
-   
-   # Apply migrations
-   migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" up
-   ```
+# Or run in the background
+docker-compose up -d
+```
+
+The `migrate` service will:
+1. Wait for PostgreSQL to be ready
+2. Apply all pending migrations
+3. Exit successfully
+4. Allow dependent services (backend-api, automation-engine, etc.) to start
+
+If you need to run migrations manually:
+
+```bash
+# Set the local database URL
+export DATABASE_URL="postgres://postgres:password@localhost:5433/academy_sync?sslmode=disable"
+
+# Apply migrations
+migrate -path internal/pkg/database/migrations -database "$DATABASE_URL" up
+```
 
 ### Common Development Commands
 
