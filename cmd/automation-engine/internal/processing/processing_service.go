@@ -278,4 +278,3 @@ func (s *ProcessingService) fetchActivitiesForDay(ctx context.Context, dayStart,
 
 	return dayActivities, nil
 }
-

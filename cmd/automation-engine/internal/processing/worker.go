@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/google"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
@@ -23,8 +24,9 @@ import (
 // - Performance timing for each processing step
 // - Structured logging with searchable fields for monitoring
 type Worker struct {
-	configService *automation.ConfigService
-	logger        *logger.Logger
+	configService  *automation.ConfigService
+	tokenPersister auth.TokenPersister
+	logger         *logger.Logger
 
 	// OAuth credentials for API clients
 	stravaClientID     string
@@ -37,12 +39,14 @@ type Worker struct {
 // NewWorker creates a new processing worker with required dependencies
 func NewWorker(
 	configService *automation.ConfigService,
+	tokenPersister auth.TokenPersister,
 	stravaClientID, stravaClientSecret string,
 	googleClientID, googleClientSecret, googleRedirectURL string,
 	logger *logger.Logger,
 ) *Worker {
 	return &Worker{
 		configService:      configService,
+		tokenPersister:     tokenPersister,
 		stravaClientID:     stravaClientID,
 		stravaClientSecret: stravaClientSecret,
 		googleClientID:     googleClientID,
@@ -166,6 +170,11 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 	stravaClient := strava.NewClient(userID, config.StravaRefreshToken, w.logger)
 	stravaClient.SetOAuthCredentials(w.stravaClientID, w.stravaClientSecret)
 
+	// Set token persister if available
+	if w.tokenPersister != nil {
+		stravaClient.SetTokenPersister(w.tokenPersister)
+	}
+
 	// Set initial tokens if available
 	if config.HasValidStravaToken() {
 		stravaClient.SetInitialTokens(config.StravaAccessToken, *config.StravaTokenExpiry)
@@ -196,6 +205,11 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 
 	sheetsClient := google.NewSheetsClient(userID, config.GoogleRefreshToken, w.logger)
 	sheetsClient.SetOAuthCredentials(w.googleClientID, w.googleClientSecret, w.googleRedirectURL)
+
+	// Set token persister if available
+	if w.tokenPersister != nil {
+		sheetsClient.SetTokenPersister(w.tokenPersister)
+	}
 
 	// Set initial tokens if available
 	if config.HasValidGoogleToken() {
@@ -428,4 +442,3 @@ func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int, jobType string
 
 	return results
 }
-

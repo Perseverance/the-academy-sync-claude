@@ -6,28 +6,28 @@ import (
 )
 
 // ProcessingConfig contains all configuration required for processing a user's automation job
-// This represents the consolidated configuration that the automation engine needs to 
+// This represents the consolidated configuration that the automation engine needs to
 // process data for a specific user during a scheduled or manual run.
 type ProcessingConfig struct {
 	// User identification
-	UserID int `json:"user_id"`
+	UserID int    `json:"user_id"`
 	Email  string `json:"email"`
-	
+
 	// Google OAuth credentials (decrypted)
 	GoogleAccessToken  string     `json:"-"` // Never serialize sensitive tokens
 	GoogleRefreshToken string     `json:"-"` // Never serialize sensitive tokens
 	GoogleTokenExpiry  *time.Time `json:"-"` // Never serialize sensitive tokens
-	
+
 	// Strava OAuth credentials (decrypted)
 	StravaAccessToken  string     `json:"-"` // Never serialize sensitive tokens
 	StravaRefreshToken string     `json:"-"` // Never serialize sensitive tokens
 	StravaTokenExpiry  *time.Time `json:"-"` // Never serialize sensitive tokens
 	StravaAthleteID    *int64     `json:"strava_athlete_id"`
-	
+
 	// Target configuration
 	SpreadsheetID string `json:"spreadsheet_id"`
 	Timezone      string `json:"timezone"`
-	
+
 	// User preferences
 	EmailNotificationsEnabled bool `json:"email_notifications_enabled"`
 	AutomationEnabled         bool `json:"automation_enabled"`
@@ -57,14 +57,14 @@ func (c *ProcessingConfig) Validate() error {
 			Message: "must be a positive integer",
 		}
 	}
-	
+
 	if c.Email == "" {
 		return &ValidationError{
 			Field:   "email",
 			Message: "is required for notifications",
 		}
 	}
-	
+
 	// Validate Google OAuth tokens - both are required for Sheets access
 	if c.GoogleRefreshToken == "" {
 		return &ValidationError{
@@ -72,7 +72,7 @@ func (c *ProcessingConfig) Validate() error {
 			Message: "is required for Google Sheets API access",
 		}
 	}
-	
+
 	// Note: Google access token may be empty (will be refreshed if needed)
 	// but we validate that token expiry is present if access token exists
 	if c.GoogleAccessToken != "" && c.GoogleTokenExpiry == nil {
@@ -81,11 +81,11 @@ func (c *ProcessingConfig) Validate() error {
 			Message: "is required when access token is present",
 		}
 	}
-	
+
 	// Note: We do NOT validate that Google token is not expired
 	// Expired tokens are normal and will be refreshed automatically
 	// by the Google client when needed
-	
+
 	// Validate Strava OAuth tokens - refresh token is essential
 	if c.StravaRefreshToken == "" {
 		return &ValidationError{
@@ -93,7 +93,7 @@ func (c *ProcessingConfig) Validate() error {
 			Message: "is required for Strava API access",
 		}
 	}
-	
+
 	// Validate Strava athlete ID - must be present for API calls
 	if c.StravaAthleteID == nil || *c.StravaAthleteID <= 0 {
 		return &ValidationError{
@@ -101,7 +101,7 @@ func (c *ProcessingConfig) Validate() error {
 			Message: "is required for Strava API access",
 		}
 	}
-	
+
 	// Note: Strava access token may be empty (will be refreshed if needed)
 	// but we validate that token expiry is present if access token exists
 	if c.StravaAccessToken != "" && c.StravaTokenExpiry == nil {
@@ -110,11 +110,11 @@ func (c *ProcessingConfig) Validate() error {
 			Message: "is required when access token is present",
 		}
 	}
-	
+
 	// Note: We do NOT validate that Strava token is not expired
 	// Expired tokens are normal and will be refreshed automatically
 	// by the Strava client when needed
-	
+
 	// Validate target configuration
 	if c.SpreadsheetID == "" {
 		return &ValidationError{
@@ -122,14 +122,14 @@ func (c *ProcessingConfig) Validate() error {
 			Message: "is required for data output destination",
 		}
 	}
-	
+
 	if c.Timezone == "" {
 		return &ValidationError{
 			Field:   "timezone",
 			Message: "is required for proper date/time processing",
 		}
 	}
-	
+
 	// Validate timezone format (basic check)
 	if _, err := time.LoadLocation(c.Timezone); err != nil {
 		return &ValidationError{
@@ -138,7 +138,7 @@ func (c *ProcessingConfig) Validate() error {
 			Cause:   err,
 		}
 	}
-	
+
 	return nil
 }
 
@@ -147,7 +147,7 @@ func (c *ProcessingConfig) HasValidGoogleToken() bool {
 	if c.GoogleAccessToken == "" || c.GoogleTokenExpiry == nil {
 		return false
 	}
-	
+
 	// Add 5-minute buffer to account for clock skew and processing time
 	return time.Now().Add(5 * time.Minute).Before(*c.GoogleTokenExpiry)
 }
@@ -157,7 +157,7 @@ func (c *ProcessingConfig) HasValidStravaToken() bool {
 	if c.StravaAccessToken == "" || c.StravaTokenExpiry == nil {
 		return false
 	}
-	
+
 	// Add 5-minute buffer to account for clock skew and processing time
 	return time.Now().Add(5 * time.Minute).Before(*c.StravaTokenExpiry)
 }

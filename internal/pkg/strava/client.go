@@ -10,28 +10,29 @@ import (
 
 	"golang.org/x/oauth2"
 
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 )
 
 // Activity represents a Strava activity with essential fields for automation processing
 type Activity struct {
-	ID               int64     `json:"id"`
-	Name             string    `json:"name"`
-	Type             string    `json:"type"`
-	SportType        string    `json:"sport_type"`
-	Distance         float64   `json:"distance"`         // meters
-	MovingTime       int       `json:"moving_time"`      // seconds
-	ElapsedTime      int       `json:"elapsed_time"`     // seconds
-	TotalElevationGain float64 `json:"total_elevation_gain"` // meters
-	StartDate        time.Time `json:"start_date"`
-	StartDateLocal   time.Time `json:"start_date_local"`
-	Timezone         string    `json:"timezone"`
-	AverageSpeed     float64   `json:"average_speed"`    // meters per second
-	MaxSpeed         float64   `json:"max_speed"`        // meters per second
-	AverageHeartrate float64   `json:"average_heartrate"`
-	MaxHeartrate     float64   `json:"max_heartrate"`
-	Kudos            int       `json:"kudos_count"`
-	Comments         int       `json:"comment_count"`
+	ID                 int64     `json:"id"`
+	Name               string    `json:"name"`
+	Type               string    `json:"type"`
+	SportType          string    `json:"sport_type"`
+	Distance           float64   `json:"distance"`             // meters
+	MovingTime         int       `json:"moving_time"`          // seconds
+	ElapsedTime        int       `json:"elapsed_time"`         // seconds
+	TotalElevationGain float64   `json:"total_elevation_gain"` // meters
+	StartDate          time.Time `json:"start_date"`
+	StartDateLocal     time.Time `json:"start_date_local"`
+	Timezone           string    `json:"timezone"`
+	AverageSpeed       float64   `json:"average_speed"` // meters per second
+	MaxSpeed           float64   `json:"max_speed"`     // meters per second
+	AverageHeartrate   float64   `json:"average_heartrate"`
+	MaxHeartrate       float64   `json:"max_heartrate"`
+	Kudos              int       `json:"kudos_count"`
+	Comments           int       `json:"comment_count"`
 }
 
 // Client provides Strava API access with automatic token lifecycle management
@@ -39,18 +40,21 @@ type Activity struct {
 type Client struct {
 	userID       int
 	refreshToken string
-	
+
 	// In-memory token cache (per-job lifecycle)
-	mu           sync.RWMutex
-	accessToken  string
-	tokenExpiry  time.Time
-	
+	mu          sync.RWMutex
+	accessToken string
+	tokenExpiry time.Time
+
 	// HTTP client for API requests
 	httpClient *http.Client
-	
+
 	// OAuth configuration for token refresh
 	oauthConfig *oauth2.Config
-	
+
+	// Token persistence
+	tokenPersister auth.TokenPersister
+
 	// Logger for debugging external API interactions
 	logger *logger.Logger
 }
@@ -82,13 +86,25 @@ func NewClient(userID int, refreshToken string, logger *logger.Logger) *Client {
 func (c *Client) SetOAuthCredentials(clientID, clientSecret string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.oauthConfig.ClientID = clientID
 	c.oauthConfig.ClientSecret = clientSecret
-	
+
 	c.logger.Debug("OAuth credentials configured for Strava client",
 		"client_id", clientID,
 		"has_client_secret", clientSecret != "")
+}
+
+// SetTokenPersister sets the token persister for automatic token persistence
+// This allows the client to save refreshed tokens back to the database
+func (c *Client) SetTokenPersister(persister auth.TokenPersister) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.tokenPersister = persister
+
+	c.logger.Debug("Token persister configured for Strava client",
+		"has_persister", persister != nil)
 }
 
 // SetInitialTokens sets initial access token and expiry if available
@@ -96,10 +112,10 @@ func (c *Client) SetOAuthCredentials(clientID, clientSecret string) {
 func (c *Client) SetInitialTokens(accessToken string, expiry time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.accessToken = accessToken
 	c.tokenExpiry = expiry
-	
+
 	c.logger.Debug("Initial access token set for Strava client",
 		"has_access_token", accessToken != "",
 		"token_expiry", expiry,
@@ -111,12 +127,12 @@ func (c *Client) SetInitialTokens(accessToken string, expiry time.Time) {
 func (c *Client) ensureValidToken(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.logger.Debug("Checking token validity before Strava API call",
 		"has_access_token", c.accessToken != "",
 		"token_expiry", c.tokenExpiry,
 		"time_until_expiry_minutes", time.Until(c.tokenExpiry).Minutes())
-	
+
 	// Check if current access token is valid (with 5-minute buffer)
 	if c.accessToken != "" && time.Now().Add(5*time.Minute).Before(c.tokenExpiry) {
 		c.logger.Debug("Using existing valid access token for Strava API call",
@@ -124,41 +140,41 @@ func (c *Client) ensureValidToken(ctx context.Context) error {
 			"minutes_until_expiry", time.Until(c.tokenExpiry).Minutes())
 		return nil
 	}
-	
+
 	// Need to refresh token
 	c.logger.Debug("Access token invalid or expired, refreshing via Strava OAuth",
 		"current_token_expired", c.accessToken != "" && time.Now().After(c.tokenExpiry),
 		"current_token_missing", c.accessToken == "",
 		"refresh_token_available", c.refreshToken != "")
-	
+
 	if c.refreshToken == "" {
 		c.logger.Error("No refresh token available for Strava token refresh",
 			"user_id", c.userID)
 		return ErrReauthRequired
 	}
-	
+
 	// Call Strava OAuth token endpoint to refresh access token
 	startTime := time.Now()
 	c.logger.Debug("Making token refresh request to Strava OAuth endpoint",
 		"endpoint", c.oauthConfig.Endpoint.TokenURL,
 		"user_id", c.userID)
-	
+
 	token := &oauth2.Token{
 		RefreshToken: c.refreshToken,
 	}
-	
+
 	tokenSource := c.oauthConfig.TokenSource(ctx, token)
 	newToken, err := tokenSource.Token()
-	
+
 	requestDuration := time.Since(startTime)
-	
+
 	if err != nil {
 		c.logger.Error("Failed to refresh Strava access token via OAuth endpoint",
 			"error", err,
 			"user_id", c.userID,
 			"request_duration_ms", requestDuration.Milliseconds(),
 			"endpoint", c.oauthConfig.Endpoint.TokenURL)
-		
+
 		// Check if this is an invalid grant error (requires re-authorization)
 		if IsReauthRequired(err) {
 			c.logger.Warn("Strava refresh token is invalid, user re-authorization required",
@@ -170,24 +186,48 @@ func (c *Client) ensureValidToken(ctx context.Context) error {
 				Cause:   err,
 			}
 		}
-		
+
 		return &NetworkError{
 			Operation: "token_refresh",
 			Message:   "Failed to refresh Strava access token",
 			Cause:     err,
 		}
 	}
-	
+
 	// Update cached token
 	c.accessToken = newToken.AccessToken
 	c.tokenExpiry = newToken.Expiry
-	
+
+	// Update refresh token if provided (Strava may rotate refresh tokens)
+	if newToken.RefreshToken != "" && newToken.RefreshToken != c.refreshToken {
+		c.logger.Debug("Strava provided new refresh token during token refresh",
+			"user_id", c.userID)
+		c.refreshToken = newToken.RefreshToken
+	}
+
 	c.logger.Info("Successfully refreshed Strava access token",
 		"user_id", c.userID,
 		"new_token_expiry", newToken.Expiry,
 		"token_valid_hours", time.Until(newToken.Expiry).Hours(),
 		"refresh_duration_ms", requestDuration.Milliseconds())
-	
+
+	// Persist the new tokens if persister is available
+	if c.tokenPersister != nil {
+		c.logger.Debug("Persisting refreshed Strava tokens to database",
+			"user_id", c.userID)
+
+		if err := c.tokenPersister.UpdateStravaTokens(ctx, c.userID, c.accessToken, c.refreshToken, c.tokenExpiry); err != nil {
+			c.logger.Error("Failed to persist refreshed Strava tokens",
+				"error", err,
+				"user_id", c.userID)
+			// Note: We don't return error here as the token refresh itself succeeded
+			// The API call can proceed with the refreshed token even if persistence fails
+		} else {
+			c.logger.Debug("Successfully persisted refreshed Strava tokens",
+				"user_id", c.userID)
+		}
+	}
+
 	return nil
 }
 
@@ -198,17 +238,17 @@ func (c *Client) makeAPIRequest(ctx context.Context, method, endpoint string, re
 	if err := c.ensureValidToken(ctx); err != nil {
 		return err
 	}
-	
+
 	// Build full URL
 	url := "https://www.strava.com/api/v3" + endpoint
-	
+
 	startTime := time.Now()
 	c.logger.Debug("Making Strava API request",
 		"method", method,
 		"endpoint", endpoint,
 		"full_url", url,
 		"user_id", c.userID)
-	
+
 	// Create HTTP request
 	req, err := http.NewRequestWithContext(ctx, method, url, nil)
 	if err != nil {
@@ -223,15 +263,15 @@ func (c *Client) makeAPIRequest(ctx context.Context, method, endpoint string, re
 			Cause:     err,
 		}
 	}
-	
+
 	// Add authorization header
 	c.mu.RLock()
 	req.Header.Set("Authorization", "Bearer "+c.accessToken)
 	c.mu.RUnlock()
-	
+
 	req.Header.Set("Accept", "application/json")
 	req.Header.Set("User-Agent", "Academy-Sync-Automation/1.0")
-	
+
 	// Execute request
 	c.logger.Debug("Executing HTTP request to Strava API",
 		"method", method,
@@ -240,7 +280,7 @@ func (c *Client) makeAPIRequest(ctx context.Context, method, endpoint string, re
 			"Accept":     req.Header.Get("Accept"),
 			"User-Agent": req.Header.Get("User-Agent"),
 		})
-	
+
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
 		requestDuration := time.Since(startTime)
@@ -257,9 +297,9 @@ func (c *Client) makeAPIRequest(ctx context.Context, method, endpoint string, re
 		}
 	}
 	defer resp.Body.Close()
-	
+
 	requestDuration := time.Since(startTime)
-	
+
 	c.logger.Debug("Received response from Strava API",
 		"method", method,
 		"endpoint", endpoint,
@@ -269,7 +309,7 @@ func (c *Client) makeAPIRequest(ctx context.Context, method, endpoint string, re
 		"content_type", resp.Header.Get("Content-Type"),
 		"user_id", c.userID,
 		"request_duration_ms", requestDuration.Milliseconds())
-	
+
 	// Check for HTTP errors
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		// Try to read error details from response body
@@ -293,7 +333,7 @@ func (c *Client) makeAPIRequest(ctx context.Context, method, endpoint string, re
 				"request_duration_ms", requestDuration.Milliseconds(),
 				"decode_error", decodeErr)
 		}
-		
+
 		// Handle specific error codes
 		switch resp.StatusCode {
 		case 401:
@@ -323,7 +363,7 @@ func (c *Client) makeAPIRequest(ctx context.Context, method, endpoint string, re
 			}
 		}
 	}
-	
+
 	// Decode successful response
 	if err := json.NewDecoder(resp.Body).Decode(result); err != nil {
 		c.logger.Error("Failed to decode Strava API response",
@@ -341,14 +381,14 @@ func (c *Client) makeAPIRequest(ctx context.Context, method, endpoint string, re
 			Cause:      err,
 		}
 	}
-	
+
 	c.logger.Info("Successfully completed Strava API request",
 		"method", method,
 		"endpoint", endpoint,
 		"status_code", resp.StatusCode,
 		"user_id", c.userID,
 		"request_duration_ms", requestDuration.Milliseconds())
-	
+
 	return nil
 }
 
@@ -359,11 +399,11 @@ func (c *Client) GetActivities(ctx context.Context, after time.Time) ([]Activity
 		"user_id", c.userID,
 		"after", after.Format(time.RFC3339),
 		"days_back", time.Since(after).Hours()/24)
-	
+
 	// Build query parameters
 	afterUnix := after.Unix()
 	endpoint := fmt.Sprintf("/athlete/activities?after=%d&per_page=100", afterUnix)
-	
+
 	var activities []Activity
 	if err := c.makeAPIRequest(ctx, "GET", endpoint, &activities); err != nil {
 		c.logger.Error("Failed to retrieve activities from Strava",
@@ -372,7 +412,7 @@ func (c *Client) GetActivities(ctx context.Context, after time.Time) ([]Activity
 			"after", after.Format(time.RFC3339))
 		return nil, err
 	}
-	
+
 	c.logger.Info("Successfully retrieved activities from Strava",
 		"user_id", c.userID,
 		"activity_count", len(activities),
@@ -383,7 +423,7 @@ func (c *Client) GetActivities(ctx context.Context, after time.Time) ([]Activity
 			}
 			return "none"
 		}())
-	
+
 	return activities, nil
 }
 
@@ -392,9 +432,9 @@ func (c *Client) GetActivity(ctx context.Context, activityID int64) (*Activity, 
 	c.logger.Debug("Retrieving specific activity from Strava",
 		"user_id", c.userID,
 		"activity_id", activityID)
-	
+
 	endpoint := fmt.Sprintf("/activities/%d", activityID)
-	
+
 	var activity Activity
 	if err := c.makeAPIRequest(ctx, "GET", endpoint, &activity); err != nil {
 		c.logger.Error("Failed to retrieve activity from Strava",
@@ -403,14 +443,14 @@ func (c *Client) GetActivity(ctx context.Context, activityID int64) (*Activity, 
 			"activity_id", activityID)
 		return nil, err
 	}
-	
+
 	c.logger.Info("Successfully retrieved activity from Strava",
 		"user_id", c.userID,
 		"activity_id", activityID,
 		"activity_name", activity.Name,
 		"activity_type", activity.Type,
 		"activity_date", activity.StartDate.Format(time.RFC3339))
-	
+
 	return &activity, nil
 }
 
@@ -418,7 +458,7 @@ func (c *Client) GetActivity(ctx context.Context, activityID int64) (*Activity, 
 func (c *Client) GetAthleteProfile(ctx context.Context) (map[string]interface{}, error) {
 	c.logger.Debug("Retrieving athlete profile from Strava",
 		"user_id", c.userID)
-	
+
 	var profile map[string]interface{}
 	if err := c.makeAPIRequest(ctx, "GET", "/athlete", &profile); err != nil {
 		c.logger.Error("Failed to retrieve athlete profile from Strava",
@@ -426,17 +466,17 @@ func (c *Client) GetAthleteProfile(ctx context.Context) (map[string]interface{},
 			"user_id", c.userID)
 		return nil, err
 	}
-	
+
 	// Extract athlete ID for logging (if available)
 	athleteID := "unknown"
 	if id, ok := profile["id"]; ok {
 		athleteID = fmt.Sprintf("%v", id)
 	}
-	
+
 	c.logger.Info("Successfully retrieved athlete profile from Strava",
 		"user_id", c.userID,
 		"athlete_id", athleteID,
 		"profile_fields", len(profile))
-	
+
 	return profile, nil
 }
