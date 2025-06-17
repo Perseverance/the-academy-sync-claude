@@ -184,7 +184,9 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 
 	// Step 1: Check if day is already processed
 	// TODO: Implement Google Sheets check when sheet updates are added
-	// For now, we'll skip this check since we're not updating sheets yet
+	// A day is processed if EITHER:
+	// - The "Описание на тренировката" text is bold OR
+	// - The "Разстояние" column contains '0'
 	isProcessed := false
 	if isProcessed {
 		result.Processed = false
@@ -208,7 +210,27 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 
 	result.ActivitiesFound = len(activities)
 
-	// Step 3: Aggregate activity data
+	// Step 3: Check if there's a scheduled run for this day
+	// TODO: Implement Google Sheets check to see if this day has a schedule entry
+	// For now, we'll assume there's always a schedule since we're not reading sheets yet
+	hasScheduledRun := true // This should be determined by checking the spreadsheet
+	
+	// Step 4: Determine if we should process this day
+	// Process if either:
+	// - There are activities to record
+	// - There's a scheduled run (even with no activities, we need to mark it as '0')
+	shouldProcess := result.ActivitiesFound > 0 || hasScheduledRun
+	
+	if !shouldProcess {
+		result.Processed = false
+		result.SkippedReason = "No activities and no scheduled run"
+		s.logger.Debug("No activities found and no scheduled run, skipping",
+			"user_id", config.UserID,
+			"date", dayStart.Format("2006-01-02"))
+		return result, nil
+	}
+
+	// Step 5: Aggregate activity data
 	var totalDistance float64
 	var totalTime int
 	for _, activity := range activities {
@@ -227,21 +249,31 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 		"date", dayStart.Format("2006-01-02"),
 		"activities_found", result.ActivitiesFound,
 		"total_distance_km", totalDistance/1000,
-		"total_time_minutes", totalTime/60)
+		"total_time_minutes", totalTime/60,
+		"has_scheduled_run", hasScheduledRun)
 
-	// Step 4: Apply conditional logic and update spreadsheet
+	// Step 6: Apply conditional logic and update spreadsheet
 	// TODO: Implement spreadsheet updates when that functionality is added
-	// For now, we'll just log what would happen
+	// Business logic for updating the spreadsheet:
+	// - If activities found: Update with actual distance/time
+	// - If NO activities but scheduled run: Update with '0' values
+	// - If activities but NO scheduled run: Still update with actual data
+	
 	if result.ActivitiesFound > 0 {
 		s.logger.Debug("Would update spreadsheet with activity data",
 			"user_id", config.UserID,
 			"date", dayStart.Format("2006-01-02"),
 			"distance_km", totalDistance/1000,
-			"time_minutes", totalTime/60)
-	} else {
-		s.logger.Debug("Would update spreadsheet with zero values (no activities)",
+			"time_minutes", totalTime/60,
+			"action", "UPDATE_WITH_ACTIVITY_DATA",
+			"has_scheduled_run", hasScheduledRun)
+	} else if hasScheduledRun {
+		// No activities found, but we have a scheduled run
+		s.logger.Debug("Would update spreadsheet with zero values (scheduled run but no activities)",
 			"user_id", config.UserID,
-			"date", dayStart.Format("2006-01-02"))
+			"date", dayStart.Format("2006-01-02"),
+			"action", "UPDATE_WITH_ZERO_VALUES",
+			"reason", "scheduled_run_not_completed")
 	}
 
 	result.Processed = true

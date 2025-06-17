@@ -112,7 +112,7 @@ func TestConfigService_extractSpreadsheetID(t *testing.T) {
 }
 
 func TestConfigService_sanitizeURL(t *testing.T) {
-	// Create a test logger  
+	// Create a test logger
 	testLogger := logger.New("config_service_test")
 	service := &ConfigService{
 		logger: testLogger,

@@ -71,9 +71,9 @@ type Config struct {
 // In production environments, it loads from Google Secret Manager.
 func Load() (*Config, error) {
 	env := getEnv("APP_ENV", getEnv("GO_ENV", "local"))
-	
+
 	// Debug logging to help identify environment detection issues
-	log.Printf("Debug: Environment detection - APP_ENV='%s', GO_ENV='%s', detected='%s'\n", 
+	log.Printf("Debug: Environment detection - APP_ENV='%s', GO_ENV='%s', detected='%s'\n",
 		os.Getenv("APP_ENV"), os.Getenv("GO_ENV"), env)
 	log.Printf("Debug: All environment variables that could affect this:\n")
 	log.Printf("  - APP_ENV: '%s'\n", os.Getenv("APP_ENV"))
@@ -183,7 +183,7 @@ func loadFromEnv() (*Config, error) {
 // loadFromSecretManager loads configuration from Google Secret Manager.
 func loadFromSecretManager() (*Config, error) {
 	ctx := context.Background()
-	
+
 	projectID := getEnv("GCP_PROJECT_ID", "")
 	if projectID == "" {
 		log.Printf("Error: GCP_PROJECT_ID is required for production environments with Secret Manager\n")
@@ -203,18 +203,18 @@ func loadFromSecretManager() (*Config, error) {
 
 	// Define secrets to fetch from Secret Manager
 	secrets := map[string]*string{
-		"database-url":           new(string),
-		"redis-url":              new(string),
-		"google-client-id":       new(string),
-		"google-client-secret":   new(string),
-		"strava-client-id":       new(string),
-		"strava-client-secret":   new(string),
-		"jwt-secret":             new(string),
-		"encryption-secret":      new(string),
-		"smtp-username":          new(string),
-		"smtp-password":          new(string),
-		"from-email":             new(string),
-		"database-password":      new(string),
+		"database-url":         new(string),
+		"redis-url":            new(string),
+		"google-client-id":     new(string),
+		"google-client-secret": new(string),
+		"strava-client-id":     new(string),
+		"strava-client-secret": new(string),
+		"jwt-secret":           new(string),
+		"encryption-secret":    new(string),
+		"smtp-username":        new(string),
+		"smtp-password":        new(string),
+		"from-email":           new(string),
+		"database-password":    new(string),
 	}
 
 	// Fetch each secret
@@ -537,4 +537,3 @@ func (c *Config) buildFrontendURL() {
 		// In production, FrontendURL must be explicitly configured - no fallback provided
 	}
 }
-

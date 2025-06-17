@@ -350,6 +350,7 @@ func runJobDistributor(ctx context.Context, queueClient *queue.Client, jobs chan
 		default:
 			// Try to dequeue a job
 			job, err := queueClient.DequeueJob(ctx)
+			
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					log.Info("Context cancelled, job distributor stopping")

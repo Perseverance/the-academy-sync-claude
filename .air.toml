@@ -17,7 +17,7 @@ tmp_dir = "tmp"
   # File extensions to exclude from watching
   exclude_file = []
   # Directories to exclude with their subdirectories
-  exclude_regex = ["_test.go"]
+  exclude_regex = ["_test.go", "test_.*\\.go", "debug_.*\\.go"]
   # Stop running old binary when build errors occur
   exclude_unchanged = false
   # Follow symlinks before watching
