@@ -289,9 +289,8 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 	var totalActivities int
 	var processingErrors []error
 
-	switch jobType {
-	case "manual_sync":
-		// For manual sync, process ALL time scopes to ensure data is fully up to date
+	// For manual sync, also process today's data
+	if jobType == "manual_sync" {
 		w.logger.Debug("Processing manual sync - will process today, yesterday, and 7-day lookback",
 			"user_id", userID,
 			"timezone", config.Timezone)
@@ -305,59 +304,32 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		} else {
 			totalActivities += todayResult.ActivitiesFound
 		}
-
-		// Process previous day (US025)
-		prevDayResult, err := processingService.ProcessPreviousDay(ctx, config)
-		if err != nil {
-			processingErrors = append(processingErrors, fmt.Errorf("previous day processing failed: %w", err))
-		} else if prevDayResult.Error != nil {
-			processingErrors = append(processingErrors, fmt.Errorf("previous day processing error: %w", prevDayResult.Error))
-		} else {
-			totalActivities += prevDayResult.ActivitiesFound
-		}
-
-		// Process 7-day lookback (US026 & US027)
-		lookbackResults, err := processingService.ProcessLookbackPeriod(ctx, config)
-		if err != nil {
-			processingErrors = append(processingErrors, fmt.Errorf("lookback processing failed: %w", err))
-		} else {
-			for _, lr := range lookbackResults {
-				if lr.Error == nil && lr.Processed {
-					totalActivities += lr.ActivitiesFound
-				}
-			}
-		}
-
-	case "scheduled_sync":
-		// For scheduled sync, process previous day and lookback period (not today)
+	} else {
 		w.logger.Debug("Processing scheduled sync - will process yesterday and 7-day lookback",
 			"user_id", userID,
 			"timezone", config.Timezone)
+	}
 
-		// Process previous day (US025)
-		prevDayResult, err := processingService.ProcessPreviousDay(ctx, config)
-		if err != nil {
-			processingErrors = append(processingErrors, fmt.Errorf("previous day processing failed: %w", err))
-		} else if prevDayResult.Error != nil {
-			processingErrors = append(processingErrors, fmt.Errorf("previous day processing error: %w", prevDayResult.Error))
-		} else {
-			totalActivities += prevDayResult.ActivitiesFound
-		}
+	// Process previous day (US025) - common for both sync types
+	prevDayResult, err := processingService.ProcessPreviousDay(ctx, config)
+	if err != nil {
+		processingErrors = append(processingErrors, fmt.Errorf("previous day processing failed: %w", err))
+	} else if prevDayResult.Error != nil {
+		processingErrors = append(processingErrors, fmt.Errorf("previous day processing error: %w", prevDayResult.Error))
+	} else {
+		totalActivities += prevDayResult.ActivitiesFound
+	}
 
-		// Process 7-day lookback (US026 & US027)
-		lookbackResults, err := processingService.ProcessLookbackPeriod(ctx, config)
-		if err != nil {
-			processingErrors = append(processingErrors, fmt.Errorf("lookback processing failed: %w", err))
-		} else {
-			for _, lr := range lookbackResults {
-				if lr.Error == nil && lr.Processed {
-					totalActivities += lr.ActivitiesFound
-				}
+	// Process 7-day lookback (US026 & US027) - common for both sync types
+	lookbackResults, err := processingService.ProcessLookbackPeriod(ctx, config)
+	if err != nil {
+		processingErrors = append(processingErrors, fmt.Errorf("lookback processing failed: %w", err))
+	} else {
+		for _, lr := range lookbackResults {
+			if lr.Error == nil && lr.Processed {
+				totalActivities += lr.ActivitiesFound
 			}
 		}
-
-	default:
-		processingErrors = append(processingErrors, fmt.Errorf("unknown job type: %s", jobType))
 	}
 
 	// Step 7: Handle results
