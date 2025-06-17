@@ -95,12 +95,12 @@ func (h *SyncHandler) TriggerManualSync(w http.ResponseWriter, r *http.Request) 
 	// Return 202 Accepted with simple success message
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusAccepted)
-	
+
 	response := map[string]interface{}{
-		"status": "accepted",
+		"status":  "accepted",
 		"message": "Sync request has been queued for processing",
 	}
-	
+
 	if err := json.NewEncoder(w).Encode(response); err != nil {
 		h.logger.Error("Failed to encode response",
 			"error", err,

@@ -181,11 +181,11 @@ func (r *UserRepository) UpdateUserTokens(ctx context.Context, req *UpdateUserTo
 	}
 
 	now := time.Now()
-	
+
 	// Build query based on whether we should update last login
 	var query string
 	var args []interface{}
-	
+
 	if req.UpdateLastLogin {
 		query = `
 			UPDATE users 
@@ -226,17 +226,17 @@ func (r *UserRepository) UpdateUserTokens(ctx context.Context, req *UpdateUserTo
 	if err != nil {
 		return err
 	}
-	
+
 	// Check that exactly one row was affected
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-	
+
 	if rowsAffected == 0 {
 		return sql.ErrNoRows // No user found with the given ID
 	}
-	
+
 	return nil
 }
 
@@ -247,17 +247,17 @@ func (r *UserRepository) UpdateLastLoginAt(ctx context.Context, userID int) erro
 	if err != nil {
 		return err
 	}
-	
+
 	// Check that exactly one row was affected
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
 		return err
 	}
-	
+
 	if rowsAffected == 0 {
 		return sql.ErrNoRows // No user found with the given ID
 	}
-	
+
 	return nil
 }
 
@@ -293,7 +293,7 @@ func (r *UserRepository) DecryptToken(encryptedToken []byte) (string, error) {
 	if len(encryptedToken) == 0 {
 		return "", nil // No token to decrypt
 	}
-	
+
 	return r.encryptor.Decrypt(encryptedToken)
 }
 
@@ -323,7 +323,7 @@ func (r *UserRepository) UpdateStravaConnection(ctx context.Context, userID int,
 		FROM users 
 		WHERE id = $1
 	`
-	
+
 	err = r.db.QueryRowContext(ctx, checkQuery, userID).Scan(&hasSpreadsheet)
 	if err != nil {
 		return err
@@ -333,7 +333,7 @@ func (r *UserRepository) UpdateStravaConnection(ctx context.Context, userID int,
 	var query string
 	var args []interface{}
 	now := time.Now()
-	
+
 	if hasSpreadsheet {
 		// User has all requirements: Google auth (implicit), Strava connection, and Spreadsheet
 		// Enable automation automatically
@@ -365,18 +365,18 @@ func (r *UserRepository) UpdateStravaConnection(ctx context.Context, userID int,
 	}
 
 	args = []interface{}{
-		encryptedAccessToken, 
-		encryptedRefreshToken, 
-		expiry, 
-		athleteID, 
+		encryptedAccessToken,
+		encryptedRefreshToken,
+		expiry,
+		athleteID,
 		athleteName,
 		profilePictureURL,
-		now, 
+		now,
 		userID,
 	}
 
 	_, err = r.db.ExecContext(ctx, query, args...)
-	
+
 	return err
 }
 
@@ -447,7 +447,7 @@ func (r *UserRepository) UpdateSpreadsheetID(ctx context.Context, userID int, sp
 		FROM users 
 		WHERE id = $1
 	`
-	
+
 	err := r.db.QueryRowContext(ctx, checkQuery, userID).Scan(&hasStravaConnection)
 	if err != nil {
 		return err
@@ -457,7 +457,7 @@ func (r *UserRepository) UpdateSpreadsheetID(ctx context.Context, userID int, sp
 	var query string
 	var args []interface{}
 	now := time.Now()
-	
+
 	if hasStravaConnection && spreadsheetID != "" {
 		// User has all requirements: Google auth (implicit), Strava connection, and Spreadsheet
 		// Enable automation automatically

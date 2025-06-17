@@ -52,12 +52,12 @@ func (e *ConfigError) Error() string {
 
 // Configuration error types
 const (
-	ConfigErrorInvalidURL     = "INVALID_URL"
-	ConfigErrorPermission     = "PERMISSION_ERROR"
-	ConfigErrorNotFound       = "NOT_FOUND"
-	ConfigErrorDatabase       = "DATABASE_ERROR"
-	ConfigErrorValidation     = "VALIDATION_ERROR"
-	ConfigErrorNetwork        = "NETWORK_ERROR"
+	ConfigErrorInvalidURL = "INVALID_URL"
+	ConfigErrorPermission = "PERMISSION_ERROR"
+	ConfigErrorNotFound   = "NOT_FOUND"
+	ConfigErrorDatabase   = "DATABASE_ERROR"
+	ConfigErrorValidation = "VALIDATION_ERROR"
+	ConfigErrorNetwork    = "NETWORK_ERROR"
 )
 
 // SetSpreadsheetURL validates and sets a user's Google Spreadsheet configuration
@@ -210,7 +210,7 @@ func (c *ConfigService) extractSpreadsheetID(url string) (string, error) {
 	// https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit#gid=0
 	// https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/edit
 	// https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}
-	
+
 	// Use pre-compiled regex patterns for better performance
 	for i, regex := range spreadsheetURLPatterns {
 		c.logger.Debug("Testing URL pattern",
@@ -222,7 +222,7 @@ func (c *ConfigService) extractSpreadsheetID(url string) (string, error) {
 			c.logger.Debug("Successfully extracted spreadsheet ID",
 				"spreadsheet_id", c.sanitizeSpreadsheetID(spreadsheetID),
 				"pattern_index", i)
-			
+
 			// Validate spreadsheet ID format
 			if len(spreadsheetID) < 10 || len(spreadsheetID) > 100 {
 				c.logger.Warn("Spreadsheet ID has unusual length",
@@ -249,7 +249,7 @@ func (c *ConfigService) sanitizeURL(url string) string {
 		}
 		return "https://docs.google.com/..."
 	}
-	
+
 	// For non-Google URLs, just show the domain
 	if len(url) > 50 {
 		return url[:30] + "..."
@@ -260,7 +260,7 @@ func (c *ConfigService) sanitizeURL(url string) string {
 // sanitizeSpreadsheetID masks sensitive spreadsheet ID for logging while preserving troubleshooting context
 func (c *ConfigService) sanitizeSpreadsheetID(spreadsheetID string) string {
 	length := len(spreadsheetID)
-	
+
 	// Handle edge cases for ultra-short IDs
 	if length == 0 {
 		return "[empty]"
@@ -271,12 +271,12 @@ func (c *ConfigService) sanitizeSpreadsheetID(spreadsheetID string) string {
 	if length == 2 {
 		return spreadsheetID[:1] + "*"
 	}
-	
+
 	if length <= 8 {
 		// For short IDs (3-8 chars), mask all but first 2 characters
 		return spreadsheetID[:2] + strings.Repeat("*", length-2)
 	}
-	
+
 	// For normal IDs, show first 4 and last 4 characters with asterisks in between
 	prefix := spreadsheetID[:4]
 	suffix := spreadsheetID[length-4:]

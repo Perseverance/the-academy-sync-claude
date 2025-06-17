@@ -26,12 +26,12 @@ const (
 	argon2Threads = 4
 	// Key length: 32 bytes for AES-256
 	argon2KeyLen = 32
-	
+
 	// Static versioned salt for consistent key derivation
 	// In production, this could be environment-specific or derived from app version
 	// Using a versioned approach allows for future salt rotation if needed
 	saltVersion = "v1"
-	staticSalt = "academy-sync-encryption-salt-" + saltVersion + "-2025"
+	staticSalt  = "academy-sync-encryption-salt-" + saltVersion + "-2025"
 )
 
 // NewEncryptionService creates a new encryption service with a securely derived key
@@ -46,7 +46,7 @@ func NewEncryptionService(secret string) *EncryptionService {
 		argon2Threads,
 		argon2KeyLen,
 	)
-	
+
 	return &EncryptionService{
 		key: key,
 	}
