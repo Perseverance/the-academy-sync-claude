@@ -12,6 +12,7 @@ import (
 	"google.golang.org/api/option"
 	"google.golang.org/api/sheets/v4"
 
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/strava"
 )
@@ -28,15 +29,15 @@ type SpreadsheetInfo struct {
 
 // ActivityRow represents a single row of activity data for writing to sheets
 type ActivityRow struct {
-	Date           string  `json:"date"`
-	Name           string  `json:"name"`
-	Type           string  `json:"type"`
-	Distance       string  `json:"distance"`        // formatted with units
-	Duration       string  `json:"duration"`        // formatted as HH:MM:SS
-	Pace           string  `json:"pace"`            // formatted pace/speed
-	ElevationGain  string  `json:"elevation_gain"`  // formatted with units
-	HeartRate      string  `json:"heart_rate"`      // formatted average HR
-	Kudos          int     `json:"kudos"`
+	Date          string `json:"date"`
+	Name          string `json:"name"`
+	Type          string `json:"type"`
+	Distance      string `json:"distance"`       // formatted with units
+	Duration      string `json:"duration"`       // formatted as HH:MM:SS
+	Pace          string `json:"pace"`           // formatted pace/speed
+	ElevationGain string `json:"elevation_gain"` // formatted with units
+	HeartRate     string `json:"heart_rate"`     // formatted average HR
+	Kudos         int    `json:"kudos"`
 }
 
 // SheetsClient provides Google Sheets API access with automatic token lifecycle management
@@ -44,18 +45,21 @@ type ActivityRow struct {
 type SheetsClient struct {
 	userID       int
 	refreshToken string
-	
+
 	// In-memory token cache (per-job lifecycle)
-	mu           sync.RWMutex
-	accessToken  string
-	tokenExpiry  time.Time
-	
+	mu          sync.RWMutex
+	accessToken string
+	tokenExpiry time.Time
+
 	// Google Sheets API service (recreated on token refresh)
 	sheetsService *sheets.Service
-	
+
 	// OAuth configuration for token refresh
 	oauthConfig *oauth2.Config
-	
+
+	// Token persistence
+	tokenPersister auth.TokenPersister
+
 	// Logger for debugging external API interactions
 	logger *logger.Logger
 }
@@ -85,11 +89,11 @@ func NewSheetsClient(userID int, refreshToken string, logger *logger.Logger) *Sh
 func (c *SheetsClient) SetOAuthCredentials(clientID, clientSecret, redirectURL string) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.oauthConfig.ClientID = clientID
 	c.oauthConfig.ClientSecret = clientSecret
 	c.oauthConfig.RedirectURL = redirectURL
-	
+
 	c.logger.Debug("OAuth credentials configured for Google Sheets client",
 		"client_id", clientID,
 		"has_client_secret", clientSecret != "",
@@ -101,14 +105,26 @@ func (c *SheetsClient) SetOAuthCredentials(clientID, clientSecret, redirectURL s
 func (c *SheetsClient) SetInitialTokens(accessToken string, expiry time.Time) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.accessToken = accessToken
 	c.tokenExpiry = expiry
-	
+
 	c.logger.Debug("Initial access token set for Google Sheets client",
 		"has_access_token", accessToken != "",
 		"token_expiry", expiry,
 		"token_valid", time.Now().Before(expiry))
+}
+
+// SetTokenPersister sets the token persister for automatic token persistence
+// This allows the client to save refreshed tokens back to the database
+func (c *SheetsClient) SetTokenPersister(persister auth.TokenPersister) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	c.tokenPersister = persister
+
+	c.logger.Debug("Token persister configured for Google Sheets client",
+		"has_persister", persister != nil)
 }
 
 // ensureValidToken implements the "check-then-fetch" token management logic
@@ -116,18 +132,18 @@ func (c *SheetsClient) SetInitialTokens(accessToken string, expiry time.Time) {
 func (c *SheetsClient) ensureValidToken(ctx context.Context) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	
+
 	c.logger.Debug("Checking token validity before Google Sheets API call",
 		"has_access_token", c.accessToken != "",
 		"token_expiry", c.tokenExpiry,
 		"time_until_expiry_minutes", time.Until(c.tokenExpiry).Minutes())
-	
+
 	// Check if current access token is valid (with 5-minute buffer)
 	if c.accessToken != "" && time.Now().Add(5*time.Minute).Before(c.tokenExpiry) {
 		c.logger.Debug("Using existing valid access token for Google Sheets API call",
 			"token_expiry", c.tokenExpiry,
 			"minutes_until_expiry", time.Until(c.tokenExpiry).Minutes())
-		
+
 		// Ensure we have a sheets service with current token
 		if c.sheetsService == nil {
 			if err := c.createSheetsService(ctx); err != nil {
@@ -139,41 +155,41 @@ func (c *SheetsClient) ensureValidToken(ctx context.Context) error {
 		}
 		return nil
 	}
-	
+
 	// Need to refresh token
 	c.logger.Debug("Access token invalid or expired, refreshing via Google OAuth",
 		"current_token_expired", c.accessToken != "" && time.Now().After(c.tokenExpiry),
 		"current_token_missing", c.accessToken == "",
 		"refresh_token_available", c.refreshToken != "")
-	
+
 	if c.refreshToken == "" {
 		c.logger.Error("No refresh token available for Google token refresh",
 			"user_id", c.userID)
 		return ErrReauthRequired
 	}
-	
+
 	// Call Google OAuth token endpoint to refresh access token
 	startTime := time.Now()
 	c.logger.Debug("Making token refresh request to Google OAuth endpoint",
 		"endpoint", c.oauthConfig.Endpoint.TokenURL,
 		"user_id", c.userID)
-	
+
 	token := &oauth2.Token{
 		RefreshToken: c.refreshToken,
 	}
-	
+
 	tokenSource := c.oauthConfig.TokenSource(ctx, token)
 	newToken, err := tokenSource.Token()
-	
+
 	requestDuration := time.Since(startTime)
-	
+
 	if err != nil {
 		c.logger.Error("Failed to refresh Google access token via OAuth endpoint",
 			"error", err,
 			"user_id", c.userID,
 			"request_duration_ms", requestDuration.Milliseconds(),
 			"endpoint", c.oauthConfig.Endpoint.TokenURL)
-		
+
 		// Check if this is an invalid grant error (requires re-authorization)
 		if IsReauthRequired(err) {
 			c.logger.Warn("Google refresh token is invalid, user re-authorization required",
@@ -185,18 +201,25 @@ func (c *SheetsClient) ensureValidToken(ctx context.Context) error {
 				Cause:   err,
 			}
 		}
-		
+
 		return &NetworkError{
 			Operation: "token_refresh",
 			Message:   "Failed to refresh Google access token",
 			Cause:     err,
 		}
 	}
-	
+
 	// Update cached token
 	c.accessToken = newToken.AccessToken
 	c.tokenExpiry = newToken.Expiry
-	
+
+	// Update refresh token if provided (Google may rotate refresh tokens)
+	if newToken.RefreshToken != "" && newToken.RefreshToken != c.refreshToken {
+		c.logger.Debug("Google provided new refresh token during token refresh",
+			"user_id", c.userID)
+		c.refreshToken = newToken.RefreshToken
+	}
+
 	// Create new Sheets service with refreshed token
 	if err := c.createSheetsService(ctx); err != nil {
 		c.logger.Error("Failed to create Sheets service with refreshed token",
@@ -208,13 +231,30 @@ func (c *SheetsClient) ensureValidToken(ctx context.Context) error {
 			Cause:     err,
 		}
 	}
-	
+
 	c.logger.Info("Successfully refreshed Google access token and created Sheets service",
 		"user_id", c.userID,
 		"new_token_expiry", newToken.Expiry,
 		"token_valid_hours", time.Until(newToken.Expiry).Hours(),
 		"refresh_duration_ms", requestDuration.Milliseconds())
-	
+
+	// Persist the new tokens if persister is available
+	if c.tokenPersister != nil {
+		c.logger.Debug("Persisting refreshed Google tokens to database",
+			"user_id", c.userID)
+
+		if err := c.tokenPersister.UpdateGoogleTokens(ctx, c.userID, c.accessToken, c.refreshToken, c.tokenExpiry); err != nil {
+			c.logger.Error("Failed to persist refreshed Google tokens",
+				"error", err,
+				"user_id", c.userID)
+			// Note: We don't return error here as the token refresh itself succeeded
+			// The API call can proceed with the refreshed token even if persistence fails
+		} else {
+			c.logger.Debug("Successfully persisted refreshed Google tokens",
+				"user_id", c.userID)
+		}
+	}
+
 	return nil
 }
 
@@ -222,16 +262,16 @@ func (c *SheetsClient) ensureValidToken(ctx context.Context) error {
 func (c *SheetsClient) createSheetsService(ctx context.Context) error {
 	c.logger.Debug("Creating Google Sheets API service",
 		"user_id", c.userID)
-	
+
 	// Create token source with current access token
 	token := &oauth2.Token{
 		AccessToken:  c.accessToken,
 		RefreshToken: c.refreshToken,
 		Expiry:       c.tokenExpiry,
 	}
-	
+
 	tokenSource := c.oauthConfig.TokenSource(ctx, token)
-	
+
 	// Create Sheets service with authenticated client
 	sheetsService, err := sheets.NewService(ctx, option.WithTokenSource(tokenSource))
 	if err != nil {
@@ -244,12 +284,12 @@ func (c *SheetsClient) createSheetsService(ctx context.Context) error {
 			Cause:     err,
 		}
 	}
-	
+
 	c.sheetsService = sheetsService
-	
+
 	c.logger.Debug("Successfully created Google Sheets API service",
 		"user_id", c.userID)
-	
+
 	return nil
 }
 
@@ -260,7 +300,7 @@ func (c *SheetsClient) ValidateAccess(ctx context.Context, spreadsheetID string)
 	c.logger.Debug("Starting Google Sheets access validation",
 		"user_id", c.userID,
 		"spreadsheet_id", spreadsheetID)
-	
+
 	// Ensure we have a valid token and service
 	if err := c.ensureValidToken(ctx); err != nil {
 		c.logger.Error("Failed to ensure valid token for access validation",
@@ -269,23 +309,23 @@ func (c *SheetsClient) ValidateAccess(ctx context.Context, spreadsheetID string)
 			"spreadsheet_id", spreadsheetID)
 		return err
 	}
-	
+
 	// Test read access by getting spreadsheet metadata
 	c.logger.Debug("Testing read access to Google Spreadsheet",
 		"spreadsheet_id", spreadsheetID,
 		"user_id", c.userID)
-	
+
 	spreadsheet, err := c.sheetsService.Spreadsheets.Get(spreadsheetID).Context(ctx).Do()
 	if err != nil {
 		return c.handleSheetsAPIError(err, "read access validation", spreadsheetID)
 	}
-	
+
 	c.logger.Debug("Successfully retrieved spreadsheet metadata",
 		"spreadsheet_id", spreadsheetID,
 		"spreadsheet_title", spreadsheet.Properties.Title,
 		"sheet_count", len(spreadsheet.Sheets),
 		"user_id", c.userID)
-	
+
 	// Check if the required sheet "Тренировъчен План" exists
 	targetSheetName := "Тренировъчен План"
 	hasTargetSheet := false
@@ -299,7 +339,7 @@ func (c *SheetsClient) ValidateAccess(ctx context.Context, spreadsheetID string)
 			break
 		}
 	}
-	
+
 	if !hasTargetSheet {
 		c.logger.Error("Required sheet not found in spreadsheet",
 			"required_sheet", targetSheetName,
@@ -314,26 +354,26 @@ func (c *SheetsClient) ValidateAccess(ctx context.Context, spreadsheetID string)
 			"user_id", c.userID)
 		return fmt.Errorf("required sheet '%s' not found in spreadsheet", targetSheetName)
 	}
-	
+
 	// Test write access by attempting to read a range from the target sheet
 	testRange := fmt.Sprintf("%s!A1:A1", targetSheetName)
 	c.logger.Debug("Testing write access permissions",
 		"spreadsheet_id", spreadsheetID,
 		"test_range", testRange,
 		"user_id", c.userID)
-	
+
 	_, err = c.sheetsService.Spreadsheets.Values.Get(spreadsheetID, testRange).Context(ctx).Do()
 	if err != nil {
 		return c.handleSheetsAPIError(err, "write access validation", spreadsheetID)
 	}
-	
+
 	duration := time.Since(startTime)
 	c.logger.Info("Google Sheets access validation successful",
 		"user_id", c.userID,
 		"spreadsheet_id", spreadsheetID,
 		"spreadsheet_title", spreadsheet.Properties.Title,
 		"validation_duration_ms", duration.Milliseconds())
-	
+
 	return nil
 }
 
@@ -342,12 +382,12 @@ func (c *SheetsClient) GetSpreadsheetInfo(ctx context.Context, spreadsheetID str
 	c.logger.Debug("Retrieving Google Spreadsheet metadata",
 		"user_id", c.userID,
 		"spreadsheet_id", spreadsheetID)
-	
+
 	// Ensure we have a valid token and service
 	if err := c.ensureValidToken(ctx); err != nil {
 		return nil, err
 	}
-	
+
 	spreadsheet, err := c.sheetsService.Spreadsheets.Get(spreadsheetID).Context(ctx).Do()
 	if err != nil {
 		c.logger.Error("Failed to retrieve spreadsheet metadata",
@@ -356,7 +396,7 @@ func (c *SheetsClient) GetSpreadsheetInfo(ctx context.Context, spreadsheetID str
 			"spreadsheet_id", spreadsheetID)
 		return nil, c.handleSheetsAPIError(err, "get spreadsheet info", spreadsheetID)
 	}
-	
+
 	info := &SpreadsheetInfo{
 		ID:         spreadsheet.SpreadsheetId,
 		Title:      spreadsheet.Properties.Title,
@@ -365,14 +405,14 @@ func (c *SheetsClient) GetSpreadsheetInfo(ctx context.Context, spreadsheetID str
 		CreatedAt:  time.Now(), // Current time as proxy since Google doesn't provide creation time
 		UpdatedAt:  time.Now(), // Current time as proxy
 	}
-	
+
 	c.logger.Info("Successfully retrieved Google Spreadsheet metadata",
 		"user_id", c.userID,
 		"spreadsheet_id", spreadsheetID,
 		"title", info.Title,
 		"sheet_count", info.SheetCount,
 		"url", info.URL)
-	
+
 	return info, nil
 }
 
@@ -384,42 +424,42 @@ func (c *SheetsClient) WriteActivities(ctx context.Context, spreadsheetID string
 		"user_id", c.userID,
 		"spreadsheet_id", spreadsheetID,
 		"activity_count", len(activities))
-	
+
 	if len(activities) == 0 {
 		c.logger.Debug("No activities to write to spreadsheet",
 			"user_id", c.userID,
 			"spreadsheet_id", spreadsheetID)
 		return nil
 	}
-	
+
 	// Ensure we have a valid token and service
 	if err := c.ensureValidToken(ctx); err != nil {
 		return err
 	}
-	
+
 	// Convert activities to spreadsheet rows
 	rows := c.convertActivitiesToRows(activities)
-	
+
 	// Prepare the range for writing (assume we're writing to Sheet1, starting from A2)
 	writeRange := "Sheet1!A2:I" + fmt.Sprintf("%d", len(rows)+1)
-	
+
 	c.logger.Debug("Preparing to write activity data to spreadsheet",
 		"user_id", c.userID,
 		"spreadsheet_id", spreadsheetID,
 		"write_range", writeRange,
 		"row_count", len(rows))
-	
+
 	// Create the value range
 	valueRange := &sheets.ValueRange{
 		Values: rows,
 	}
-	
+
 	// Write to spreadsheet
 	_, err := c.sheetsService.Spreadsheets.Values.Update(spreadsheetID, writeRange, valueRange).
 		ValueInputOption("USER_ENTERED").
 		Context(ctx).
 		Do()
-	
+
 	if err != nil {
 		c.logger.Error("Failed to write activities to Google Spreadsheet",
 			"error", err,
@@ -428,7 +468,7 @@ func (c *SheetsClient) WriteActivities(ctx context.Context, spreadsheetID string
 			"activity_count", len(activities))
 		return c.handleSheetsAPIError(err, "write activities", spreadsheetID)
 	}
-	
+
 	duration := time.Since(startTime)
 	c.logger.Info("Successfully wrote activities to Google Spreadsheet",
 		"user_id", c.userID,
@@ -436,35 +476,35 @@ func (c *SheetsClient) WriteActivities(ctx context.Context, spreadsheetID string
 		"activity_count", len(activities),
 		"write_range", writeRange,
 		"write_duration_ms", duration.Milliseconds())
-	
+
 	return nil
 }
 
 // convertActivitiesToRows converts Strava activities to spreadsheet row format
 func (c *SheetsClient) convertActivitiesToRows(activities []strava.Activity) [][]interface{} {
 	rows := make([][]interface{}, len(activities))
-	
+
 	for i, activity := range activities {
 		// Format duration as HH:MM:SS
 		duration := time.Duration(activity.MovingTime) * time.Second
-		durationStr := fmt.Sprintf("%02d:%02d:%02d", 
-			int(duration.Hours()), 
-			int(duration.Minutes())%60, 
+		durationStr := fmt.Sprintf("%02d:%02d:%02d",
+			int(duration.Hours()),
+			int(duration.Minutes())%60,
 			int(duration.Seconds())%60)
-		
+
 		// Format distance in kilometers
 		distanceKm := activity.Distance / 1000
 		distanceStr := fmt.Sprintf("%.2f km", distanceKm)
-		
+
 		// Format elevation gain in meters
 		elevationStr := fmt.Sprintf("%.0f m", activity.TotalElevationGain)
-		
+
 		// Format average heart rate
 		heartRateStr := ""
 		if activity.AverageHeartrate > 0 {
 			heartRateStr = fmt.Sprintf("%.0f bpm", activity.AverageHeartrate)
 		}
-		
+
 		// Calculate pace (for running activities)
 		paceStr := ""
 		if activity.Type == "Run" && activity.MovingTime > 0 && activity.Distance > 0 {
@@ -473,7 +513,7 @@ func (c *SheetsClient) convertActivitiesToRows(activities []strava.Activity) [][
 			paceSeconds := int(pacePerKm) % 60
 			paceStr = fmt.Sprintf("%d:%02d /km", paceMinutes, paceSeconds)
 		}
-		
+
 		rows[i] = []interface{}{
 			activity.StartDateLocal.Format("2006-01-02"),
 			activity.Name,
@@ -486,11 +526,11 @@ func (c *SheetsClient) convertActivitiesToRows(activities []strava.Activity) [][
 			activity.Kudos,
 		}
 	}
-	
+
 	c.logger.Debug("Converted activities to spreadsheet rows",
 		"activity_count", len(activities),
 		"row_count", len(rows))
-	
+
 	return rows
 }
 
@@ -501,9 +541,9 @@ func (c *SheetsClient) handleSheetsAPIError(err error, operation, spreadsheetID 
 		"operation", operation,
 		"user_id", c.userID,
 		"spreadsheet_id", spreadsheetID)
-	
+
 	errorString := err.Error()
-	
+
 	// Parse common Google API error patterns
 	switch {
 	case strings.Contains(errorString, "403") || strings.Contains(errorString, "Forbidden"):

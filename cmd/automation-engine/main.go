@@ -144,9 +144,13 @@ func main() {
 	userRepository := database.NewUserRepository(db, encryptionService)
 	configService := automation.NewConfigService(userRepository, log)
 
+	// Initialize token persister for automatic token persistence
+	tokenPersister := database.NewTokenPersister(db, encryptionService, log)
+
 	// Initialize processing worker
 	worker := processing.NewWorker(
 		configService,
+		tokenPersister,
 		cfg.StravaClientID,
 		cfg.StravaClientSecret,
 		cfg.GoogleClientID,
@@ -443,4 +447,3 @@ func runTestMode(worker *processing.Worker, log *logger.Logger) {
 		time.Sleep(60 * time.Second) // Process every minute for testing
 	}
 }
-
