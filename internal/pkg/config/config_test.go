@@ -32,18 +32,18 @@ func TestLoadFromEnv(t *testing.T) {
 
 	// Set test environment variables
 	testValues := map[string]string{
-		"APP_ENV":             "local",
-		"PORT":                "9090",
-		"POSTGRES_DB":         "test_db",
-		"POSTGRES_USER":       "test_user",
-		"POSTGRES_PASSWORD":   "test_pass",
-		"POSTGRES_HOST":       "test_host",
-		"POSTGRES_PORT":       "5432",
-		"REDIS_HOST":          "redis_host",
-		"REDIS_PORT":          "6379",
-		"GOOGLE_CLIENT_ID":    "test_google_id",
+		"APP_ENV":              "local",
+		"PORT":                 "9090",
+		"POSTGRES_DB":          "test_db",
+		"POSTGRES_USER":        "test_user",
+		"POSTGRES_PASSWORD":    "test_pass",
+		"POSTGRES_HOST":        "test_host",
+		"POSTGRES_PORT":        "5432",
+		"REDIS_HOST":           "redis_host",
+		"REDIS_PORT":           "6379",
+		"GOOGLE_CLIENT_ID":     "test_google_id",
 		"GOOGLE_CLIENT_SECRET": "test_google_secret",
-		"JWT_SECRET":          "test_jwt_secret",
+		"JWT_SECRET":           "test_jwt_secret",
 	}
 
 	for key, value := range testValues {
@@ -148,9 +148,9 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "valid production config",
 			config: Config{
-				Environment: "production",
-				Port:        "8080",
-				JWTSecret:   "secret",
+				Environment:      "production",
+				Port:             "8080",
+				JWTSecret:        "secret",
 				EncryptionSecret: "this-is-a-32-character-encryption-secret-key",
 			},
 			expectError: false,
@@ -193,8 +193,8 @@ func TestValidateConfig(t *testing.T) {
 		{
 			name: "encryption secret too short",
 			config: Config{
-				Environment: "local",
-				Port:        "8080",
+				Environment:      "local",
+				Port:             "8080",
 				EncryptionSecret: "short",
 			},
 			expectError: true,
@@ -214,15 +214,15 @@ func TestValidateConfig(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			err := tt.config.validate()
-			
+
 			if tt.expectError && err == nil {
 				t.Errorf("Expected validation error but got none")
 			}
-			
+
 			if !tt.expectError && err != nil {
 				t.Errorf("Expected no validation error but got: %v", err)
 			}
-			
+
 			if tt.expectError && err != nil && tt.errorMsg != "" {
 				if !strings.Contains(err.Error(), tt.errorMsg) {
 					t.Errorf("Expected error message to contain '%s', got '%s'", tt.errorMsg, err.Error())
@@ -494,4 +494,3 @@ func TestLoadFromSecretManagerFallback(t *testing.T) {
 		t.Errorf("Expected JWTSecret fallback to work, got '%s'", config.JWTSecret)
 	}
 }
-

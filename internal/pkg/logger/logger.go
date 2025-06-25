@@ -67,7 +67,7 @@ func New(serviceName string) *Logger {
 // Returns slog.LevelInfo as default for invalid or empty input.
 func parseLogLevel(levelStr string) slog.Level {
 	levelStr = strings.ToUpper(strings.TrimSpace(levelStr))
-	
+
 	switch LogLevel(levelStr) {
 	case LevelDebug:
 		return slog.LevelDebug

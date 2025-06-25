@@ -15,13 +15,13 @@ import (
 var (
 	// ErrUserNotFound is returned when the user does not exist
 	ErrUserNotFound = errors.New("user not found")
-	
+
 	// ErrStravaConnectionRequired is returned when manual sync is attempted without Strava connection
 	ErrStravaConnectionRequired = errors.New("strava connection required for manual sync")
-	
+
 	// ErrSpreadsheetRequired is returned when manual sync is attempted without spreadsheet configuration
 	ErrSpreadsheetRequired = errors.New("spreadsheet configuration required for manual sync")
-	
+
 	// ErrSyncAlreadyInProgress is returned when a sync is already processing for the user
 	ErrSyncAlreadyInProgress = errors.New("sync already in progress for this user")
 )
@@ -49,7 +49,7 @@ func NewSyncService(userRepo UserRepository, queueClient *queue.Client, logger *
 	if logger == nil {
 		panic("logger is required for sync service")
 	}
-	
+
 	return &SyncService{
 		userRepo:    userRepo,
 		queueClient: queueClient,
@@ -120,8 +120,8 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) error {
 
 	// Step 5: Create job data
 	jobData := map[string]interface{}{
-		"trigger_type": "manual",
-		"email":        user.Email,
+		"trigger_type":   "manual",
+		"email":          user.Email,
 		"spreadsheet_id": *user.SpreadsheetID,
 	}
 
@@ -138,7 +138,7 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) error {
 				"error", releaseErr,
 				"user_id", userID)
 		}
-		
+
 		s.logger.Error("Failed to enqueue manual sync job",
 			"error", err,
 			"user_id", userID)

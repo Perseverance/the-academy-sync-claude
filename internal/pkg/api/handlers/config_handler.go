@@ -46,7 +46,7 @@ type ErrorResponse struct {
 func (h *ConfigHandler) SetSpreadsheet(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	clientIP := middleware.GetClientIP(r)
-	
+
 	h.logger.Info("SetSpreadsheet API request received",
 		"user_id", userID,
 		"has_user_id", ok,
@@ -139,7 +139,7 @@ func (h *ConfigHandler) SetSpreadsheet(w http.ResponseWriter, r *http.Request) {
 func (h *ConfigHandler) ClearSpreadsheet(w http.ResponseWriter, r *http.Request) {
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	clientIP := middleware.GetClientIP(r)
-	
+
 	h.logger.Info("ClearSpreadsheet API request received",
 		"user_id", userID,
 		"has_user_id", ok,

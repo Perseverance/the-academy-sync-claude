@@ -66,7 +66,7 @@ func generateSecureState() (string, error) {
 	if _, err := rand.Read(randomBytes); err != nil {
 		return "", fmt.Errorf("failed to generate secure random state: %w", err)
 	}
-	
+
 	// Encode as base64 URL-safe string with "oauth-" prefix for identification
 	return "oauth-" + base64.URLEncoding.EncodeToString(randomBytes), nil
 }
@@ -74,10 +74,10 @@ func generateSecureState() (string, error) {
 // GoogleAuthURL generates and returns the Google OAuth authorization URL
 func (h *AuthHandler) GoogleAuthURL(w http.ResponseWriter, r *http.Request) {
 	clientIP := middleware.GetClientIP(r)
-	h.logger.Debug("Generating Google OAuth authorization URL", 
+	h.logger.Debug("Generating Google OAuth authorization URL",
 		"client_ip", clientIP,
 		"user_agent", r.Header.Get("User-Agent"))
-	
+
 	// Generate a cryptographically secure state parameter for CSRF protection
 	state, err := generateSecureState()
 	if err != nil {
@@ -85,7 +85,7 @@ func (h *AuthHandler) GoogleAuthURL(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to generate secure state", http.StatusInternalServerError)
 		return
 	}
-	
+
 	// Store state in session cookie for validation
 	domain, sameSite, secure := h.getCookieConfig()
 	http.SetCookie(w, &http.Cookie{
@@ -100,8 +100,8 @@ func (h *AuthHandler) GoogleAuthURL(w http.ResponseWriter, r *http.Request) {
 	})
 
 	authURL := h.oauthService.GetAuthURL(state)
-	
-	h.logger.Debug("Generated Google OAuth URL", 
+
+	h.logger.Debug("Generated Google OAuth URL",
 		"state_length", len(state),
 		"cookie_domain", domain,
 		"cookie_secure", secure)
@@ -116,17 +116,17 @@ func (h *AuthHandler) GoogleAuthURL(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to encode response", http.StatusInternalServerError)
 		return
 	}
-	
+
 	h.logger.Info("Google OAuth URL generated successfully")
 }
 
 // GoogleCallback handles the OAuth callback from Google
 func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	clientIP := middleware.GetClientIP(r)
-	h.logger.Debug("Handling Google OAuth callback", 
+	h.logger.Debug("Handling Google OAuth callback",
 		"client_ip", clientIP,
 		"user_agent", r.Header.Get("User-Agent"))
-	
+
 	// Validate state parameter exists
 	stateParam := r.URL.Query().Get("state")
 	if stateParam == "" {
@@ -147,7 +147,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		}
 		// In development, allow fallback validation for direct callback testing
 		if !strings.HasPrefix(stateParam, "oauth-") {
-			h.logger.Warn("OAuth callback invalid state parameter format in development", 
+			h.logger.Warn("OAuth callback invalid state parameter format in development",
 				"state_length", len(stateParam),
 				"has_oauth_prefix", false)
 			http.Error(w, "Invalid state parameter format", http.StatusBadRequest)
@@ -157,7 +157,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	} else {
 		// Cookie exists, must match exactly
 		if stateCookie.Value != stateParam {
-			h.logger.Warn("OAuth state parameter mismatch - CSRF protection failed", 
+			h.logger.Warn("OAuth state parameter mismatch - CSRF protection failed",
 				"client_ip", clientIP,
 				"cookie_state_length", len(stateCookie.Value),
 				"param_state_length", len(stateParam),
@@ -190,7 +190,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Missing authorization code", http.StatusBadRequest)
 		return
 	}
-	
+
 	h.logger.Debug("Exchanging OAuth authorization code for token", "code_length", len(code))
 
 	// Exchange code for token
@@ -200,7 +200,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to exchange code for token", http.StatusInternalServerError)
 		return
 	}
-	
+
 	h.logger.Debug("Successfully exchanged OAuth code for token", "token_type", token.TokenType, "expires_in", token.Expiry.Sub(time.Now()).String())
 
 	// Get user info from Google
@@ -210,7 +210,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to get user info", http.StatusInternalServerError)
 		return
 	}
-	
+
 	h.logger.Debug("Retrieved user info from Google", "user_id", userInfo.ID)
 
 	// Check if user already exists
@@ -272,8 +272,8 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 
 	// Redirect to frontend dashboard
 	dashboardURL := h.frontendURL + "/dashboard"
-	h.logger.Info("OAuth callback successful, redirecting to dashboard", 
-		"user_id", user.ID, 
+	h.logger.Info("OAuth callback successful, redirecting to dashboard",
+		"user_id", user.ID,
 		"dashboard_url", dashboardURL,
 		"client_ip", clientIP)
 	http.Redirect(w, r, dashboardURL, http.StatusTemporaryRedirect)
@@ -284,7 +284,7 @@ func (h *AuthHandler) createUserSession(w http.ResponseWriter, r *http.Request, 
 	// Create session in database
 	userAgent := r.Header.Get("User-Agent")
 	ipAddress := middleware.GetClientIP(r)
-	
+
 	// Create session record first to get the actual session ID
 	sessionReq := &database.CreateSessionRequest{
 		UserID:    user.ID,
@@ -333,17 +333,17 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	sessionID, hasSession := middleware.GetSessionIDFromContext(r.Context())
 	userID, ok := middleware.GetUserIDFromContext(r.Context())
 	clientIP := middleware.GetClientIP(r)
-	
-	h.logger.Debug("GetCurrentUser API request", 
+
+	h.logger.Debug("GetCurrentUser API request",
 		"user_id", userID,
 		"has_user_id", ok,
 		"session_id", sessionID,
 		"has_session", hasSession,
 		"client_ip", clientIP,
 		"user_agent", r.Header.Get("User-Agent"))
-	
+
 	if !ok {
-		h.logger.Warn("GetCurrentUser called without valid user context", 
+		h.logger.Warn("GetCurrentUser called without valid user context",
 			"client_ip", clientIP)
 		http.Error(w, "User not found in context", http.StatusUnauthorized)
 		return
@@ -351,8 +351,8 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 
 	user, err := h.userRepository.GetUserByID(r.Context(), userID)
 	if err != nil {
-		h.logger.Error("Failed to fetch user from database", 
-			"error", err, 
+		h.logger.Error("Failed to fetch user from database",
+			"error", err,
 			"user_id", userID,
 			"client_ip", clientIP)
 		http.Error(w, "Failed to get user", http.StatusInternalServerError)
@@ -360,7 +360,7 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if user == nil {
-		h.logger.Warn("User not found in database", 
+		h.logger.Warn("User not found in database",
 			"user_id", userID,
 			"client_ip", clientIP)
 		http.Error(w, "User not found", http.StatusNotFound)
@@ -369,14 +369,14 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 
 	// Return public user data with dashboard additions (no sensitive tokens)
 	publicUser := user.ToPublicUser()
-	
+
 	// Create dashboard response with empty activity logs (UI uses mocked data for now)
 	dashboardResponse := &database.DashboardUserResponse{
 		PublicUser:         publicUser,
 		RecentActivityLogs: []database.ActivityLog{}, // Empty for now, will be populated in future stories
 	}
-	
-	h.logger.Debug("Returning user information", 
+
+	h.logger.Debug("Returning user information",
 		"user_id", user.ID,
 		"has_strava_connection", publicUser.HasStravaConnection,
 		"has_sheets_connection", publicUser.HasSheetsConnection,
@@ -385,15 +385,15 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(dashboardResponse); err != nil {
-		h.logger.Error("Failed to encode user data response", 
-			"error", err, 
+		h.logger.Error("Failed to encode user data response",
+			"error", err,
 			"user_id", user.ID,
 			"client_ip", clientIP)
 		http.Error(w, "Failed to encode user data", http.StatusInternalServerError)
 		return
 	}
-	
-	h.logger.Info("GetCurrentUser request completed successfully", 
+
+	h.logger.Info("GetCurrentUser request completed successfully",
 		"user_id", user.ID)
 }
 
@@ -402,19 +402,19 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	userID, hasUserID := middleware.GetUserIDFromContext(r.Context())
 	sessionID, ok := middleware.GetSessionIDFromContext(r.Context())
 	clientIP := middleware.GetClientIP(r)
-	
-	h.logger.Info("User logout initiated", 
-		"user_id", userID, 
+
+	h.logger.Info("User logout initiated",
+		"user_id", userID,
 		"has_user_id", hasUserID,
 		"session_id", sessionID,
 		"has_session", ok,
 		"client_ip", clientIP)
-	
+
 	if ok {
 		// Deactivate session in database
 		if err := h.sessionRepository.DeactivateSession(r.Context(), sessionID); err != nil {
-			h.logger.Error("Failed to deactivate session during logout", 
-				"error", err, 
+			h.logger.Error("Failed to deactivate session during logout",
+				"error", err,
 				"session_id", sessionID,
 				"user_id", userID)
 			// Continue with clearing the cookie anyway
@@ -450,14 +450,14 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 // RefreshToken refreshes the user's JWT token
 func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	clientIP := middleware.GetClientIP(r)
-	h.logger.Debug("RefreshToken request initiated", 
+	h.logger.Debug("RefreshToken request initiated",
 		"client_ip", clientIP,
 		"user_agent", r.Header.Get("User-Agent"))
-	
+
 	// Get current JWT token from cookie
 	cookie, err := r.Cookie("session_token")
 	if err != nil {
-		h.logger.Warn("RefreshToken request missing session token cookie", 
+		h.logger.Warn("RefreshToken request missing session token cookie",
 			"cookie_error", err.Error(),
 			"client_ip", clientIP)
 		http.Error(w, "No session token", http.StatusUnauthorized)
@@ -467,21 +467,21 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// Validate current token to get session ID
 	claims, err := h.jwtService.ValidateToken(cookie.Value)
 	if err != nil {
-		h.logger.Warn("RefreshToken request with invalid JWT token", 
+		h.logger.Warn("RefreshToken request with invalid JWT token",
 			"validation_error", err.Error(),
 			"client_ip", clientIP)
 		http.Error(w, "Invalid session token", http.StatusUnauthorized)
 		return
 	}
-	
-	h.logger.Debug("JWT token validated successfully", 
+
+	h.logger.Debug("JWT token validated successfully",
 		"user_id", claims.UserID,
 		"session_id", claims.SessionID)
 
 	// Check if session is still active
 	session, err := h.sessionRepository.GetSessionByID(r.Context(), claims.SessionID)
 	if err != nil || session == nil || !session.IsActive {
-		h.logger.Warn("RefreshToken request for inactive or revoked session", 
+		h.logger.Warn("RefreshToken request for inactive or revoked session",
 			"session_id", claims.SessionID,
 			"user_id", claims.UserID,
 			"session_found", session != nil,
@@ -495,7 +495,7 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	// Generate new token
 	newToken, err := h.jwtService.RefreshToken(cookie.Value)
 	if err != nil {
-		h.logger.Error("Failed to generate new JWT token during refresh", 
+		h.logger.Error("Failed to generate new JWT token during refresh",
 			"error", err,
 			"user_id", claims.UserID,
 			"session_id", claims.SessionID,
@@ -503,14 +503,14 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Failed to refresh token", http.StatusUnauthorized)
 		return
 	}
-	
-	h.logger.Debug("Generated new JWT token", 
+
+	h.logger.Debug("Generated new JWT token",
 		"user_id", claims.UserID,
 		"session_id", claims.SessionID)
 
 	// Update session token in database
 	if err := h.sessionRepository.UpdateSessionToken(r.Context(), claims.SessionID, newToken); err != nil {
-		h.logger.Error("Failed to update session token in database", 
+		h.logger.Error("Failed to update session token in database",
 			"error", err,
 			"user_id", claims.UserID,
 			"session_id", claims.SessionID,
@@ -533,8 +533,8 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, newCookie)
-	
-	h.logger.Debug("Set new JWT cookie", 
+
+	h.logger.Debug("Set new JWT cookie",
 		"cookie_domain", domain,
 		"cookie_secure", secure,
 		"user_id", claims.UserID,
@@ -544,17 +544,15 @@ func (h *AuthHandler) RefreshToken(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(map[string]string{
 		"message": "Token refreshed successfully",
 	}); err != nil {
-		h.logger.Error("Failed to encode refresh token response", 
+		h.logger.Error("Failed to encode refresh token response",
 			"error", err,
 			"user_id", claims.UserID,
 			"client_ip", clientIP)
 		http.Error(w, "Failed to encode refresh response", http.StatusInternalServerError)
 		return
 	}
-	
-	h.logger.Info("Token refresh completed successfully", 
+
+	h.logger.Info("Token refresh completed successfully",
 		"user_id", claims.UserID,
 		"session_id", claims.SessionID)
 }
-
-

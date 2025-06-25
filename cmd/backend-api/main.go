@@ -28,20 +28,20 @@ import (
 // This function implements the US046 fail-fast mechanism for critical startup dependencies
 func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 	log.Info("Starting dependency health checks")
-	
+
 	// Create health checker
 	healthChecker := health.NewHealthChecker(log)
-	
+
 	// Create context with timeout for all health checks
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	// Validate critical dependencies
 	if cfg.DatabaseURL == "" {
 		log.Critical("Critical dependency validation failed: DATABASE_URL not configured")
 		return fmt.Errorf("DATABASE_URL is required but not configured")
 	}
-	
+
 	// Critical dependency: Database connection with retry logic
 	err := retry.WithExponentialBackoff(ctx, retry.CriticalConfig(), log, "database_health_check", func() error {
 		result := healthChecker.CheckDatabaseConnection(ctx, cfg.DatabaseURL)
@@ -50,13 +50,13 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 		}
 		return nil
 	})
-	
+
 	if err != nil {
-		log.Critical("Critical dependency failed: Database connection unavailable after retries", 
+		log.Critical("Critical dependency failed: Database connection unavailable after retries",
 			"error", err.Error())
 		return fmt.Errorf("database dependency check failed: %w", err)
 	}
-	
+
 	log.Info("All critical dependency health checks passed successfully")
 	return nil
 }
@@ -73,18 +73,18 @@ func main() {
 	// Initialize structured logger
 	log := logger.New("backend-api")
 
-	log.Info("Backend API starting", 
-		"environment", cfg.Environment, 
+	log.Info("Backend API starting",
+		"environment", cfg.Environment,
 		"port", cfg.Port,
 		"log_level", cfg.LogLevel)
-	log.Info("Configuration status", 
+	log.Info("Configuration status",
 		"database_configured", cfg.DatabaseURL != "",
 		"google_oauth_configured", cfg.GoogleClientID != "" && cfg.GoogleClientSecret != "")
 
 	// Dependency Health Check - US046 Fail Fast Mechanism
 	// Validate critical dependencies before proceeding with initialization
 	if err := performStartupHealthChecks(cfg, log); err != nil {
-		log.Critical("Startup dependency health checks failed - application cannot continue", 
+		log.Critical("Startup dependency health checks failed - application cannot continue",
 			"error", err.Error())
 		os.Exit(2) // Exit code 2 indicates dependency failure
 	}
@@ -107,16 +107,16 @@ func main() {
 	// Initialize services
 	jwtService := auth.NewJWTService(cfg.JWTSecret)
 	encryptionService := auth.NewEncryptionService(cfg.EncryptionSecret) // Use separate encryption secret
-	
+
 	// Construct OAuth redirect URLs using configurable base URL
 	googleRedirectURL := fmt.Sprintf("%s/api/auth/google/callback", cfg.BaseURL)
 	stravaRedirectURL := fmt.Sprintf("%s/api/connections/strava/callback", cfg.BaseURL)
 	oauthService := auth.NewOAuthService(
-		cfg.GoogleClientID, 
-		cfg.GoogleClientSecret, 
-		googleRedirectURL, 
-		cfg.StravaClientID, 
-		cfg.StravaClientSecret, 
+		cfg.GoogleClientID,
+		cfg.GoogleClientSecret,
+		googleRedirectURL,
+		cfg.StravaClientID,
+		cfg.StravaClientSecret,
 		stravaRedirectURL,
 	)
 
@@ -141,7 +141,7 @@ func main() {
 	// Initialize services
 	sheetsService := services.NewSheetsService(userRepository, log)
 	configService := services.NewConfigService(userRepository, sheetsService, log)
-	
+
 	// Initialize sync service (only if Redis is available)
 	var syncService *services.SyncService
 	if queueClient != nil {
@@ -154,7 +154,7 @@ func main() {
 	// Initialize handlers
 	// Determine if running in development mode
 	isDevelopment := cfg.Environment == "local" || cfg.Environment == "development" || cfg.Environment == "dev"
-	
+
 	authHandler := handlers.NewAuthHandler(
 		oauthService,
 		jwtService,
@@ -177,7 +177,7 @@ func main() {
 		configService,
 		log.WithContext("component", "config_handler"),
 	)
-	
+
 	// Initialize sync handler (only if sync service is available)
 	var syncHandler *handlers.SyncHandler
 	if syncService != nil {
@@ -210,7 +210,7 @@ func main() {
 		r.Get("/google", authHandler.GoogleAuthURL)           // Get Google OAuth URL
 		r.Get("/google/callback", authHandler.GoogleCallback) // Handle OAuth callback
 		r.Post("/refresh", authHandler.RefreshToken)          // Refresh JWT token
-		
+
 		// Protected auth routes
 		r.Group(func(r chi.Router) {
 			r.Use(authMW.RequireAuth)
@@ -223,11 +223,11 @@ func main() {
 	r.Route("/api/connections", func(r chi.Router) {
 		// Public OAuth callback (Strava redirects here directly)
 		r.Get("/strava/callback", stravaHandler.StravaCallback) // Handle Strava OAuth callback (public)
-		
+
 		// Protected Strava endpoints (require authentication)
 		r.Group(func(r chi.Router) {
 			r.Use(authMW.RequireAuth)
-			r.Get("/strava", stravaHandler.StravaAuthURL)      // Get Strava OAuth URL
+			r.Get("/strava", stravaHandler.StravaAuthURL)       // Get Strava OAuth URL
 			r.Delete("/strava", stravaHandler.DisconnectStrava) // Disconnect Strava account
 		})
 	})
@@ -235,7 +235,7 @@ func main() {
 	// Protected API routes (authentication required)
 	r.Route("/api", func(r chi.Router) {
 		r.Use(authMW.RequireAuth)
-		
+
 		// User routes
 		r.Route("/users", func(r chi.Router) {
 			r.Get("/me", authHandler.GetCurrentUser) // Duplicate for convenience
@@ -243,8 +243,8 @@ func main() {
 
 		// Configuration routes
 		r.Route("/config", func(r chi.Router) {
-			r.Post("/spreadsheet", configHandler.SetSpreadsheet)      // Set spreadsheet URL
-			r.Delete("/spreadsheet", configHandler.ClearSpreadsheet)  // Clear spreadsheet configuration
+			r.Post("/spreadsheet", configHandler.SetSpreadsheet)     // Set spreadsheet URL
+			r.Delete("/spreadsheet", configHandler.ClearSpreadsheet) // Clear spreadsheet configuration
 		})
 
 		// Sync routes (only if sync service is available)
@@ -254,12 +254,12 @@ func main() {
 		}
 	})
 
-	log.Info("Backend API server starting", 
+	log.Info("Backend API server starting",
 		"port", cfg.Port,
 		"base_url", cfg.BaseURL,
 		"google_oauth_redirect_url", googleRedirectURL,
 		"strava_oauth_redirect_url", stravaRedirectURL)
-	
+
 	if err := http.ListenAndServe(":"+cfg.Port, r); err != nil {
 		log.Critical("Server failed to start", "error", err)
 		os.Exit(1)

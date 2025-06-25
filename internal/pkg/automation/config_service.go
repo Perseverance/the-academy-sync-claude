@@ -63,7 +63,7 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 	// Retrieve decrypted processing tokens
 	s.logger.Debug("Retrieving decrypted processing tokens",
 		"user_id", userID)
-	
+
 	tokens, err := s.userRepository.GetProcessingConfigForUser(ctx, userID)
 	if err != nil {
 		s.logger.Error("Failed to retrieve processing tokens from database",
@@ -132,13 +132,13 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 				"error_message":  err.Error(),
 				"config_summary": config.String(),
 				"validation_checklist": map[string]interface{}{
-					"has_google_refresh":   config.GoogleRefreshToken != "",
-					"has_strava_refresh":   config.StravaRefreshToken != "",
-					"has_athlete_id":       config.StravaAthleteID != nil,
-					"has_spreadsheet_id":   config.SpreadsheetID != "",
-					"has_timezone":         config.Timezone != "",
-					"automation_enabled":   config.AutomationEnabled,
-					"valid_timezone":       func() bool {
+					"has_google_refresh": config.GoogleRefreshToken != "",
+					"has_strava_refresh": config.StravaRefreshToken != "",
+					"has_athlete_id":     config.StravaAthleteID != nil,
+					"has_spreadsheet_id": config.SpreadsheetID != "",
+					"has_timezone":       config.Timezone != "",
+					"automation_enabled": config.AutomationEnabled,
+					"valid_timezone": func() bool {
 						if config.Timezone == "" {
 							return false
 						}
@@ -162,10 +162,10 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 		"user_id", userID,
 		"token_analysis", map[string]interface{}{
 			"google": map[string]interface{}{
-				"has_access_token":    config.GoogleAccessToken != "",
-				"has_refresh_token":   config.GoogleRefreshToken != "",
-				"token_valid":         config.HasValidGoogleToken(),
-				"token_expiry":        config.GoogleTokenExpiry,
+				"has_access_token":  config.GoogleAccessToken != "",
+				"has_refresh_token": config.GoogleRefreshToken != "",
+				"token_valid":       config.HasValidGoogleToken(),
+				"token_expiry":      config.GoogleTokenExpiry,
 				"minutes_until_expiry": func() float64 {
 					if config.GoogleTokenExpiry != nil {
 						return time.Until(*config.GoogleTokenExpiry).Minutes()
@@ -174,11 +174,11 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 				}(),
 			},
 			"strava": map[string]interface{}{
-				"has_access_token":     config.StravaAccessToken != "",
-				"has_refresh_token":    config.StravaRefreshToken != "",
-				"token_valid":          config.HasValidStravaToken(),
-				"token_expiry":         config.StravaTokenExpiry,
-				"athlete_id":           config.StravaAthleteID,
+				"has_access_token":  config.StravaAccessToken != "",
+				"has_refresh_token": config.StravaRefreshToken != "",
+				"token_valid":       config.HasValidStravaToken(),
+				"token_expiry":      config.StravaTokenExpiry,
+				"athlete_id":        config.StravaAthleteID,
 				"minutes_until_expiry": func() float64 {
 					if config.StravaTokenExpiry != nil {
 						return time.Until(*config.StravaTokenExpiry).Minutes()

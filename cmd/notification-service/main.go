@@ -18,14 +18,14 @@ import (
 // This function implements the US046 fail-fast mechanism for notification service dependencies
 func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 	log.Info("Starting dependency health checks")
-	
+
 	// Create health checker
 	healthChecker := health.NewHealthChecker(log)
-	
+
 	// Create context with timeout for all health checks
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	// For notification service, database connectivity is optional but recommended
 	// Only enforce it if explicitly configured
 	if cfg.DatabaseURL != "" {
@@ -36,30 +36,30 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 			}
 			return nil
 		})
-		
+
 		if err != nil {
 			if cfg.FailFastEnabled {
-				log.Critical("Database dependency check failed with fail-fast enabled", 
+				log.Critical("Database dependency check failed with fail-fast enabled",
 					"error", err.Error())
 				return fmt.Errorf("database dependency check failed: %w", err)
 			} else {
-				log.Warn("Database dependency check failed - notification service will run with limited functionality", 
+				log.Warn("Database dependency check failed - notification service will run with limited functionality",
 					"error", err.Error())
 				// Continue operation with reduced functionality when fail-fast is disabled
 			}
 		}
 	}
-	
+
 	// TODO: Add Redis health check when Redis connectivity is implemented
 	// if cfg.RedisURL != "" {
 	//     // Redis health check logic here
 	// }
-	
+
 	// TODO: Add SMTP health check when email functionality is implemented
 	// if cfg.SMTPHost != "" {
 	//     // SMTP connectivity check logic here
 	// }
-	
+
 	log.Info("Dependency health checks completed")
 	return nil
 }
@@ -76,10 +76,10 @@ func main() {
 	// Initialize structured logger
 	log := logger.New("notification-service")
 
-	log.Info("Notification Service starting", 
+	log.Info("Notification Service starting",
 		"environment", cfg.Environment,
 		"log_level", cfg.LogLevel)
-	log.Info("Configuration status", 
+	log.Info("Configuration status",
 		"database_configured", cfg.DatabaseURL != "",
 		"redis_configured", cfg.RedisURL != "",
 		"smtp_configured", cfg.SMTPHost != "" && cfg.SMTPUsername != "")
@@ -87,7 +87,7 @@ func main() {
 	// Dependency Health Check - US046 Fail Fast Mechanism
 	// Validate critical dependencies before starting processing loop
 	if err := performStartupHealthChecks(cfg, log); err != nil {
-		log.Critical("Startup dependency health checks failed - notification service cannot continue", 
+		log.Critical("Startup dependency health checks failed - notification service cannot continue",
 			"error", err.Error())
 		os.Exit(2) // Exit code 2 indicates dependency failure
 	}
