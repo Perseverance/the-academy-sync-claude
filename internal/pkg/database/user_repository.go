@@ -591,3 +591,20 @@ func (r *UserRepository) GetProcessingConfigForUser(ctx context.Context, userID 
 
 	return result, nil
 }
+
+// UpdateTimezone updates the user's timezone
+func (r *UserRepository) UpdateTimezone(ctx context.Context, userID int, timezone string) error {
+	query := `
+		UPDATE users 
+		SET timezone = $1,
+		    updated_at = NOW()
+		WHERE id = $2
+	`
+
+	_, err := r.db.ExecContext(ctx, query, timezone, userID)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

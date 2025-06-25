@@ -4,7 +4,6 @@ import type React from "react"
 import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { Button as ShadButton } from "@/components/ui/button" // Keep shadcn button for dropdown trigger
-import { useAuth } from "@/components/auth-provider"
 import { cn } from "@/lib/utils"
 import { LayoutDashboard, ListChecks, LogOut, Settings, Loader2 } from "lucide-react"
 // Removed Moon, Sun as theme toggle might be out of scope for this light theme
@@ -17,13 +16,16 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { AcademyLogo } from "@/components/icons/academy-logo"
+import { useAppState } from "@/context/app-state-provider"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
 ]
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const { user, signOut, isLoading } = useAuth()
+  const { state, actions } = useAppState()
+  const { user, isAuthLoading: isLoading } = state
+  const { signOut } = actions
   const pathname = usePathname()
   // const { theme, setTheme } = useTheme() // Theme toggle removed for now
 
