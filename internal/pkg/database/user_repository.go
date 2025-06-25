@@ -601,9 +601,19 @@ func (r *UserRepository) UpdateTimezone(ctx context.Context, userID int, timezon
 		WHERE id = $2
 	`
 
-	_, err := r.db.ExecContext(ctx, query, timezone, userID)
+	result, err := r.db.ExecContext(ctx, query, timezone, userID)
 	if err != nil {
 		return err
+	}
+
+	// Check that exactly one row was affected
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows // No user found with the given ID
 	}
 
 	return nil
