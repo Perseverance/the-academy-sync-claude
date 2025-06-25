@@ -706,9 +706,15 @@ func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetI
 		if update.DistanceValue != "0" {
 			// Replace comma with period and parse
 			distanceStr := strings.Replace(update.DistanceValue, ",", ".", 1)
-			if parsed, err := strconv.ParseFloat(distanceStr, 64); err == nil {
-				distanceFloat = parsed
+			parsed, err := strconv.ParseFloat(distanceStr, 64)
+			if err != nil {
+				c.logger.Error("Failed to parse distance value",
+					"value", update.DistanceValue,
+					"error", err,
+					"row", update.Row)
+				return fmt.Errorf("invalid distance value '%s' at row %d: %w", update.DistanceValue, update.Row, err)
 			}
+			distanceFloat = parsed
 		}
 		
 		requests = append(requests, &sheets.Request{
