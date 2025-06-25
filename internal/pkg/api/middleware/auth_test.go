@@ -147,7 +147,9 @@ func TestCORSMiddleware(t *testing.T) {
 
 		handler := middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("OK"))
+			if _, err := w.Write([]byte("OK")); err != nil {
+				t.Fatalf("failed to write response body: %v", err)
+			}
 		}))
 
 		req := httptest.NewRequest("GET", "/test", nil)
@@ -318,11 +320,10 @@ func TestJWTLogoutIntegration(t *testing.T) {
 		}
 
 		// Simulate logout by "deactivating" the session (this would happen in DB)
-		sessionActive := true
-		sessionActive = false // Simulate logout
+		sessionActive := false // Simulate logout
 
 		// JWT token is still cryptographically valid
-		claims, err = jwtService.ValidateToken(token)
+		_, err = jwtService.ValidateToken(token)
 		if err != nil {
 			t.Fatalf("JWT should still be cryptographically valid: %v", err)
 		}
