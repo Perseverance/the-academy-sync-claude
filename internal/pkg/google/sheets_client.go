@@ -3,6 +3,7 @@ package google
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -700,6 +701,16 @@ func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetI
 
 	for _, update := range updates {
 		// Column E (index 4): Distance
+		// Convert the comma-separated string back to a float for Google Sheets
+		distanceFloat := 0.0
+		if update.DistanceValue != "0" {
+			// Replace comma with period and parse
+			distanceStr := strings.Replace(update.DistanceValue, ",", ".", 1)
+			if parsed, err := strconv.ParseFloat(distanceStr, 64); err == nil {
+				distanceFloat = parsed
+			}
+		}
+		
 		requests = append(requests, &sheets.Request{
 			UpdateCells: &sheets.UpdateCellsRequest{
 				Start: &sheets.GridCoordinate{
@@ -712,7 +723,7 @@ func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetI
 						Values: []*sheets.CellData{
 							{
 								UserEnteredValue: &sheets.ExtendedValue{
-									StringValue: &update.DistanceValue,
+									NumberValue: &distanceFloat,
 								},
 							},
 						},
