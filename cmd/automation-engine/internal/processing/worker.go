@@ -281,10 +281,67 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 	// Step 5: Create processing service
 	processingService := NewProcessingService(stravaClient, sheetsClient, w.logger)
 
-	// Step 6: Process based on job type
-	w.logger.Info("📊 Step 5: Processing data based on job type",
+	// Step 6: Calculate date range and fetch training plan cache
+	w.logger.Info("📊 Step 6: Fetching training plan data",
 		"user_id", userID,
 		"job_type", jobType)
+
+	// Load user's timezone to calculate date range
+	location, err := time.LoadLocation(config.Timezone)
+	if err != nil {
+		w.logger.Error("Invalid timezone",
+			"timezone", config.Timezone,
+			"error", err)
+		result.ProcessingTime = time.Since(startTime)
+		result.Error = fmt.Sprintf("Invalid timezone: %v", err)
+		result.ErrorType = "TIMEZONE_ERROR"
+		return result
+	}
+
+	// Calculate date range for fetching training plan
+	now := time.Now().In(location)
+	// Set to beginning of day for consistent date comparisons
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	endDate := today // Today at 00:00:00
+	startDate := today.AddDate(0, 0, -8) // 8 days ago at 00:00:00
+
+	// Fetch all training plan entries once
+	trainingPlanCache, err := processingService.FetchAllTrainingPlanEntries(ctx, config, startDate, endDate)
+	if err != nil {
+		w.logger.Error("Failed to fetch training plan cache",
+			"error", err,
+			"user_id", userID,
+			"date_range", fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")))
+		result.ProcessingTime = time.Since(startTime)
+		result.Error = fmt.Sprintf("Failed to fetch training plan: %v", err)
+		result.ErrorType = "TRAINING_PLAN_ERROR"
+		return result
+	}
+
+	// Step 7: Fetch all Strava activities once
+	w.logger.Info("🏃 Step 7: Fetching Strava activities",
+		"user_id", userID,
+		"job_type", jobType)
+
+	// Fetch all Strava activities for the date range
+	stravaActivitiesCache, err := processingService.FetchAllStravaActivities(ctx, location, startDate, endDate)
+	if err != nil {
+		w.logger.Error("Failed to fetch Strava activities",
+			"error", err,
+			"user_id", userID,
+			"date_range", fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")))
+		result.ProcessingTime = time.Since(startTime)
+		result.Error = fmt.Sprintf("Failed to fetch Strava activities: %v", err)
+		result.ErrorType = "STRAVA_API_ERROR"
+		return result
+	}
+
+	// Step 8: Process based on job type
+	w.logger.Info("📊 Step 8: Processing data based on job type",
+		"user_id", userID,
+		"job_type", jobType,
+		"training_plan_entries", len(trainingPlanCache),
+		"strava_activity_days", len(stravaActivitiesCache))
 
 	var totalActivities int
 	var processingErrors []error
@@ -296,7 +353,7 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 			"timezone", config.Timezone)
 
 		// Process today's data (US028)
-		todayResult, err := processingService.ProcessTodaySoFar(ctx, config)
+		todayResult, err := processingService.ProcessTodaySoFar(ctx, config, trainingPlanCache, stravaActivitiesCache)
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Errorf("today processing failed: %w", err))
 		} else if todayResult.Error != nil {
@@ -311,7 +368,7 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 	}
 
 	// Process previous day (US025) - common for both sync types
-	prevDayResult, err := processingService.ProcessPreviousDay(ctx, config)
+	prevDayResult, err := processingService.ProcessPreviousDay(ctx, config, trainingPlanCache, stravaActivitiesCache)
 	if err != nil {
 		processingErrors = append(processingErrors, fmt.Errorf("previous day processing failed: %w", err))
 	} else if prevDayResult.Error != nil {
@@ -321,7 +378,7 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 	}
 
 	// Process 7-day lookback (US026 & US027) - common for both sync types
-	lookbackResults, err := processingService.ProcessLookbackPeriod(ctx, config)
+	lookbackResults, err := processingService.ProcessLookbackPeriod(ctx, config, trainingPlanCache, stravaActivitiesCache)
 	if err != nil {
 		processingErrors = append(processingErrors, fmt.Errorf("lookback processing failed: %w", err))
 	} else {
@@ -332,7 +389,7 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		}
 	}
 
-	// Step 7: Handle results
+	// Step 9: Handle results
 	processingDuration := time.Since(startTime)
 
 	if len(processingErrors) > 0 {
@@ -350,9 +407,9 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		return result
 	}
 
-	// Step 8: Queue notification (if enabled)
+	// Step 10: Queue notification (if enabled)
 	if config.EmailNotificationsEnabled && totalActivities > 0 {
-		w.logger.Debug("📧 Step 6: Queueing notification (TODO: implement)",
+		w.logger.Debug("📧 Step 10: Queueing notification (TODO: implement)",
 			"user_id", userID,
 			"email", config.Email,
 			"activity_count", totalActivities)

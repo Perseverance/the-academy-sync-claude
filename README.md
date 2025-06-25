@@ -69,16 +69,30 @@ The manual sync uses a robust Redis-based queue system:
 
 ### Worker Processing Pipeline
 
-Each sync job goes through an 8-step processing pipeline:
+Each sync job processes multiple days of activities based on the sync type:
 
-1. **📋 Step 1/8**: Retrieve user configuration and validate automation settings
-2. **🏃 Step 2/8**: Create Strava API client with OAuth token management
-3. **📊 Step 3/8**: Create Google Sheets API client with OAuth token management
-4. **🔄 Step 4/8**: **Token refresh preparation** - Ensure OAuth tokens are valid
-5. **🔐 Step 5/8**: Validate Google Sheets access and "Тренировъчен План" sheet
-6. **🏃 Step 6/8**: Fetch activities from Strava (7-day lookback)
-7. **📝 Step 7/8**: Write activities to Google Sheets with proper formatting
-8. **🎉 Step 8/8**: Complete processing and log results
+**Manual Sync Processing:**
+- Today's activities (from midnight to current time)
+- Yesterday's activities (full day)
+- 7-day lookback period (days 2-8 in the past)
+
+**Scheduled Sync Processing:**
+- Yesterday's activities (full day)
+- 7-day lookback period (days 2-8 in the past)
+
+The processing follows these steps:
+
+1. **🚀 Starting automation processing**: Initialize job with context and OAuth credentials
+2. **📋 Step 1: Retrieving user configuration**: Load user settings and validate automation is enabled
+3. **🏃 Step 2: Creating Strava API client**: Initialize Strava client with token management
+4. **📊 Step 3: Creating Google Sheets API client**: Initialize Sheets client with token management
+5. **🔐 Step 4: Validating Google Sheets access**: Verify spreadsheet permissions
+6. **📊 Step 5: Processing data based on job type**: Execute the appropriate sync logic
+7. **🎉 Successfully completed**: Log summary with total activities processed
+
+**Activity Count in Logs:**
+The `activity_count` shown in logs represents the **total number of activities processed across all days** in the current sync operation, not just a single day. For example:
+- 2 activities today + 3 activities yesterday + 2 from lookback = `activity_count: 7`
 
 ### Configuration Requirements
 
@@ -143,6 +157,27 @@ All sync operations include detailed logging:
 - **Token Management**: OAuth token validity and refresh status
 - **API Interactions**: External API call logging and rate limit tracking
 
+**Monitoring Job Processing:**
+
+```bash
+# Watch automation engine logs for job processing
+docker-compose logs -f automation-engine | grep -E "(Processing job|Successfully completed|ERROR)"
+
+# Monitor queue operations
+docker-compose logs -f backend-api automation-engine | grep -E "(enqueue|dequeue|jobs_queue)"
+
+# Check specific user processing
+docker-compose logs automation-engine | grep "user_id\":1"
+```
+
+**Key Log Messages to Monitor:**
+
+- `"Successfully enqueued job"` - Job added to queue by backend API
+- `"Processing job"` - Worker picked up job from queue
+- `"Successfully completed automation processing"` - Job finished with activity count
+- `"Failed to retrieve user configuration"` - User config issues
+- `"Google Sheets access requires re-authorization"` - OAuth token expired
+
 ### Health Checks
 
 The system performs startup health checks:
@@ -180,7 +215,7 @@ The system performs startup health checks:
 
 ### Prerequisites
 
-- Go 1.22+
+- Go 1.23+
 - Node.js 18+
 - Docker & Docker Compose
 - PostgreSQL (for local development)
@@ -242,9 +277,34 @@ docker-compose restart backend-api
 
 The Go services are configured with Air for automatic live reloading during development. When you modify Go source files, the affected service will automatically rebuild and restart.
 
+**Note:** The Air configuration excludes test files (`*_test.go`, `test_*.go`, `debug_*.go`) from triggering rebuilds to prevent unnecessary restarts during debugging.
+
 **Database Persistence:**
 
 PostgreSQL data is persisted in a Docker volume. Your data will survive container restarts but will be lost if you run `docker-compose down -v`.
+
+### Troubleshooting Redis Queue Issues
+
+If jobs are not being processed:
+
+1. **Check for competing connections:**
+   ```bash
+   # Check BRPOP connections
+   docker-compose exec redis redis-cli CLIENT LIST | grep "cmd=brpop"
+   
+   # Check for host processes
+   ps aux | grep -E "automation-engine|automatio" | grep -v docker
+   ```
+
+2. **Kill any host processes that might be consuming jobs:**
+   ```bash
+   # If you find automation-engine processes on host
+   kill <PID>
+   ```
+
+3. **Verify only Docker containers are connected:**
+   - There should be exactly 1 BRPOP connection from the automation-engine container
+   - No connections should come from the host machine (172.x.0.1)
 
 ### Manual Development Setup
 
