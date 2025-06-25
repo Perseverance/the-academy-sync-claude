@@ -23,19 +23,19 @@ func (t *TestableAuthHandler) testLogout(w http.ResponseWriter, r *http.Request)
 	userID, hasUserID := middleware.GetUserIDFromContext(r.Context())
 	sessionID, ok := middleware.GetSessionIDFromContext(r.Context())
 	clientIP := middleware.GetClientIP(r)
-	
-	t.logger.Info("User logout initiated", 
-		"user_id", userID, 
+
+	t.logger.Info("User logout initiated",
+		"user_id", userID,
 		"has_user_id", hasUserID,
 		"session_id", sessionID,
 		"has_session", ok,
 		"client_ip", clientIP)
-	
+
 	if ok && t.mockDeactivateSession != nil {
 		// Use mock function for testing
 		if err := t.mockDeactivateSession(r.Context(), sessionID); err != nil {
-			t.logger.Error("Failed to deactivate session during logout", 
-				"error", err, 
+			t.logger.Error("Failed to deactivate session during logout",
+				"error", err,
 				"session_id", sessionID,
 				"user_id", userID)
 			// Continue with clearing the cookie anyway
@@ -71,7 +71,7 @@ func (t *TestableAuthHandler) testLogout(w http.ResponseWriter, r *http.Request)
 // setupTestAuthHandler creates a testable AuthHandler for testing
 func setupTestAuthHandler() *TestableAuthHandler {
 	testLogger := logger.New("test")
-	
+
 	baseHandler := &AuthHandler{
 		oauthService:      nil, // Not needed for logout tests
 		jwtService:        nil, // Not needed for logout tests
@@ -81,7 +81,7 @@ func setupTestAuthHandler() *TestableAuthHandler {
 		isDevelopment:     true,
 		logger:            testLogger,
 	}
-	
+
 	return &TestableAuthHandler{
 		AuthHandler: baseHandler,
 	}
@@ -107,43 +107,43 @@ func TestLogout(t *testing.T) {
 			sessionDeactivated = true
 			return nil
 		}
-		
+
 		// Create request
 		req := httptest.NewRequest("POST", "/api/auth/logout", nil)
 		req = addContextValues(req, 456, 123) // userID=456, sessionID=123
-		
+
 		// Create response recorder
 		w := httptest.NewRecorder()
-		
+
 		// Call handler
 		handler.testLogout(w, req)
-		
+
 		// Verify response status
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		
+
 		// Verify session was deactivated
 		if !sessionDeactivated {
 			t.Error("Expected session to be deactivated")
 		}
-		
+
 		// Verify response content type
 		if contentType := w.Header().Get("Content-Type"); contentType != "application/json" {
 			t.Errorf("Expected Content-Type application/json, got %s", contentType)
 		}
-		
+
 		// Verify response body
 		var response map[string]string
 		if err := json.NewDecoder(w.Body).Decode(&response); err != nil {
 			t.Fatalf("Failed to decode response body: %v", err)
 		}
-		
+
 		expectedMessage := "Logged out successfully"
 		if response["message"] != expectedMessage {
 			t.Errorf("Expected message '%s', got '%s'", expectedMessage, response["message"])
 		}
-		
+
 		// Verify cookie was cleared
 		cookies := w.Result().Cookies()
 		var sessionCookie *http.Cookie
@@ -153,7 +153,7 @@ func TestLogout(t *testing.T) {
 				break
 			}
 		}
-		
+
 		if sessionCookie == nil {
 			t.Error("Expected session_token cookie to be set")
 		} else {
@@ -192,28 +192,28 @@ func TestLogout(t *testing.T) {
 			sessionDeactivated = true
 			return nil
 		}
-		
+
 		// Create request without session ID in context
 		req := httptest.NewRequest("POST", "/api/auth/logout", nil)
 		ctx := context.WithValue(req.Context(), middleware.UserIDKey, 456)
 		req = req.WithContext(ctx)
-		
+
 		// Create response recorder
 		w := httptest.NewRecorder()
-		
+
 		// Call handler
 		handler.testLogout(w, req)
-		
+
 		// Verify response status is still OK
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		
+
 		// Verify session deactivation was not called (no session ID)
 		if sessionDeactivated {
 			t.Error("Expected session deactivation not to be called when no session ID")
 		}
-		
+
 		// Verify cookie is still cleared
 		cookies := w.Result().Cookies()
 		var sessionCookie *http.Cookie
@@ -223,7 +223,7 @@ func TestLogout(t *testing.T) {
 				break
 			}
 		}
-		
+
 		if sessionCookie == nil {
 			t.Error("Expected session_token cookie to be cleared even without session ID")
 		}
@@ -236,22 +236,22 @@ func TestLogout(t *testing.T) {
 		handler.mockDeactivateSession = func(ctx context.Context, sessionID int) error {
 			return nil
 		}
-		
+
 		// Create request
 		req := httptest.NewRequest("POST", "/api/auth/logout", nil)
 		req = addContextValues(req, 456, 123)
-		
+
 		// Create response recorder
 		w := httptest.NewRecorder()
-		
+
 		// Call handler
 		handler.testLogout(w, req)
-		
+
 		// Verify response status
 		if w.Code != http.StatusOK {
 			t.Errorf("Expected status 200, got %d", w.Code)
 		}
-		
+
 		// Verify cookie configuration for production
 		cookies := w.Result().Cookies()
 		var sessionCookie *http.Cookie
@@ -261,7 +261,7 @@ func TestLogout(t *testing.T) {
 				break
 			}
 		}
-		
+
 		if sessionCookie == nil {
 			t.Error("Expected session_token cookie to be set")
 		} else {
@@ -279,9 +279,9 @@ func TestLogout(t *testing.T) {
 func TestGetCookieConfig(t *testing.T) {
 	t.Run("DevelopmentMode", func(t *testing.T) {
 		handler := &AuthHandler{isDevelopment: true}
-		
+
 		domain, sameSite, secure := handler.getCookieConfig()
-		
+
 		if domain != ".localhost" {
 			t.Errorf("Expected domain '.localhost', got '%s'", domain)
 		}
@@ -295,9 +295,9 @@ func TestGetCookieConfig(t *testing.T) {
 
 	t.Run("ProductionMode", func(t *testing.T) {
 		handler := &AuthHandler{isDevelopment: false}
-		
+
 		domain, sameSite, secure := handler.getCookieConfig()
-		
+
 		if domain != "" {
 			t.Errorf("Expected empty domain, got '%s'", domain)
 		}
@@ -317,15 +317,15 @@ func TestGetCurrentUser(t *testing.T) {
 		mockUserRepo := &MockUserRepository{
 			users: map[int]*MockUser{
 				123: {
-					ID:    123,
-					Email: "test@example.com",
-					Name:  "Test User",
-					ProfilePictureURL: "https://example.com/avatar.jpg",
-					Timezone: "UTC",
+					ID:                        123,
+					Email:                     "test@example.com",
+					Name:                      "Test User",
+					ProfilePictureURL:         "https://example.com/avatar.jpg",
+					Timezone:                  "UTC",
 					EmailNotificationsEnabled: true,
-					AutomationEnabled: false,
-					HasStravaConnection: true,
-					HasSheetsConnection: false,
+					AutomationEnabled:         false,
+					HasStravaConnection:       true,
+					HasSheetsConnection:       false,
 				},
 			},
 		}
@@ -460,16 +460,16 @@ func (t *TestableAuthHandler) testGetCurrentUser(w http.ResponseWriter, r *http.
 
 		// Convert mock user to response format
 		response := map[string]interface{}{
-			"id":                         mockUser.ID,
-			"email":                      mockUser.Email,
-			"name":                       mockUser.Name,
-			"profile_picture_url":        mockUser.ProfilePictureURL,
-			"timezone":                   mockUser.Timezone,
+			"id":                          mockUser.ID,
+			"email":                       mockUser.Email,
+			"name":                        mockUser.Name,
+			"profile_picture_url":         mockUser.ProfilePictureURL,
+			"timezone":                    mockUser.Timezone,
 			"email_notifications_enabled": mockUser.EmailNotificationsEnabled,
-			"automation_enabled":         mockUser.AutomationEnabled,
-			"has_strava_connection":      mockUser.HasStravaConnection,
-			"has_sheets_connection":      mockUser.HasSheetsConnection,
-			"recent_activity_logs":       []interface{}{}, // Empty array for now
+			"automation_enabled":          mockUser.AutomationEnabled,
+			"has_strava_connection":       mockUser.HasStravaConnection,
+			"has_sheets_connection":       mockUser.HasSheetsConnection,
+			"recent_activity_logs":        []interface{}{}, // Empty array for now
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -483,4 +483,3 @@ func (t *TestableAuthHandler) testGetCurrentUser(w http.ResponseWriter, r *http.
 	// Fallback to actual implementation if no mock
 	t.GetCurrentUser(w, r)
 }
-

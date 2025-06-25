@@ -28,14 +28,14 @@ import (
 // This function implements the US046 fail-fast mechanism for automation engine dependencies
 func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 	log.Info("Starting dependency health checks")
-	
+
 	// Create health checker
 	healthChecker := health.NewHealthChecker(log)
-	
+
 	// Create context with timeout for all health checks
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	
+
 	// Validate critical dependencies - DATABASE_URL is required for automation engine
 	if cfg.DatabaseURL == "" {
 		log.Critical("Critical dependency validation failed: DATABASE_URL not configured")
@@ -50,17 +50,17 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 		}
 		return nil
 	})
-	
+
 	if err != nil {
-		log.Critical("Critical dependency failed: Database connection unavailable after retries", 
+		log.Critical("Critical dependency failed: Database connection unavailable after retries",
 			"error", err.Error())
 		return fmt.Errorf("database dependency check failed: %w", err)
 	}
-	
+
 	// Redis health check (if Redis is configured)
 	if cfg.RedisURL != "" {
 		log.Info("Performing Redis health check", "redis_url", cfg.RedisURL)
-		
+
 		err := retry.WithExponentialBackoff(ctx, retry.CriticalConfig(), log, "redis_health_check", func() error {
 			// Create a temporary queue client for health check
 			tempQueueClient, err := queue.NewClient(cfg.RedisURL, "health_check_queue", log)
@@ -68,27 +68,27 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 				return fmt.Errorf("redis connection failed: %w", err)
 			}
 			defer tempQueueClient.Close()
-			
+
 			// Perform health check
 			if err := tempQueueClient.HealthCheck(ctx); err != nil {
 				return fmt.Errorf("redis health check failed: %w", err)
 			}
-			
+
 			return nil
 		})
-		
+
 		if err != nil {
-			log.Critical("Critical dependency failed: Redis connection unavailable after retries", 
+			log.Critical("Critical dependency failed: Redis connection unavailable after retries",
 				"error", err.Error(),
 				"redis_url", cfg.RedisURL)
 			return fmt.Errorf("redis dependency check failed: %w", err)
 		}
-		
+
 		log.Info("Redis health check passed successfully", "redis_url", cfg.RedisURL)
 	} else {
 		log.Warn("Redis not configured - queue-based sync functionality will be unavailable")
 	}
-	
+
 	log.Info("All critical dependency health checks passed successfully")
 	return nil
 }
@@ -105,10 +105,10 @@ func main() {
 	// Initialize structured logger
 	log := logger.New("automation-engine")
 
-	log.Info("Automation Engine starting", 
+	log.Info("Automation Engine starting",
 		"environment", cfg.Environment,
 		"log_level", cfg.LogLevel)
-	log.Info("Configuration status", 
+	log.Info("Configuration status",
 		"database_configured", cfg.DatabaseURL != "",
 		"redis_configured", cfg.RedisURL != "",
 		"strava_oauth_configured", cfg.StravaClientID != "" && cfg.StravaClientSecret != "")
@@ -116,7 +116,7 @@ func main() {
 	// Dependency Health Check - US046 Fail Fast Mechanism
 	// Validate critical dependencies before starting processing loop
 	if err := performStartupHealthChecks(cfg, log); err != nil {
-		log.Critical("Startup dependency health checks failed - automation engine cannot continue", 
+		log.Critical("Startup dependency health checks failed - automation engine cannot continue",
 			"error", err.Error())
 		os.Exit(2) // Exit code 2 indicates dependency failure
 	}
@@ -144,9 +144,13 @@ func main() {
 	userRepository := database.NewUserRepository(db, encryptionService)
 	configService := automation.NewConfigService(userRepository, log)
 
+	// Initialize token persister for automatic token persistence
+	tokenPersister := database.NewTokenPersister(db, encryptionService, log)
+
 	// Initialize processing worker
 	worker := processing.NewWorker(
 		configService,
+		tokenPersister,
 		cfg.StravaClientID,
 		cfg.StravaClientSecret,
 		cfg.GoogleClientID,
@@ -164,7 +168,7 @@ func main() {
 		log.Info("Redis configured - starting worker pool for job processing",
 			"redis_url", cfg.RedisURL,
 			"max_workers", cfg.MaxWorkers)
-		
+
 		// Initialize queue client
 		queueClient, err := queue.NewClient(cfg.RedisURL, "jobs_queue", log)
 		if err != nil {
@@ -172,7 +176,7 @@ func main() {
 			os.Exit(1)
 		}
 		defer queueClient.Close()
-		
+
 		// Validate MaxWorkers before starting pool
 		if cfg.MaxWorkers <= 0 {
 			log.Critical("Invalid MAX_WORKERS configuration",
@@ -181,7 +185,7 @@ func main() {
 				"error", "MAX_WORKERS must be at least 1")
 			os.Exit(1)
 		}
-		
+
 		if cfg.MaxWorkers > 1000 {
 			log.Critical("Invalid MAX_WORKERS configuration",
 				"configured_value", cfg.MaxWorkers,
@@ -189,7 +193,7 @@ func main() {
 				"error", "MAX_WORKERS must not exceed 1000 to prevent resource exhaustion")
 			os.Exit(1)
 		}
-		
+
 		// Start worker pool
 		startWorkerPool(queueClient, worker, cfg.MaxWorkers, log)
 	} else {
@@ -238,7 +242,7 @@ func startWorkerPool(queueClient *queue.Client, worker *processing.Worker, maxWo
 	<-sigChan
 	log.Info("Shutdown signal received, stopping worker pool")
 
-	cancel() // Signal all workers to stop
+	cancel()  // Signal all workers to stop
 	wg.Wait() // Wait for all workers to finish
 
 	log.Info("Worker pool stopped gracefully")
@@ -268,7 +272,7 @@ func runWorker(ctx context.Context, workerID int, jobs <-chan *queue.Job, queueC
 // processJob processes a single job
 func processJob(ctx context.Context, workerID int, job *queue.Job, queueClient *queue.Client, worker *processing.Worker, log *logger.Logger) {
 	startTime := time.Now()
-	
+
 	log.Info("Processing job",
 		"job_id", job.ID,
 		"job_type", job.Type,
@@ -281,7 +285,7 @@ func processJob(ctx context.Context, workerID int, job *queue.Job, queueClient *
 		// Use a fresh context with timeout for lock release to ensure it's not affected by cancellation
 		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer releaseCancel()
-		
+
 		if err := queueClient.ReleaseUserProcessingLock(releaseCtx, job.UserID); err != nil {
 			log.Error("Failed to release user processing lock",
 				"error", err,
@@ -302,7 +306,7 @@ func processJob(ctx context.Context, workerID int, job *queue.Job, queueClient *
 	var result *processing.ProcessingResult
 	switch job.Type {
 	case queue.JobTypeManualSync, queue.JobTypeScheduledSync:
-		result = worker.ProcessUser(jobCtx, job.UserID)
+		result = worker.ProcessUser(jobCtx, job.UserID, string(job.Type))
 	default:
 		log.Error("Unknown job type",
 			"job_id", job.ID,
@@ -346,6 +350,7 @@ func runJobDistributor(ctx context.Context, queueClient *queue.Client, jobs chan
 		default:
 			// Try to dequeue a job
 			job, err := queueClient.DequeueJob(ctx)
+			
 			if err != nil {
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					log.Info("Context cancelled, job distributor stopping")
@@ -379,29 +384,29 @@ func runJobDistributor(ctx context.Context, queueClient *queue.Client, jobs chan
 
 // runTestMode runs the engine in test mode for development
 func runTestMode(worker *processing.Worker, log *logger.Logger) {
-	log.Info("Starting automation engine in test mode - will process user ID 1 every minute", 
+	log.Info("Starting automation engine in test mode - will process user ID 1 every minute",
 		"note", "Production mode requires Redis configuration")
-	
+
 	testUserID := 1
 	cycleCount := 0
-	
+
 	for {
 		cycleCount++
 		cycleStartTime := time.Now()
-		
+
 		// Create context for this processing cycle
 		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Minute)
-		
+
 		log.Info("🔄 Starting test automation processing cycle",
 			"test_user_id", testUserID,
 			"cycle_number", cycleCount,
 			"timeout_minutes", 5,
 			"note", "This is a development test - production will use job queue")
-		
-		result := worker.ProcessUser(ctx, testUserID)
-		
+
+		result := worker.ProcessUser(ctx, testUserID, "scheduled_sync")
+
 		cycleDuration := time.Since(cycleStartTime)
-		
+
 		if result.Success {
 			log.Info("✅ Test processing cycle completed successfully",
 				"cycle_number", cycleCount,
@@ -425,15 +430,15 @@ func runTestMode(worker *processing.Worker, log *logger.Logger) {
 					"success":                 false,
 				},
 				"troubleshooting", map[string]interface{}{
-					"check_user_exists":      "Verify user ID 1 exists in database",
-					"check_oauth_tokens":     "Verify user has valid OAuth tokens",
-					"check_spreadsheet_id":   "Verify user has configured spreadsheet ID",
+					"check_user_exists":       "Verify user ID 1 exists in database",
+					"check_oauth_tokens":      "Verify user has valid OAuth tokens",
+					"check_spreadsheet_id":    "Verify user has configured spreadsheet ID",
 					"check_oauth_credentials": "Verify app OAuth credentials are configured",
 				})
 		}
-		
+
 		cancel()
-		
+
 		// Wait before next cycle
 		log.Debug("💤 Automation processing cycle completed, waiting for next cycle",
 			"cycle_number", cycleCount,

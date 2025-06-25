@@ -47,13 +47,13 @@ const (
 func (a *AuthMiddleware) RequireAuth(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		clientIP := GetClientIP(r)
-		
+
 		a.logger.Debug("Auth middleware processing request",
 			"path", r.URL.Path,
 			"method", r.Method,
 			"client_ip", clientIP,
 			"user_agent", r.Header.Get("User-Agent"))
-		
+
 		// Get JWT token from cookie
 		cookie, err := r.Cookie("session_token")
 		if err != nil {
@@ -243,7 +243,7 @@ func GetClientIP(r *http.Request) string {
 			}
 		}
 	}
-	
+
 	return addr
 }
 
@@ -294,7 +294,7 @@ func (a *AuthMiddleware) shouldRefreshStravaToken(user *database.User) bool {
 // refreshGoogleOAuthToken refreshes the user's Google OAuth token
 func (a *AuthMiddleware) refreshGoogleOAuthToken(ctx context.Context, user *database.User) {
 	a.logger.Debug("Starting background Google OAuth token refresh", "user_id", user.ID)
-	
+
 	// Decrypt the refresh token
 	refreshToken, err := a.userRepository.DecryptToken(user.GoogleRefreshToken)
 	if err != nil {
@@ -326,7 +326,7 @@ func (a *AuthMiddleware) refreshGoogleOAuthToken(ctx context.Context, user *data
 			"user_id", user.ID, "error", err.Error())
 		return
 	}
-	
+
 	a.logger.Info("Successfully refreshed Google OAuth token in background",
 		"user_id", user.ID, "new_expiry", newToken.Expiry.String())
 }

@@ -44,11 +44,11 @@ func (h *HealthChecker) CheckDatabase(ctx context.Context, db *sql.DB) *HealthCh
 	if err := db.PingContext(checkCtx); err != nil {
 		result.Status = "unhealthy"
 		result.Error = err
-		h.log.Error("Database health check failed", 
+		h.log.Error("Database health check failed",
 			"error", err.Error(),
 			"latency_ms", time.Since(start).Milliseconds())
 	} else {
-		h.log.Debug("Database health check passed", 
+		h.log.Debug("Database health check passed",
 			"latency_ms", time.Since(start).Milliseconds())
 	}
 
@@ -75,7 +75,7 @@ func (h *HealthChecker) CheckDatabaseConnection(ctx context.Context, databaseURL
 		result.Status = "unhealthy"
 		result.Error = fmt.Errorf("failed to open database connection: %w", err)
 		result.Latency = time.Since(start)
-		h.log.Error("Database connection establishment failed", 
+		h.log.Error("Database connection establishment failed",
 			"error", err.Error(),
 			"latency_ms", result.Latency.Milliseconds())
 		return result
@@ -86,11 +86,11 @@ func (h *HealthChecker) CheckDatabaseConnection(ctx context.Context, databaseURL
 	if err := db.PingContext(checkCtx); err != nil {
 		result.Status = "unhealthy"
 		result.Error = fmt.Errorf("database ping failed: %w", err)
-		h.log.Error("Database ping failed during health check", 
+		h.log.Error("Database ping failed during health check",
 			"error", err.Error(),
 			"latency_ms", time.Since(start).Milliseconds())
 	} else {
-		h.log.Debug("Database connection health check passed", 
+		h.log.Debug("Database connection health check passed",
 			"latency_ms", time.Since(start).Milliseconds())
 	}
 

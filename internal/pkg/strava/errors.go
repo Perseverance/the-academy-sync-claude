@@ -36,24 +36,24 @@ func IsReauthRequired(err error) bool {
 	if err == nil {
 		return false
 	}
-	
+
 	// First check if this is our specific error type (supports wrapped errors)
 	if errors.Is(err, ErrReauthRequired) {
 		return true
 	}
-	
+
 	// Check for our specific error type
 	if authErr, ok := err.(*AuthError); ok {
 		return authErr.Type == "REAUTH_REQUIRED"
 	}
-	
+
 	// Check for common OAuth error patterns that indicate invalid refresh tokens
 	errStr := strings.ToLower(err.Error())
 	return strings.Contains(errStr, "invalid_grant") ||
-		   strings.Contains(errStr, "invalid refresh token") ||
-		   strings.Contains(errStr, "refresh token is invalid") ||
-		   strings.Contains(errStr, "authorization_revoked") ||
-		   strings.Contains(errStr, "token_revoked")
+		strings.Contains(errStr, "invalid refresh token") ||
+		strings.Contains(errStr, "refresh token is invalid") ||
+		strings.Contains(errStr, "authorization_revoked") ||
+		strings.Contains(errStr, "token_revoked")
 }
 
 // APIError represents general Strava API errors
@@ -66,10 +66,10 @@ type APIError struct {
 
 func (e *APIError) Error() string {
 	if e.Cause != nil {
-		return fmt.Sprintf("strava api error (status %d, type %s): %s (caused by: %v)", 
+		return fmt.Sprintf("strava api error (status %d, type %s): %s (caused by: %v)",
 			e.StatusCode, e.Type, e.Message, e.Cause)
 	}
-	return fmt.Sprintf("strava api error (status %d, type %s): %s", 
+	return fmt.Sprintf("strava api error (status %d, type %s): %s",
 		e.StatusCode, e.Type, e.Message)
 }
 
@@ -86,7 +86,7 @@ type NetworkError struct {
 
 func (e *NetworkError) Error() string {
 	if e.Cause != nil {
-		return fmt.Sprintf("strava network error during %s: %s (caused by: %v)", 
+		return fmt.Sprintf("strava network error during %s: %s (caused by: %v)",
 			e.Operation, e.Message, e.Cause)
 	}
 	return fmt.Sprintf("strava network error during %s: %s", e.Operation, e.Message)
@@ -105,7 +105,7 @@ type ValidationError struct {
 
 func (e *ValidationError) Error() string {
 	if e.Cause != nil {
-		return fmt.Sprintf("strava validation error for %s: %s (caused by: %v)", 
+		return fmt.Sprintf("strava validation error for %s: %s (caused by: %v)",
 			e.Field, e.Message, e.Cause)
 	}
 	return fmt.Sprintf("strava validation error for %s: %s", e.Field, e.Message)

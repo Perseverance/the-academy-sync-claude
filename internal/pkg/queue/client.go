@@ -3,6 +3,7 @@ package queue
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -130,11 +131,15 @@ func (c *Client) EnqueueJob(ctx context.Context, jobType JobType, userID int, da
 func (c *Client) DequeueJob(ctx context.Context) (*Job, error) {
 	c.logger.Debug("Waiting for job from queue", "queue", c.queueName)
 
+
 	// BRPOP blocks until an item is available or timeout
 	result, err := c.redis.BRPop(ctx, 0, c.queueName).Result()
 	if err != nil {
 		if err == redis.Nil {
 			return nil, nil // No job available
+		}
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return nil, err
 		}
 		c.logger.Error("Failed to dequeue job",
 			"error", err,
@@ -218,7 +223,7 @@ func IsConnectionError(err error) bool {
 // Returns true if lock was acquired, false if user is already being processed
 func (c *Client) AcquireUserProcessingLock(ctx context.Context, userID int, ttl time.Duration) (bool, error) {
 	lockKey := fmt.Sprintf("processing:user:%d", userID)
-	
+
 	// SetNX returns true if the key was set, false if it already existed
 	result, err := c.redis.SetNX(ctx, lockKey, "locked", ttl).Result()
 	if err != nil {
@@ -228,7 +233,7 @@ func (c *Client) AcquireUserProcessingLock(ctx context.Context, userID int, ttl 
 			"lock_key", lockKey)
 		return false, fmt.Errorf("failed to acquire processing lock: %w", err)
 	}
-	
+
 	if result {
 		c.logger.Debug("Acquired user processing lock",
 			"user_id", userID,
@@ -239,14 +244,14 @@ func (c *Client) AcquireUserProcessingLock(ctx context.Context, userID int, ttl 
 			"user_id", userID,
 			"lock_key", lockKey)
 	}
-	
+
 	return result, nil
 }
 
 // ReleaseUserProcessingLock releases the processing lock for a user
 func (c *Client) ReleaseUserProcessingLock(ctx context.Context, userID int) error {
 	lockKey := fmt.Sprintf("processing:user:%d", userID)
-	
+
 	err := c.redis.Del(ctx, lockKey).Err()
 	if err != nil {
 		c.logger.Error("Failed to release user processing lock",
@@ -255,18 +260,18 @@ func (c *Client) ReleaseUserProcessingLock(ctx context.Context, userID int) erro
 			"lock_key", lockKey)
 		return fmt.Errorf("failed to release processing lock: %w", err)
 	}
-	
+
 	c.logger.Debug("Released user processing lock",
 		"user_id", userID,
 		"lock_key", lockKey)
-	
+
 	return nil
 }
 
 // IsUserProcessingLocked checks if a user has an active processing lock
 func (c *Client) IsUserProcessingLocked(ctx context.Context, userID int) (bool, error) {
 	lockKey := fmt.Sprintf("processing:user:%d", userID)
-	
+
 	exists, err := c.redis.Exists(ctx, lockKey).Result()
 	if err != nil {
 		c.logger.Error("Failed to check user processing lock",
@@ -275,6 +280,6 @@ func (c *Client) IsUserProcessingLocked(ctx context.Context, userID int) (bool, 
 			"lock_key", lockKey)
 		return false, fmt.Errorf("failed to check processing lock: %w", err)
 	}
-	
+
 	return exists > 0, nil
 }

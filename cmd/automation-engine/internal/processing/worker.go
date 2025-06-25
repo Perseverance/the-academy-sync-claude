@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/google"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
@@ -23,57 +24,61 @@ import (
 // - Performance timing for each processing step
 // - Structured logging with searchable fields for monitoring
 type Worker struct {
-	configService       *automation.ConfigService
-	logger              *logger.Logger
-	
+	configService  *automation.ConfigService
+	tokenPersister auth.TokenPersister
+	logger         *logger.Logger
+
 	// OAuth credentials for API clients
-	stravaClientID      string
-	stravaClientSecret  string
-	googleClientID      string
-	googleClientSecret  string
-	googleRedirectURL   string
+	stravaClientID     string
+	stravaClientSecret string
+	googleClientID     string
+	googleClientSecret string
+	googleRedirectURL  string
 }
 
 // NewWorker creates a new processing worker with required dependencies
 func NewWorker(
 	configService *automation.ConfigService,
+	tokenPersister auth.TokenPersister,
 	stravaClientID, stravaClientSecret string,
 	googleClientID, googleClientSecret, googleRedirectURL string,
 	logger *logger.Logger,
 ) *Worker {
 	return &Worker{
-		configService:       configService,
-		stravaClientID:      stravaClientID,
-		stravaClientSecret:  stravaClientSecret,
-		googleClientID:      googleClientID,
-		googleClientSecret:  googleClientSecret,
-		googleRedirectURL:   googleRedirectURL,
-		logger:              logger.WithContext("component", "automation_worker"),
+		configService:      configService,
+		tokenPersister:     tokenPersister,
+		stravaClientID:     stravaClientID,
+		stravaClientSecret: stravaClientSecret,
+		googleClientID:     googleClientID,
+		googleClientSecret: googleClientSecret,
+		googleRedirectURL:  googleRedirectURL,
+		logger:             logger.WithContext("component", "automation_worker"),
 	}
 }
 
 // ProcessingResult represents the outcome of processing a user's automation job
 type ProcessingResult struct {
-	UserID           int           `json:"user_id"`
-	Success          bool          `json:"success"`
-	ActivitiesCount  int           `json:"activities_count"`
-	ProcessingTime   time.Duration `json:"processing_time"`
-	Error            string        `json:"error,omitempty"`
-	ErrorType        string        `json:"error_type,omitempty"`
-	RequiresReauth   bool          `json:"requires_reauth"`
+	UserID          int           `json:"user_id"`
+	Success         bool          `json:"success"`
+	ActivitiesCount int           `json:"activities_count"`
+	ProcessingTime  time.Duration `json:"processing_time"`
+	Error           string        `json:"error,omitempty"`
+	ErrorType       string        `json:"error_type,omitempty"`
+	RequiresReauth  bool          `json:"requires_reauth"`
 }
 
 // ProcessUser processes automation for a single user
 // This method implements the core processing flow:
 // 1. Retrieve user configuration (US022)
 // 2. Create API clients with token management (US023, US024)
-// 3. Fetch activities and write to spreadsheet
+// 3. Process data based on job type (manual or scheduled sync)
 // 4. Handle errors gracefully with proper logging
-func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult {
+func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *ProcessingResult {
 	startTime := time.Now()
-	
+
 	w.logger.Info("🚀 Starting automation processing for user",
 		"user_id", userID,
+		"job_type", jobType,
 		"context_deadline", func() string {
 			if deadline, ok := ctx.Deadline(); ok {
 				return deadline.Format(time.RFC3339)
@@ -86,38 +91,38 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 			"has_google_client_id":     w.googleClientID != "",
 			"has_google_client_secret": w.googleClientSecret != "",
 		})
-	
+
 	result := &ProcessingResult{
-		UserID:     userID,
-		Success:    false,
+		UserID:         userID,
+		Success:        false,
 		ProcessingTime: 0,
 	}
-	
+
 	// Step 1: Retrieve user configuration (US022)
-	w.logger.Debug("📋 Step 1/8: Retrieving user configuration for processing",
+	w.logger.Debug("📋 Step 1: Retrieving user configuration for processing",
 		"user_id", userID,
 		"step", "config_retrieval")
-	
+
 	config, err := w.configService.GetProcessingConfigForUser(ctx, userID)
 	if err != nil {
 		processingDuration := time.Since(startTime)
 		w.logger.Error("❌ FATAL: Failed to retrieve user configuration, skipping user processing",
 			"error", err,
 			"error_details", map[string]interface{}{
-				"error_type": fmt.Sprintf("%T", err),
+				"error_type":   fmt.Sprintf("%T", err),
 				"error_string": err.Error(),
 			},
 			"user_id", userID,
 			"step", "config_retrieval",
 			"processing_duration_ms", processingDuration.Milliseconds(),
 			"failure_reason", "Cannot proceed without valid user configuration")
-		
+
 		result.ProcessingTime = processingDuration
 		result.Error = fmt.Sprintf("Configuration retrieval failed: %v", err)
 		result.ErrorType = "CONFIG_ERROR"
 		return result
 	}
-	
+
 	// Validate that automation is enabled for this user
 	if !config.AutomationEnabled {
 		processingDuration := time.Since(startTime)
@@ -127,44 +132,49 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 			"automation_enabled", false,
 			"processing_duration_ms", processingDuration.Milliseconds(),
 			"skip_reason", "User has disabled automation in their settings")
-		
+
 		result.ProcessingTime = processingDuration
 		result.Error = "Automation is disabled for this user"
 		result.ErrorType = "AUTOMATION_DISABLED"
 		return result
 	}
-	
-	w.logger.Info("✅ Step 1/8: Successfully retrieved user configuration",
+
+	w.logger.Info("✅ Step 1: Successfully retrieved user configuration",
 		"user_id", userID,
 		"step", "config_retrieval",
 		"config_details", map[string]interface{}{
-			"email":                    config.Email,
-			"spreadsheet_id":           config.SpreadsheetID,
-			"timezone":                 config.Timezone,
-			"automation_enabled":       config.AutomationEnabled,
-			"email_notifications":      config.EmailNotificationsEnabled,
-			"has_valid_google_token":   config.HasValidGoogleToken(),
-			"has_valid_strava_token":   config.HasValidStravaToken(),
-			"has_strava_athlete_id":    config.StravaAthleteID != nil,
-			"google_token_expiry":      config.GoogleTokenExpiry,
-			"strava_token_expiry":      config.StravaTokenExpiry,
+			"email":                  config.Email,
+			"spreadsheet_id":         config.SpreadsheetID,
+			"timezone":               config.Timezone,
+			"automation_enabled":     config.AutomationEnabled,
+			"email_notifications":    config.EmailNotificationsEnabled,
+			"has_valid_google_token": config.HasValidGoogleToken(),
+			"has_valid_strava_token": config.HasValidStravaToken(),
+			"has_strava_athlete_id":  config.StravaAthleteID != nil,
+			"google_token_expiry":    config.GoogleTokenExpiry,
+			"strava_token_expiry":    config.StravaTokenExpiry,
 		})
-	
+
 	// Step 2: Create Strava API client with token management (US023)
-	w.logger.Debug("🏃 Step 2/8: Creating Strava API client with token management",
+	w.logger.Debug("🏃 Step 2: Creating Strava API client with token management",
 		"user_id", userID,
 		"step", "strava_client_creation",
 		"strava_config", map[string]interface{}{
-			"has_refresh_token":    config.StravaRefreshToken != "",
-			"has_access_token":     config.StravaAccessToken != "",
-			"token_valid":          config.HasValidStravaToken(),
-			"athlete_id":           config.StravaAthleteID,
-			"client_credentials":   w.stravaClientID != "" && w.stravaClientSecret != "",
+			"has_refresh_token":  config.StravaRefreshToken != "",
+			"has_access_token":   config.StravaAccessToken != "",
+			"token_valid":        config.HasValidStravaToken(),
+			"athlete_id":         config.StravaAthleteID,
+			"client_credentials": w.stravaClientID != "" && w.stravaClientSecret != "",
 		})
-	
+
 	stravaClient := strava.NewClient(userID, config.StravaRefreshToken, w.logger)
 	stravaClient.SetOAuthCredentials(w.stravaClientID, w.stravaClientSecret)
-	
+
+	// Set token persister if available
+	if w.tokenPersister != nil {
+		stravaClient.SetTokenPersister(w.tokenPersister)
+	}
+
 	// Set initial tokens if available
 	if config.HasValidStravaToken() {
 		stravaClient.SetInitialTokens(config.StravaAccessToken, *config.StravaTokenExpiry)
@@ -180,22 +190,27 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 			"has_refresh_token", config.StravaRefreshToken != "",
 			"token_expired", config.StravaTokenExpiry != nil && time.Now().After(*config.StravaTokenExpiry))
 	}
-	
+
 	// Step 3: Create Google Sheets API client with token management (US024)
-	w.logger.Debug("📊 Step 3/8: Creating Google Sheets API client with token management",
+	w.logger.Debug("📊 Step 3: Creating Google Sheets API client with token management",
 		"user_id", userID,
 		"step", "google_client_creation",
 		"google_config", map[string]interface{}{
-			"has_refresh_token":    config.GoogleRefreshToken != "",
-			"has_access_token":     config.GoogleAccessToken != "",
-			"token_valid":          config.HasValidGoogleToken(),
-			"spreadsheet_id":       config.SpreadsheetID,
-			"client_credentials":   w.googleClientID != "" && w.googleClientSecret != "",
+			"has_refresh_token":  config.GoogleRefreshToken != "",
+			"has_access_token":   config.GoogleAccessToken != "",
+			"token_valid":        config.HasValidGoogleToken(),
+			"spreadsheet_id":     config.SpreadsheetID,
+			"client_credentials": w.googleClientID != "" && w.googleClientSecret != "",
 		})
-	
+
 	sheetsClient := google.NewSheetsClient(userID, config.GoogleRefreshToken, w.logger)
 	sheetsClient.SetOAuthCredentials(w.googleClientID, w.googleClientSecret, w.googleRedirectURL)
-	
+
+	// Set token persister if available
+	if w.tokenPersister != nil {
+		sheetsClient.SetTokenPersister(w.tokenPersister)
+	}
+
 	// Set initial tokens if available
 	if config.HasValidGoogleToken() {
 		sheetsClient.SetInitialTokens(config.GoogleAccessToken, *config.GoogleTokenExpiry)
@@ -211,51 +226,17 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 			"has_refresh_token", config.GoogleRefreshToken != "",
 			"token_expired", config.GoogleTokenExpiry != nil && time.Now().After(*config.GoogleTokenExpiry))
 	}
-	
-	// Step 4: Refresh OAuth tokens if needed
-	w.logger.Debug("🔄 Step 4/8: Refreshing OAuth tokens if needed",
-		"user_id", userID,
-		"step", "token_refresh",
-		"refresh_reason", "Ensuring tokens are valid before API operations")
-	
-	// Refresh Strava token if needed
-	if !config.HasValidStravaToken() {
-		w.logger.Debug("🔄 Refreshing Strava token",
-			"user_id", userID,
-			"step", "strava_token_refresh",
-			"token_expired", config.StravaTokenExpiry != nil && time.Now().After(*config.StravaTokenExpiry))
-		
-		// Token refresh will happen automatically during first API call
-		// The strava client handles this internally
-	}
-	
-	// Refresh Google token if needed
-	if !config.HasValidGoogleToken() {
-		w.logger.Debug("🔄 Refreshing Google token",
-			"user_id", userID,
-			"step", "google_token_refresh", 
-			"token_expired", config.GoogleTokenExpiry != nil && time.Now().After(*config.GoogleTokenExpiry))
-		
-		// Token refresh will happen automatically during first API call
-		// The sheets client handles this internally
-	}
-	
-	w.logger.Info("✅ Step 4/8: Token refresh preparation completed",
-		"user_id", userID,
-		"step", "token_refresh",
-		"strava_token_valid", config.HasValidStravaToken(),
-		"google_token_valid", config.HasValidGoogleToken())
-	
-	// Step 5: Validate spreadsheet access
-	w.logger.Debug("🔐 Step 5/8: Validating Google Sheets access",
+
+	// Step 4: Validate spreadsheet access
+	w.logger.Debug("🔐 Step 4: Validating Google Sheets access",
 		"user_id", userID,
 		"step", "sheets_access_validation",
 		"spreadsheet_id", config.SpreadsheetID,
 		"validation_reason", "Ensuring user has read/write permissions before processing")
-	
+
 	if err := sheetsClient.ValidateAccess(ctx, config.SpreadsheetID); err != nil {
 		processingDuration := time.Since(startTime)
-		
+
 		// Check if this requires re-authorization
 		if google.IsReauthRequired(err) {
 			w.logger.Warn("🔐 Google Sheets access requires user re-authorization",
@@ -270,220 +251,265 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int) *ProcessingResult 
 				},
 				"processing_duration_ms", processingDuration.Milliseconds(),
 				"action_required", "User must re-authorize Google Sheets access")
-			
+
 			result.ProcessingTime = processingDuration
 			result.Error = "Google Sheets access requires re-authorization"
 			result.ErrorType = "GOOGLE_REAUTH_REQUIRED"
 			result.RequiresReauth = true
 			return result
 		}
-		
+
 		w.logger.Error("❌ Failed to validate Google Sheets access",
 			"error", err,
 			"user_id", userID,
 			"step", "sheets_access_validation",
 			"error_details", map[string]interface{}{
-				"error_type":       fmt.Sprintf("%T", err),
-				"error_string":     err.Error(),
-				"spreadsheet_id":   config.SpreadsheetID,
-				"has_valid_token":  config.HasValidGoogleToken(),
-				"token_expiry":     config.GoogleTokenExpiry,
+				"error_type":      fmt.Sprintf("%T", err),
+				"error_string":    err.Error(),
+				"spreadsheet_id":  config.SpreadsheetID,
+				"has_valid_token": config.HasValidGoogleToken(),
+				"token_expiry":    config.GoogleTokenExpiry,
 			},
 			"processing_duration_ms", processingDuration.Milliseconds())
-		
+
 		result.ProcessingTime = processingDuration
 		result.Error = fmt.Sprintf("Sheets access validation failed: %v", err)
 		result.ErrorType = "SHEETS_ACCESS_ERROR"
 		return result
 	}
-	
-	// Step 6: Fetch activities from Strava
-	// TODO: Implement actual Strava activity fetching functionality
-	// This is subject to a separate story and should not be implemented yet
-	since := time.Now().AddDate(0, 0, -7)
-	
-	w.logger.Debug("🏃 Step 6/8: Simulating Strava activity fetch (TODO: implement actual fetching)",
+
+	// Step 5: Create processing service
+	processingService := NewProcessingService(stravaClient, sheetsClient, w.logger)
+
+	// Step 6: Calculate date range and fetch training plan cache
+	w.logger.Info("📊 Step 6: Fetching training plan data",
 		"user_id", userID,
-		"step", "strava_activity_fetch",
-		"fetch_parameters", map[string]interface{}{
-			"since":            since.Format(time.RFC3339),
-			"days_back":        7,
-			"athlete_id":       config.StravaAthleteID,
-			"current_time":     time.Now().Format(time.RFC3339),
-			"timezone":         config.Timezone,
-		})
-	
-	// TODO: Replace this simulation with actual Strava API call
-	// The implementation should:
-	// 1. Use the stravaClient.GetActivities() method
-	// 2. Handle re-authorization errors properly
-	// 3. Fetch activities since the specified date
-	// 4. Apply proper rate limiting and error handling
-	
-	// TODO: Remove this sleep when actual Strava API integration is implemented
-	// This artificial delay simulates API call time but throttles production throughput
-	time.Sleep(500 * time.Millisecond) // Simulate API call time
-	
-	// Simulate some activities for testing purposes
-	activities := []strava.Activity{
-		{
-			ID:         12345,
-			Name:       "Morning Run",
-			Type:       "Run",
-			Distance:   5000,    // 5km in meters
-			MovingTime: 1800,    // 30 minutes in seconds
-			StartDate:  time.Now().Add(-24 * time.Hour),
-			StartDateLocal: time.Now().Add(-24 * time.Hour),
-			TotalElevationGain: 50,
-			AverageHeartrate: 150,
-			Kudos: 5,
-		},
-		{
-			ID:         12346,
-			Name:       "Evening Bike Ride",
-			Type:       "Ride",
-			Distance:   15000,   // 15km in meters
-			MovingTime: 2700,    // 45 minutes in seconds
-			StartDate:  time.Now().Add(-48 * time.Hour),
-			StartDateLocal: time.Now().Add(-48 * time.Hour),
-			TotalElevationGain: 200,
-			AverageHeartrate: 130,
-			Kudos: 8,
-		},
+		"job_type", jobType)
+
+	// Load user's timezone to calculate date range
+	location, err := time.LoadLocation(config.Timezone)
+	if err != nil {
+		w.logger.Error("Invalid timezone",
+			"timezone", config.Timezone,
+			"error", err)
+		result.ProcessingTime = time.Since(startTime)
+		result.Error = fmt.Sprintf("Invalid timezone: %v", err)
+		result.ErrorType = "TIMEZONE_ERROR"
+		return result
 	}
-	
-	// No error for simulation - actual error handling would be here in real implementation
-	w.logger.Info("✅ Step 6/8: Simulated Strava activity fetch completed (TODO: implement actual fetching)",
+
+	// Calculate date range for fetching training plan
+	now := time.Now().In(location)
+	// Set to beginning of day for consistent date comparisons
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	endDate := today // Today at 00:00:00
+	startDate := today.AddDate(0, 0, -8) // 8 days ago at 00:00:00
+
+	// Fetch all training plan entries once
+	trainingPlanCache, err := processingService.FetchAllTrainingPlanEntries(ctx, config, startDate, endDate)
+	if err != nil {
+		w.logger.Error("Failed to fetch training plan cache",
+			"error", err,
+			"user_id", userID,
+			"date_range", fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")))
+		result.ProcessingTime = time.Since(startTime)
+		result.Error = fmt.Sprintf("Failed to fetch training plan: %v", err)
+		result.ErrorType = "TRAINING_PLAN_ERROR"
+		return result
+	}
+
+	// Step 7: Fetch all Strava activities once
+	w.logger.Info("🏃 Step 7: Fetching Strava activities",
 		"user_id", userID,
-		"step", "strava_activity_fetch",
-		"fetch_results", map[string]interface{}{
-			"activity_count":   len(activities),
-			"since":            since.Format(time.RFC3339),
-			"fetch_simulated":  true,
-			"first_activity":   func() string {
-				if len(activities) > 0 {
-					return activities[0].StartDate.Format(time.RFC3339)
-				}
-				return "none"
-			}(),
-			"last_activity":    func() string {
-				if len(activities) > 0 {
-					return activities[len(activities)-1].StartDate.Format(time.RFC3339)
-				}
-				return "none"
-			}(),
-		})
-	
-	// Step 7: Write activities to Google Sheets
-	// TODO: Implement actual Google Sheets writing functionality
-	// This is subject to a separate story and should not be implemented yet
-	if len(activities) > 0 {
-		w.logger.Debug("📝 Step 7/8: Simulating Google Sheets write (TODO: implement actual writing)",
+		"job_type", jobType)
+
+	// Fetch all Strava activities for the date range
+	stravaActivitiesCache, err := processingService.FetchAllStravaActivities(ctx, location, startDate, endDate)
+	if err != nil {
+		w.logger.Error("Failed to fetch Strava activities",
+			"error", err,
 			"user_id", userID,
-			"step", "sheets_activity_write",
-			"write_parameters", map[string]interface{}{
-				"activity_count":   len(activities),
-				"spreadsheet_id":   config.SpreadsheetID,
-				"target_sheet":     "Тренировъчен План",
-				"write_range":      fmt.Sprintf("A2:I%d", len(activities)+1),
-			})
-		
-		// TODO: Replace this simulation with actual sheets writing
-		// The implementation should:
-		// 1. Use the corrected Google Sheets client
-		// 2. Write to the "Тренировъчен План" sheet
-		// 3. Handle re-authorization errors
-		// 4. Provide proper error logging and recovery
-		
-		time.Sleep(300 * time.Millisecond) // Simulate processing time
-		
-		w.logger.Info("✅ Step 7/8: Simulated Google Sheets write completed (TODO: implement actual writing)",
+			"date_range", fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")))
+		result.ProcessingTime = time.Since(startTime)
+		result.Error = fmt.Sprintf("Failed to fetch Strava activities: %v", err)
+		result.ErrorType = "STRAVA_API_ERROR"
+		return result
+	}
+
+	// Step 8: Process based on job type
+	w.logger.Info("📊 Step 8: Processing data based on job type",
+		"user_id", userID,
+		"job_type", jobType,
+		"training_plan_entries", len(trainingPlanCache),
+		"strava_activity_days", len(stravaActivitiesCache))
+
+	var totalActivities int
+	var processingErrors []error
+	var spreadsheetUpdates []*google.SpreadsheetUpdate
+
+	// For manual sync, also process today's data
+	if jobType == "manual_sync" {
+		w.logger.Debug("Processing manual sync - will process today, yesterday, and 7-day lookback",
 			"user_id", userID,
-			"step", "sheets_activity_write",
-			"write_results", map[string]interface{}{
-				"activity_count":   len(activities),
-				"spreadsheet_id":   config.SpreadsheetID,
-				"write_simulated":  true,
-			})
+			"timezone", config.Timezone)
+
+		// Process today's data (US028)
+		todayResult, err := processingService.ProcessTodaySoFar(ctx, config, trainingPlanCache, stravaActivitiesCache)
+		if err != nil {
+			processingErrors = append(processingErrors, fmt.Errorf("today processing failed: %w", err))
+		} else if todayResult.Error != nil {
+			processingErrors = append(processingErrors, fmt.Errorf("today processing error: %w", todayResult.Error))
+		} else {
+			totalActivities += todayResult.ActivitiesFound
+			if todayResult.Processed && todayResult.SpreadsheetUpdate != nil {
+				// Convert to google.SpreadsheetUpdate
+				update := &google.SpreadsheetUpdate{
+					Row:              todayResult.SpreadsheetUpdate.Row,
+					DistanceValue:    todayResult.SpreadsheetUpdate.DistanceValue,
+					TimeValue:        todayResult.SpreadsheetUpdate.TimeValue,
+					RPEValue:         todayResult.SpreadsheetUpdate.RPEValue,
+					DescriptionValue: todayResult.SpreadsheetUpdate.DescriptionValue,
+					DescriptionBold:  todayResult.SpreadsheetUpdate.DescriptionBold,
+				}
+				spreadsheetUpdates = append(spreadsheetUpdates, update)
+			}
+		}
 	} else {
-		w.logger.Info("ℹ️ Step 7/8: No new activities to write to Google Sheets",
+		w.logger.Debug("Processing scheduled sync - will process yesterday and 7-day lookback",
 			"user_id", userID,
-			"step", "sheets_activity_write",
-			"skip_details", map[string]interface{}{
-				"activity_count":   0,
-				"since":            since.Format(time.RFC3339),
-				"skip_reason":      "No activities found in the specified time range",
-			})
+			"timezone", config.Timezone)
 	}
-	
-	// Step 8: Queue notification to notification service
-	w.logger.Debug("📧 Step 8/8: Queueing notification to notification service (TODO: implement)",
-		"user_id", userID,
-		"step", "notification_queueing",
-		"notification_details", map[string]interface{}{
-			"target_queue":           "notifications_queue",
-			"email":                  config.Email,
-			"activity_count":         len(activities),
-			"email_notifications":    config.EmailNotificationsEnabled,
-			"notification_required":  config.EmailNotificationsEnabled && len(activities) > 0,
-		})
-	
-	// TODO: Implement actual notification queueing
-	// if config.EmailNotificationsEnabled && len(activities) > 0 {
-	//     notificationData := map[string]interface{}{
-	//         "email": config.Email,
-	//         "activity_count": len(activities),
-	//         "processing_time": processingDuration.Milliseconds(),
-	//     }
-	//     _, err := notificationQueueClient.EnqueueJob(ctx, queue.JobTypeNotification, userID, notificationData)
-	//     if err != nil {
-	//         w.logger.Warn("Failed to queue notification", "error", err, "user_id", userID)
-	//     }
-	// }
-	
-	w.logger.Info("✅ Step 8/8: Notification queueing completed (TODO: implement actual queueing)",
-		"user_id", userID,
-		"step", "notification_queueing",
-		"notification_status", "simulated")
-	
-	// Complete processing successfully
+
+	// Process previous day (US025) - common for both sync types
+	prevDayResult, err := processingService.ProcessPreviousDay(ctx, config, trainingPlanCache, stravaActivitiesCache)
+	if err != nil {
+		processingErrors = append(processingErrors, fmt.Errorf("previous day processing failed: %w", err))
+	} else if prevDayResult.Error != nil {
+		processingErrors = append(processingErrors, fmt.Errorf("previous day processing error: %w", prevDayResult.Error))
+	} else {
+		totalActivities += prevDayResult.ActivitiesFound
+		if prevDayResult.Processed && prevDayResult.SpreadsheetUpdate != nil {
+			// Convert to google.SpreadsheetUpdate
+			update := &google.SpreadsheetUpdate{
+				Row:              prevDayResult.SpreadsheetUpdate.Row,
+				DistanceValue:    prevDayResult.SpreadsheetUpdate.DistanceValue,
+				TimeValue:        prevDayResult.SpreadsheetUpdate.TimeValue,
+				RPEValue:         prevDayResult.SpreadsheetUpdate.RPEValue,
+				DescriptionValue: prevDayResult.SpreadsheetUpdate.DescriptionValue,
+				DescriptionBold:  prevDayResult.SpreadsheetUpdate.DescriptionBold,
+			}
+			spreadsheetUpdates = append(spreadsheetUpdates, update)
+		}
+	}
+
+	// Process 7-day lookback (US026 & US027) - common for both sync types
+	lookbackResults, err := processingService.ProcessLookbackPeriod(ctx, config, trainingPlanCache, stravaActivitiesCache)
+	if err != nil {
+		processingErrors = append(processingErrors, fmt.Errorf("lookback processing failed: %w", err))
+	} else {
+		for _, lr := range lookbackResults {
+			if lr.Error == nil && lr.Processed {
+				totalActivities += lr.ActivitiesFound
+				if lr.SpreadsheetUpdate != nil {
+					// Convert to google.SpreadsheetUpdate
+					update := &google.SpreadsheetUpdate{
+						Row:              lr.SpreadsheetUpdate.Row,
+						DistanceValue:    lr.SpreadsheetUpdate.DistanceValue,
+						TimeValue:        lr.SpreadsheetUpdate.TimeValue,
+						RPEValue:         lr.SpreadsheetUpdate.RPEValue,
+						DescriptionValue: lr.SpreadsheetUpdate.DescriptionValue,
+						DescriptionBold:  lr.SpreadsheetUpdate.DescriptionBold,
+					}
+					spreadsheetUpdates = append(spreadsheetUpdates, update)
+				}
+			}
+		}
+	}
+
+	// Step 9: Batch update spreadsheet if we have any updates
+	if len(spreadsheetUpdates) > 0 {
+		w.logger.Info("📝 Step 9: Writing updates to Google Sheets",
+			"user_id", userID,
+			"update_count", len(spreadsheetUpdates))
+
+		err := sheetsClient.BatchUpdateTrainingPlan(ctx, config.SpreadsheetID, spreadsheetUpdates)
+		if err != nil {
+			processingErrors = append(processingErrors, fmt.Errorf("spreadsheet batch update failed: %w", err))
+			w.logger.Error("Failed to update spreadsheet",
+				"error", err,
+				"user_id", userID,
+				"spreadsheet_id", config.SpreadsheetID,
+				"update_count", len(spreadsheetUpdates))
+		} else {
+			w.logger.Info("Successfully updated training plan spreadsheet",
+				"user_id", userID,
+				"rows_updated", len(spreadsheetUpdates))
+		}
+	}
+
+	// Step 10: Handle results
 	processingDuration := time.Since(startTime)
-	
+
+	if len(processingErrors) > 0 {
+		w.logger.Error("❌ Processing completed with errors",
+			"user_id", userID,
+			"job_type", jobType,
+			"error_count", len(processingErrors),
+			"errors", processingErrors,
+			"processing_duration_ms", processingDuration.Milliseconds())
+
+		result.ProcessingTime = processingDuration
+		result.Error = fmt.Sprintf("Processing failed with %d errors", len(processingErrors))
+		result.ErrorType = "PROCESSING_ERROR"
+		result.ActivitiesCount = totalActivities
+		return result
+	}
+
+	// Step 11: Queue notification (if enabled)
+	if config.EmailNotificationsEnabled && totalActivities > 0 {
+		w.logger.Debug("📧 Step 11: Queueing notification (TODO: implement)",
+			"user_id", userID,
+			"email", config.Email,
+			"activity_count", totalActivities)
+		// TODO: Implement notification queueing when notification service is ready
+	}
+
+	// Complete processing successfully
 	result.Success = true
-	result.ActivitiesCount = len(activities)
+	result.ActivitiesCount = totalActivities
 	result.ProcessingTime = processingDuration
-	
+
 	w.logger.Info("🎉 Successfully completed automation processing for user",
 		"user_id", userID,
-		"step", "processing_complete",
+		"job_type", jobType,
 		"processing_summary", map[string]interface{}{
-			"activity_count":        len(activities),
+			"activity_count":         totalActivities,
 			"processing_duration_ms": processingDuration.Milliseconds(),
-			"email":                 config.Email,
-			"spreadsheet_id":        config.SpreadsheetID,
-			"all_steps_successful": true,
-			"final_status":         "SUCCESS",
+			"email":                  config.Email,
+			"spreadsheet_id":         config.SpreadsheetID,
+			"final_status":           "SUCCESS",
 		})
-	
+
 	return result
 }
 
 // ProcessUsers processes automation for multiple users
 // This method handles batch processing with individual error isolation
-func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int) []*ProcessingResult {
+func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int, jobType string) []*ProcessingResult {
 	w.logger.Info("Starting batch automation processing",
-		"user_count", len(userIDs))
-	
+		"user_count", len(userIDs),
+		"job_type", jobType)
+
 	results := make([]*ProcessingResult, len(userIDs))
-	
+
 	for i, userID := range userIDs {
 		w.logger.Debug("Processing user in batch",
 			"user_id", userID,
 			"user_index", i+1,
 			"total_users", len(userIDs))
-		
-		results[i] = w.ProcessUser(ctx, userID)
-		
+
+		results[i] = w.ProcessUser(ctx, userID, jobType)
+
 		// Log batch progress
 		if results[i].Success {
 			w.logger.Debug("User processing completed successfully in batch",
@@ -501,12 +527,12 @@ func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int) []*ProcessingR
 				"requires_reauth", results[i].RequiresReauth)
 		}
 	}
-	
+
 	// Calculate batch summary
 	successful := 0
 	reauthRequired := 0
 	totalActivities := 0
-	
+
 	for _, result := range results {
 		if result.Success {
 			successful++
@@ -516,13 +542,13 @@ func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int) []*ProcessingR
 			reauthRequired++
 		}
 	}
-	
+
 	w.logger.Info("Completed batch automation processing",
 		"total_users", len(userIDs),
 		"successful_users", successful,
 		"failed_users", len(userIDs)-successful,
 		"reauth_required_users", reauthRequired,
 		"total_activities_processed", totalActivities)
-	
+
 	return results
 }
