@@ -245,6 +245,7 @@ func main() {
 		r.Route("/config", func(r chi.Router) {
 			r.Post("/spreadsheet", configHandler.SetSpreadsheet)     // Set spreadsheet URL
 			r.Delete("/spreadsheet", configHandler.ClearSpreadsheet) // Clear spreadsheet configuration
+			r.Post("/timezone", configHandler.SetTimezone)           // Set user timezone
 		})
 
 		// Sync routes (only if sync service is available)

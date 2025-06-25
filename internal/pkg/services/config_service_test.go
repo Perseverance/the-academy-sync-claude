@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestConfigService_extractSpreadsheetID(t *testing.T) {
@@ -192,4 +193,28 @@ func TestConfigError(t *testing.T) {
 			}
 		})
 	}
+}
+
+// Test that timezone validation happens before database call
+func TestConfigService_SetTimezone_ValidationFirst(t *testing.T) {
+	log := logger.New("test")
+	service := &ConfigService{
+		logger: log,
+		// userRepository is nil, but validation should fail first
+	}
+
+	// Test with empty timezone
+	err := service.SetTimezone(context.Background(), 123, "")
+	assert.Error(t, err)
+	configErr, ok := err.(*ConfigError)
+	assert.True(t, ok, "Expected ConfigError type")
+	assert.Equal(t, ConfigErrorValidation, configErr.Type)
+	assert.Equal(t, "Timezone cannot be empty", configErr.Message)
+
+	// Test with whitespace timezone
+	err = service.SetTimezone(context.Background(), 123, "  ")
+	assert.Error(t, err)
+	configErr, ok = err.(*ConfigError)
+	assert.True(t, ok, "Expected ConfigError type")
+	assert.Equal(t, ConfigErrorValidation, configErr.Type)
 }

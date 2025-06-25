@@ -302,7 +302,7 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 	now := time.Now().In(location)
 	// Set to beginning of day for consistent date comparisons
 	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
-	endDate := today // Today at 00:00:00
+	endDate := today                     // Today at 00:00:00
 	startDate := today.AddDate(0, 0, -8) // 8 days ago at 00:00:00
 
 	// Fetch all training plan entries once

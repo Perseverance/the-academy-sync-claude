@@ -124,6 +124,28 @@ export class ConfigService {
       this.handleNetworkError(error, 'clearing spreadsheet URL')
     }
   }
+
+  /**
+   * Update the user's timezone (fire-and-forget)
+   * This method does not throw errors as it's a non-critical operation
+   */
+  async updateUserTimezone(timezone: string): Promise<void> {
+    try {
+      // Fire-and-forget: we don't wait for or handle the response
+      fetch(`${this.baseURL}/api/config/timezone`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include', // Include cookies for authentication
+        body: JSON.stringify({ timezone }),
+      }).catch(() => {
+        // Silently ignore errors - fire-and-forget pattern
+      })
+    } catch (error) {
+      // Silently ignore errors - fire-and-forget pattern
+    }
+  }
 }
 
 /**
