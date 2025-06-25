@@ -131,7 +131,6 @@ func (c *Client) EnqueueJob(ctx context.Context, jobType JobType, userID int, da
 func (c *Client) DequeueJob(ctx context.Context) (*Job, error) {
 	c.logger.Debug("Waiting for job from queue", "queue", c.queueName)
 
-
 	// BRPOP blocks until an item is available or timeout
 	result, err := c.redis.BRPop(ctx, 0, c.queueName).Result()
 	if err != nil {

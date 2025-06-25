@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation"
 // Using custom button classes now, but can keep shadcn Button for structure if preferred
 // import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useAuth } from "@/components/auth-provider"
 import { Activity, BarChart3, Calendar, Loader2 } from "lucide-react"
 import { AcademyLogo } from "./icons/academy-logo"
+import { useAppState } from "@/context/app-state-provider"
 
 export function LandingPage() {
-  const { user, signIn, isLoading } = useAuth()
+  const { state, actions } = useAppState()
+  const { user, isAuthLoading: isLoading } = state
+  const { signIn } = actions
   const router = useRouter()
 
   useEffect(() => {

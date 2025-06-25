@@ -283,3 +283,38 @@ func (c *ConfigService) sanitizeSpreadsheetID(spreadsheetID string) string {
 	middle := strings.Repeat("*", length-8)
 	return prefix + middle + suffix
 }
+
+// SetTimezone updates the user's timezone setting
+func (c *ConfigService) SetTimezone(ctx context.Context, userID int, timezone string) error {
+	c.logger.Info("Updating user timezone",
+		"user_id", userID,
+		"timezone", timezone)
+
+	// Basic validation - check if timezone is not empty
+	if strings.TrimSpace(timezone) == "" {
+		return &ConfigError{
+			Type:    ConfigErrorValidation,
+			Message: "Timezone cannot be empty",
+		}
+	}
+
+	// Update timezone in database
+	err := c.userRepository.UpdateTimezone(ctx, userID, timezone)
+	if err != nil {
+		c.logger.Error("Failed to update timezone",
+			"error", err,
+			"user_id", userID,
+			"timezone", timezone)
+		return &ConfigError{
+			Type:    ConfigErrorDatabase,
+			Message: "Failed to update timezone. Please try again.",
+			Cause:   err,
+		}
+	}
+
+	c.logger.Info("Timezone updated successfully",
+		"user_id", userID,
+		"timezone", timezone)
+
+	return nil
+}

@@ -99,7 +99,6 @@ web/
 ├── components/               # React components
 │   ├── ui/                   # shadcn/ui components
 │   ├── icons/                # SVG icon components
-│   ├── auth-provider.tsx     # Authentication context
 │   └── *.tsx                 # Feature components
 ├── context/                  # React contexts
 ├── hooks/                    # Custom React hooks

@@ -106,6 +106,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           activityLogs: user?.recent_activity_logs?.length ? user.recent_activity_logs : mockLogs,
           isLogsLoading: false
         }))
+
+        // Update timezone if user is authenticated (fire-and-forget)
+        if (user) {
+          const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+          configService.updateUserTimezone(browserTimezone)
+        }
       } catch (error) {
         console.error('Error checking auth status:', error)
         setState((s) => ({ ...s, isAuthLoading: false }))
@@ -344,6 +350,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     triggerManualSync,
     setGoogleStatus,
   }
+
+  // Update timezone when window regains focus (in case user changed system timezone)
+  useEffect(() => {
+    const handleFocus = () => {
+      if (state.user) {
+        const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
+        configService.updateUserTimezone(browserTimezone)
+      }
+    }
+
+    window.addEventListener('focus', handleFocus)
+    return () => {
+      window.removeEventListener('focus', handleFocus)
+    }
+  }, [state.user])
 
   // Cleanup effect to mark component as unmounted
   useEffect(() => {

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"strings"
@@ -27,6 +28,11 @@ func NewConfigHandler(configService *services.ConfigService, logger *logger.Logg
 // SetSpreadsheetRequest represents the request body for setting a spreadsheet URL
 type SetSpreadsheetRequest struct {
 	URL string `json:"url"`
+}
+
+// SetTimezoneRequest represents the request body for setting a timezone
+type SetTimezoneRequest struct {
+	Timezone string `json:"timezone"`
 }
 
 // SetSpreadsheetResponse represents the response for spreadsheet configuration
@@ -240,5 +246,78 @@ func (h *ConfigHandler) writeErrorResponse(w http.ResponseWriter, statusCode int
 			"error", err,
 			"status_code", statusCode,
 			"error_code", errorCode)
+	}
+}
+
+// SetTimezone handles POST /api/config/timezone requests
+// This is a fire-and-forget endpoint that always returns success
+func (h *ConfigHandler) SetTimezone(w http.ResponseWriter, r *http.Request) {
+	userID, ok := middleware.GetUserIDFromContext(r.Context())
+	clientIP := middleware.GetClientIP(r)
+
+	h.logger.Info("SetTimezone API request received",
+		"user_id", userID,
+		"has_user_id", ok,
+		"client_ip", clientIP,
+		"method", r.Method)
+
+	if !ok {
+		// Even for unauthenticated requests, return success (fire-and-forget)
+		h.logger.Warn("SetTimezone called without valid user context",
+			"client_ip", clientIP)
+		h.writeSuccessResponse(w, "Timezone update request received")
+		return
+	}
+
+	// Parse request body
+	var req SetTimezoneRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		h.logger.Warn("Invalid JSON in SetTimezone request",
+			"error", err,
+			"user_id", userID,
+			"client_ip", clientIP)
+		// Still return success (fire-and-forget)
+		h.writeSuccessResponse(w, "Timezone update request received")
+		return
+	}
+
+	h.logger.Debug("Parsed SetTimezone request",
+		"user_id", userID,
+		"timezone", req.Timezone)
+
+	// Call service to set timezone (fire-and-forget)
+	go func() {
+		// Use background context for async operation
+		ctx := context.Background()
+		err := h.configService.SetTimezone(ctx, userID, req.Timezone)
+		if err != nil {
+			h.logger.Error("Failed to update timezone",
+				"error", err,
+				"user_id", userID,
+				"timezone", req.Timezone)
+		} else {
+			h.logger.Info("Timezone updated successfully",
+				"user_id", userID,
+				"timezone", req.Timezone)
+		}
+	}()
+
+	// Always return success immediately (fire-and-forget)
+	h.writeSuccessResponse(w, "Timezone update request received")
+}
+
+// writeSuccessResponse writes a standardized success response
+func (h *ConfigHandler) writeSuccessResponse(w http.ResponseWriter, message string) {
+	response := SetSpreadsheetResponse{
+		Success: true,
+		Message: message,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		h.logger.Error("Failed to encode success response",
+			"error", err,
+			"message", message)
 	}
 }
