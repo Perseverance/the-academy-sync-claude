@@ -63,16 +63,16 @@ type SpreadsheetUpdate struct {
 
 // DayProcessingResult represents the outcome of processing a single day
 type DayProcessingResult struct {
-	Date               time.Time
-	Processed          bool
-	SkippedReason      string
-	ActivitiesFound    int
-	TotalDistance      float64 // in meters
-	TotalTime          int     // in seconds
-	Activities         []ProcessedActivity
-	PlanEntry          *TrainingPlanEntry
-	SpreadsheetUpdate  *SpreadsheetUpdate
-	Error              error
+	Date              time.Time
+	Processed         bool
+	SkippedReason     string
+	ActivitiesFound   int
+	TotalDistance     float64 // in meters
+	TotalTime         int     // in seconds
+	Activities        []ProcessedActivity
+	PlanEntry         *TrainingPlanEntry
+	SpreadsheetUpdate *SpreadsheetUpdate
+	Error             error
 }
 
 // TrainingPlanCache maps date strings (YYYY-MM-DD) to training plan entries
@@ -286,13 +286,13 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 
 	// Step 3: Check if there's a scheduled run for this day
 	hasScheduledRun := planEntry.ActivityType == "Бягане"
-	
+
 	// Step 4: Determine if we should process this day
 	// Process if either:
 	// - There are activities to record
 	// - There's a scheduled run (even with no activities, we need to mark it as '0')
 	shouldProcess := result.ActivitiesFound > 0 || hasScheduledRun
-	
+
 	if !shouldProcess {
 		result.Processed = false
 		result.SkippedReason = "No activities and no scheduled run"
@@ -319,9 +319,9 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 		"row", spreadsheetUpdate.Row,
 		"updates", map[string]interface{}{
 			"distance":         spreadsheetUpdate.DistanceValue,
-			"time":            spreadsheetUpdate.TimeValue,
-			"rpe":             spreadsheetUpdate.RPEValue,
-			"description":     spreadsheetUpdate.DescriptionValue,
+			"time":             spreadsheetUpdate.TimeValue,
+			"rpe":              spreadsheetUpdate.RPEValue,
+			"description":      spreadsheetUpdate.DescriptionValue,
 			"description_bold": spreadsheetUpdate.DescriptionBold,
 		},
 		"special_case", func() string {
@@ -360,7 +360,7 @@ func (s *ProcessingService) FetchAllStravaActivities(ctx context.Context, locati
 
 	// Build cache by organizing activities by date
 	cache := make(StravaActivitiesCache)
-	
+
 	// Pre-populate cache with empty slices for all dates in range
 	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
 		dateKey := d.Format("2006-01-02")
@@ -373,20 +373,18 @@ func (s *ProcessingService) FetchAllStravaActivities(ctx context.Context, locati
 		if activity.Type != "Run" {
 			continue
 		}
-		
+
 		// Convert to user's timezone for proper day assignment
 		activityLocalTime := activity.StartDate.In(location)
 		activityDayStart := time.Date(activityLocalTime.Year(), activityLocalTime.Month(), activityLocalTime.Day(), 0, 0, 0, 0, location)
 		dateKey := activityDayStart.Format("2006-01-02")
-		
-		
+
 		// Only include if within our date range
 		// Note: We use >= startDate and <= endDate (inclusive on both ends)
 		if !activityDayStart.Before(startDate) && !activityDayStart.After(endDate) {
 			cache[dateKey] = append(cache[dateKey], activity)
 		}
 	}
-
 
 	s.logger.Info("Organized Strava running activities into cache",
 		"total_days", len(cache),
@@ -397,7 +395,7 @@ func (s *ProcessingService) FetchAllStravaActivities(ctx context.Context, locati
 			}
 			return count
 		}(),
-		"filtered_out_non_runs", len(activities) - activityTypeCounts["Run"])
+		"filtered_out_non_runs", len(activities)-activityTypeCounts["Run"])
 
 	return cache, nil
 }
@@ -405,11 +403,11 @@ func (s *ProcessingService) FetchAllStravaActivities(ctx context.Context, locati
 // fetchActivitiesForDay retrieves activities for a specific day from the cache
 func (s *ProcessingService) fetchActivitiesForDay(ctx context.Context, dayStart time.Time, cache StravaActivitiesCache) ([]strava.Activity, error) {
 	dateKey := dayStart.Format("2006-01-02")
-	
+
 	if activities, ok := cache[dateKey]; ok {
 		return activities, nil
 	}
-	
+
 	// Return empty slice if not in cache
 	return []strava.Activity{}, nil
 }
@@ -427,19 +425,19 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 	// Since this is a yearly plan, we can estimate the row range
 	startDayOfYear := startDate.YearDay()
 	endDayOfYear := endDate.YearDay()
-	
+
 	// Add some buffer for safety (in case plan doesn't start on Jan 1)
-	startRow := max(2, startDayOfYear - 10) // Start from at least row 2
-	endRow := min(endDayOfYear + 10, 367)   // Max 365 days + buffer
-	
+	startRow := max(2, startDayOfYear-10) // Start from at least row 2
+	endRow := min(endDayOfYear+10, 367)   // Max 365 days + buffer
+
 	rangeSpec := fmt.Sprintf("Тренировъчен План!A%d:J%d", startRow, endRow)
-	
+
 	s.logger.Debug("Calculated spreadsheet range",
 		"user_id", config.UserID,
 		"start_row", startRow,
 		"end_row", endRow,
 		"range", rangeSpec)
-	
+
 	rows, err := s.sheetsClient.ReadRange(ctx, config.SpreadsheetID, rangeSpec)
 	if err != nil {
 		s.logger.Error("Failed to read training plan from spreadsheet",
@@ -452,12 +450,12 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 
 	// Build the cache
 	cache := make(TrainingPlanCache)
-	
+
 	for rowIndex, row := range rows {
 		if len(row) == 0 {
 			continue
 		}
-		
+
 		entry := s.parseTrainingPlanRow(row, startRow+rowIndex)
 		if entry != nil && !entry.Date.IsZero() {
 			// Store in cache with normalized date key (YYYY-MM-DD)
@@ -470,26 +468,26 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 		"user_id", config.UserID,
 		"entries_found", len(cache),
 		"date_range", fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")))
-	
+
 	return cache, nil
 }
 
 // fetchTrainingPlanEntry retrieves the training plan for a specific day from the cache
 func (s *ProcessingService) fetchTrainingPlanEntry(ctx context.Context, config *automation.ProcessingConfig, date time.Time, cache TrainingPlanCache) (*TrainingPlanEntry, error) {
 	dateKey := date.Format("2006-01-02")
-	
+
 	s.logger.Debug("Looking up training plan entry in cache",
 		"user_id", config.UserID,
 		"date", dateKey)
-	
+
 	if entry, ok := cache[dateKey]; ok {
 		return entry, nil
 	}
-	
+
 	s.logger.Debug("No training plan entry found in cache for date",
 		"user_id", config.UserID,
 		"date", dateKey)
-	
+
 	return nil, nil
 }
 
@@ -591,20 +589,20 @@ func (s *ProcessingService) processActivities(activities []strava.Activity) ([]P
 				"activity_name", activity.Name)
 			continue
 		}
-		
+
 		processed := ProcessedActivity{
 			StravaActivity: activity,
 		}
-		
+
 		// Round distance to nearest 0.05km
 		distanceKm := activity.Distance / 1000
 		processed.ProcessedData.Distance = math.Round(distanceKm*20) / 20 // Round to nearest 0.05
-		
+
 		// Format duration as HH:MM:SS with rounding to nearest 5 seconds
 		processed.ProcessedData.Duration = s.formatDuration(activity.MovingTime)
-		
+
 		processedActivities = append(processedActivities, processed)
-		
+
 		// Add to totals
 		totalDistance += activity.Distance
 		totalTime += activity.MovingTime
@@ -658,22 +656,22 @@ func (s *ProcessingService) formatDuration(seconds int) string {
 	hours := seconds / 3600
 	minutes := (seconds % 3600) / 60
 	secs := seconds % 60
-	
+
 	// Round to nearest 5 seconds
 	roundedSecs := int(math.Round(float64(secs)/5.0) * 5)
-	
+
 	// Handle carry-over if rounding caused 60 seconds
 	if roundedSecs == 60 {
 		minutes++
 		roundedSecs = 0
-		
+
 		// Handle carry-over to hours if needed
 		if minutes == 60 {
 			hours++
 			minutes = 0
 		}
 	}
-	
+
 	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, roundedSecs)
 }
 

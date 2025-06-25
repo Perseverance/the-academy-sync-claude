@@ -716,13 +716,13 @@ func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetI
 			}
 			distanceFloat = parsed
 		}
-		
+
 		requests = append(requests, &sheets.Request{
 			UpdateCells: &sheets.UpdateCellsRequest{
 				Start: &sheets.GridCoordinate{
 					SheetId:     sheetID,
 					RowIndex:    int64(update.Row - 1), // 0-indexed
-					ColumnIndex: 4,                      // Column E
+					ColumnIndex: 4,                     // Column E
 				},
 				Rows: []*sheets.RowData{
 					{
