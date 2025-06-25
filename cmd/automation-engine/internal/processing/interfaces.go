@@ -19,4 +19,5 @@ type SheetsClient interface {
 	ValidateAccess(ctx context.Context, spreadsheetID string) error
 	GetSpreadsheetInfo(ctx context.Context, spreadsheetID string) (*google.SpreadsheetInfo, error)
 	WriteActivities(ctx context.Context, spreadsheetID string, activities []strava.Activity) error
+	BatchUpdateTrainingPlan(ctx context.Context, spreadsheetID string, updates []*google.SpreadsheetUpdate) error
 }

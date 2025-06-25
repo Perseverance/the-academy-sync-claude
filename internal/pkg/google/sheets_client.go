@@ -40,6 +40,16 @@ type ActivityRow struct {
 	Kudos         int    `json:"kudos"`
 }
 
+// SpreadsheetUpdate represents the changes to be made to a training plan spreadsheet row
+type SpreadsheetUpdate struct {
+	Row              int    `json:"row"`               // Spreadsheet row number (1-based)
+	DistanceValue    string `json:"distance_value"`    // Column E: "0" or formatted distance
+	TimeValue        string `json:"time_value"`        // Column F: "00:00:00" or formatted time
+	RPEValue         int    `json:"rpe_value"`         // Column I: Updated RPE (e.g., 2 for rest day)
+	DescriptionValue string `json:"description_value"` // Column J: Updated description
+	DescriptionBold  bool   `json:"description_bold"`  // Column J: Make bold to mark processed
+}
+
 // SheetsClient provides Google Sheets API access with automatic token lifecycle management
 // This implements US024 requirements for managing Google Sheets access tokens using refresh tokens
 type SheetsClient struct {
@@ -639,4 +649,196 @@ func (c *SheetsClient) handleSheetsAPIError(err error, operation, spreadsheetID 
 			Cause:     err,
 		}
 	}
+}
+
+// BatchUpdateTrainingPlan updates multiple rows in the training plan spreadsheet in a single API call
+// This method is designed to minimize API calls when processing multiple days (e.g., 7-day lookback)
+func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetID string, updates []*SpreadsheetUpdate) error {
+	startTime := time.Now()
+	c.logger.Debug("Starting batch update of training plan",
+		"user_id", c.userID,
+		"spreadsheet_id", spreadsheetID,
+		"update_count", len(updates))
+
+	if len(updates) == 0 {
+		c.logger.Debug("No updates to process",
+			"user_id", c.userID,
+			"spreadsheet_id", spreadsheetID)
+		return nil
+	}
+
+	// Ensure we have a valid token and service
+	if err := c.ensureValidToken(ctx); err != nil {
+		c.logger.Error("Failed to ensure valid token for batch update",
+			"error", err,
+			"user_id", c.userID,
+			"spreadsheet_id", spreadsheetID)
+		return err
+	}
+
+	// Get sheet ID for "Тренировъчен План"
+	targetSheetName := "Тренировъчен План"
+	spreadsheet, err := c.sheetsService.Spreadsheets.Get(spreadsheetID).Context(ctx).Do()
+	if err != nil {
+		return c.handleSheetsAPIError(err, "get spreadsheet for batch update", spreadsheetID)
+	}
+
+	var sheetID int64 = -1
+	for _, sheet := range spreadsheet.Sheets {
+		if sheet.Properties.Title == targetSheetName {
+			sheetID = sheet.Properties.SheetId
+			break
+		}
+	}
+
+	if sheetID == -1 {
+		return fmt.Errorf("sheet '%s' not found in spreadsheet", targetSheetName)
+	}
+
+	// Build batch update request
+	var requests []*sheets.Request
+
+	for _, update := range updates {
+		// Column E (index 4): Distance
+		requests = append(requests, &sheets.Request{
+			UpdateCells: &sheets.UpdateCellsRequest{
+				Start: &sheets.GridCoordinate{
+					SheetId:     sheetID,
+					RowIndex:    int64(update.Row - 1), // 0-indexed
+					ColumnIndex: 4,                      // Column E
+				},
+				Rows: []*sheets.RowData{
+					{
+						Values: []*sheets.CellData{
+							{
+								UserEnteredValue: &sheets.ExtendedValue{
+									StringValue: &update.DistanceValue,
+								},
+							},
+						},
+					},
+				},
+				Fields: "userEnteredValue",
+			},
+		})
+
+		// Column F (index 5): Time
+		requests = append(requests, &sheets.Request{
+			UpdateCells: &sheets.UpdateCellsRequest{
+				Start: &sheets.GridCoordinate{
+					SheetId:     sheetID,
+					RowIndex:    int64(update.Row - 1),
+					ColumnIndex: 5, // Column F
+				},
+				Rows: []*sheets.RowData{
+					{
+						Values: []*sheets.CellData{
+							{
+								UserEnteredValue: &sheets.ExtendedValue{
+									StringValue: &update.TimeValue,
+								},
+							},
+						},
+					},
+				},
+				Fields: "userEnteredValue",
+			},
+		})
+
+		// Column I (index 8): RPE
+		rpeValue := float64(update.RPEValue)
+		requests = append(requests, &sheets.Request{
+			UpdateCells: &sheets.UpdateCellsRequest{
+				Start: &sheets.GridCoordinate{
+					SheetId:     sheetID,
+					RowIndex:    int64(update.Row - 1),
+					ColumnIndex: 8, // Column I
+				},
+				Rows: []*sheets.RowData{
+					{
+						Values: []*sheets.CellData{
+							{
+								UserEnteredValue: &sheets.ExtendedValue{
+									NumberValue: &rpeValue,
+								},
+							},
+						},
+					},
+				},
+				Fields: "userEnteredValue",
+			},
+		})
+
+		// Column J (index 9): Description
+		requests = append(requests, &sheets.Request{
+			UpdateCells: &sheets.UpdateCellsRequest{
+				Start: &sheets.GridCoordinate{
+					SheetId:     sheetID,
+					RowIndex:    int64(update.Row - 1),
+					ColumnIndex: 9, // Column J
+				},
+				Rows: []*sheets.RowData{
+					{
+						Values: []*sheets.CellData{
+							{
+								UserEnteredValue: &sheets.ExtendedValue{
+									StringValue: &update.DescriptionValue,
+								},
+								// TODO: Implement bold formatting for Column J (Description) to mark as processed
+								// This will be implemented in a separate story for better separation of concerns
+								// When implemented, add: UserEnteredFormat with TextFormat.Bold = true
+							},
+						},
+					},
+				},
+				Fields: "userEnteredValue",
+			},
+		})
+	}
+
+	// Execute batch update
+	batchUpdateRequest := &sheets.BatchUpdateSpreadsheetRequest{
+		Requests: requests,
+	}
+
+	c.logger.Debug("Executing batch update request",
+		"user_id", c.userID,
+		"spreadsheet_id", spreadsheetID,
+		"request_count", len(requests),
+		"rows_affected", len(updates))
+
+	_, err = c.sheetsService.Spreadsheets.BatchUpdate(spreadsheetID, batchUpdateRequest).Context(ctx).Do()
+	if err != nil {
+		c.logger.Error("Failed to execute batch update",
+			"error", err,
+			"user_id", c.userID,
+			"spreadsheet_id", spreadsheetID,
+			"update_count", len(updates))
+		return c.handleSheetsAPIError(err, "batch update training plan", spreadsheetID)
+	}
+
+	duration := time.Since(startTime)
+	c.logger.Info("Successfully completed batch update of training plan",
+		"user_id", c.userID,
+		"spreadsheet_id", spreadsheetID,
+		"rows_updated", len(updates),
+		"cells_updated", len(updates)*4, // 4 cells per row
+		"duration_ms", duration.Milliseconds())
+
+	// Log details of what was updated
+	for _, update := range updates {
+		c.logger.Debug("Updated training plan row",
+			"row", update.Row,
+			"distance", update.DistanceValue,
+			"time", update.TimeValue,
+			"rpe", update.RPEValue,
+			"description_preview", func() string {
+				if len(update.DescriptionValue) > 50 {
+					return update.DescriptionValue[:50] + "..."
+				}
+				return update.DescriptionValue
+			}())
+	}
+
+	return nil
 }
