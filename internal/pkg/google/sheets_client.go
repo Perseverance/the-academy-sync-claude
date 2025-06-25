@@ -416,6 +416,48 @@ func (c *SheetsClient) GetSpreadsheetInfo(ctx context.Context, spreadsheetID str
 	return info, nil
 }
 
+// ReadRange reads values from a specified range in the spreadsheet
+// NOTE: In future, we should optimize the reading range to only read a small slice of data
+// based on the actual date range being processed
+func (c *SheetsClient) ReadRange(ctx context.Context, spreadsheetID, rangeSpec string) ([][]interface{}, error) {
+	startTime := time.Now()
+	c.logger.Debug("Reading range from Google Spreadsheet",
+		"user_id", c.userID,
+		"spreadsheet_id", spreadsheetID,
+		"range", rangeSpec)
+
+	// Ensure we have a valid token and service
+	if err := c.ensureValidToken(ctx); err != nil {
+		c.logger.Error("Failed to ensure valid token for range reading",
+			"error", err,
+			"user_id", c.userID,
+			"spreadsheet_id", spreadsheetID,
+			"range", rangeSpec)
+		return nil, err
+	}
+
+	// Read the range
+	resp, err := c.sheetsService.Spreadsheets.Values.Get(spreadsheetID, rangeSpec).Context(ctx).Do()
+	if err != nil {
+		c.logger.Error("Failed to read range from spreadsheet",
+			"error", err,
+			"user_id", c.userID,
+			"spreadsheet_id", spreadsheetID,
+			"range", rangeSpec)
+		return nil, c.handleSheetsAPIError(err, "read range", spreadsheetID)
+	}
+
+	duration := time.Since(startTime)
+	c.logger.Debug("Successfully read range from spreadsheet",
+		"user_id", c.userID,
+		"spreadsheet_id", spreadsheetID,
+		"range", rangeSpec,
+		"rows_returned", len(resp.Values),
+		"read_duration_ms", duration.Milliseconds())
+
+	return resp.Values, nil
+}
+
 // WriteActivities writes Strava activities to a Google Spreadsheet
 // This implements the core automation functionality
 func (c *SheetsClient) WriteActivities(ctx context.Context, spreadsheetID string, activities []strava.Activity) error {
