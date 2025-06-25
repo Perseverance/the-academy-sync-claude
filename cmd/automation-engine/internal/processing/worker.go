@@ -345,6 +345,7 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 
 	var totalActivities int
 	var processingErrors []error
+	var spreadsheetUpdates []*google.SpreadsheetUpdate
 
 	// For manual sync, also process today's data
 	if jobType == "manual_sync" {
@@ -360,6 +361,18 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 			processingErrors = append(processingErrors, fmt.Errorf("today processing error: %w", todayResult.Error))
 		} else {
 			totalActivities += todayResult.ActivitiesFound
+			if todayResult.Processed && todayResult.SpreadsheetUpdate != nil {
+				// Convert to google.SpreadsheetUpdate
+				update := &google.SpreadsheetUpdate{
+					Row:              todayResult.SpreadsheetUpdate.Row,
+					DistanceValue:    todayResult.SpreadsheetUpdate.DistanceValue,
+					TimeValue:        todayResult.SpreadsheetUpdate.TimeValue,
+					RPEValue:         todayResult.SpreadsheetUpdate.RPEValue,
+					DescriptionValue: todayResult.SpreadsheetUpdate.DescriptionValue,
+					DescriptionBold:  todayResult.SpreadsheetUpdate.DescriptionBold,
+				}
+				spreadsheetUpdates = append(spreadsheetUpdates, update)
+			}
 		}
 	} else {
 		w.logger.Debug("Processing scheduled sync - will process yesterday and 7-day lookback",
@@ -375,6 +388,18 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		processingErrors = append(processingErrors, fmt.Errorf("previous day processing error: %w", prevDayResult.Error))
 	} else {
 		totalActivities += prevDayResult.ActivitiesFound
+		if prevDayResult.Processed && prevDayResult.SpreadsheetUpdate != nil {
+			// Convert to google.SpreadsheetUpdate
+			update := &google.SpreadsheetUpdate{
+				Row:              prevDayResult.SpreadsheetUpdate.Row,
+				DistanceValue:    prevDayResult.SpreadsheetUpdate.DistanceValue,
+				TimeValue:        prevDayResult.SpreadsheetUpdate.TimeValue,
+				RPEValue:         prevDayResult.SpreadsheetUpdate.RPEValue,
+				DescriptionValue: prevDayResult.SpreadsheetUpdate.DescriptionValue,
+				DescriptionBold:  prevDayResult.SpreadsheetUpdate.DescriptionBold,
+			}
+			spreadsheetUpdates = append(spreadsheetUpdates, update)
+		}
 	}
 
 	// Process 7-day lookback (US026 & US027) - common for both sync types
@@ -385,11 +410,44 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		for _, lr := range lookbackResults {
 			if lr.Error == nil && lr.Processed {
 				totalActivities += lr.ActivitiesFound
+				if lr.SpreadsheetUpdate != nil {
+					// Convert to google.SpreadsheetUpdate
+					update := &google.SpreadsheetUpdate{
+						Row:              lr.SpreadsheetUpdate.Row,
+						DistanceValue:    lr.SpreadsheetUpdate.DistanceValue,
+						TimeValue:        lr.SpreadsheetUpdate.TimeValue,
+						RPEValue:         lr.SpreadsheetUpdate.RPEValue,
+						DescriptionValue: lr.SpreadsheetUpdate.DescriptionValue,
+						DescriptionBold:  lr.SpreadsheetUpdate.DescriptionBold,
+					}
+					spreadsheetUpdates = append(spreadsheetUpdates, update)
+				}
 			}
 		}
 	}
 
-	// Step 9: Handle results
+	// Step 9: Batch update spreadsheet if we have any updates
+	if len(spreadsheetUpdates) > 0 {
+		w.logger.Info("📝 Step 9: Writing updates to Google Sheets",
+			"user_id", userID,
+			"update_count", len(spreadsheetUpdates))
+
+		err := sheetsClient.BatchUpdateTrainingPlan(ctx, config.SpreadsheetID, spreadsheetUpdates)
+		if err != nil {
+			processingErrors = append(processingErrors, fmt.Errorf("spreadsheet batch update failed: %w", err))
+			w.logger.Error("Failed to update spreadsheet",
+				"error", err,
+				"user_id", userID,
+				"spreadsheet_id", config.SpreadsheetID,
+				"update_count", len(spreadsheetUpdates))
+		} else {
+			w.logger.Info("Successfully updated training plan spreadsheet",
+				"user_id", userID,
+				"rows_updated", len(spreadsheetUpdates))
+		}
+	}
+
+	// Step 10: Handle results
 	processingDuration := time.Since(startTime)
 
 	if len(processingErrors) > 0 {
@@ -407,9 +465,9 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		return result
 	}
 
-	// Step 10: Queue notification (if enabled)
+	// Step 11: Queue notification (if enabled)
 	if config.EmailNotificationsEnabled && totalActivities > 0 {
-		w.logger.Debug("📧 Step 10: Queueing notification (TODO: implement)",
+		w.logger.Debug("📧 Step 11: Queueing notification (TODO: implement)",
 			"user_id", userID,
 			"email", config.Email,
 			"activity_count", totalActivities)

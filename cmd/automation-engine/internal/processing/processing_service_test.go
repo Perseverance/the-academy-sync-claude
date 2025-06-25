@@ -41,6 +41,8 @@ type MockSheetsClient struct {
 	readRangeCalls    int
 	lastReadRange     string
 	validateAccessErr error
+	batchUpdateCalls  int
+	lastBatchUpdates  []*google.SpreadsheetUpdate
 }
 
 func (m *MockSheetsClient) ReadRange(ctx context.Context, spreadsheetID, rangeSpec string) ([][]interface{}, error) {
@@ -66,6 +68,12 @@ func (m *MockSheetsClient) GetSpreadsheetInfo(ctx context.Context, spreadsheetID
 }
 
 func (m *MockSheetsClient) WriteActivities(ctx context.Context, spreadsheetID string, activities []strava.Activity) error {
+	return nil
+}
+
+func (m *MockSheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetID string, updates []*google.SpreadsheetUpdate) error {
+	m.batchUpdateCalls++
+	m.lastBatchUpdates = updates
 	return nil
 }
 
@@ -641,5 +649,83 @@ func TestFetchAllTrainingPlanEntries_APIError(t *testing.T) {
 	
 	if err.Error() != "failed to read training plan: API quota exceeded" {
 		t.Errorf("Expected specific error message, got: %v", err)
+	}
+}
+
+// Test that spreadsheet updates are properly prepared
+func TestSpreadsheetUpdatePreparation(t *testing.T) {
+	date, _ := time.Parse("2006-01-02", "2025-05-01")
+	dateKey := date.Format("2006-01-02")
+	
+	mockStrava := &MockStravaClient{
+		activities: []strava.Activity{
+			{
+				ID:         123,
+				Name:       "Morning Run",
+				Type:       "Run",
+				Distance:   10274, // Should round to 10.25km
+				MovingTime: 3723,  // 01:02:03 should round to 01:02:05
+				StartDate:  date.Add(8 * time.Hour),
+			},
+		},
+	}
+	mockSheets := &MockSheetsClient{}
+	
+	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	config := createTestConfig(1, "Europe/Sofia")
+	
+	cache := TrainingPlanCache{
+		dateKey: &TrainingPlanEntry{
+			Date:         date,
+			ActivityType: "Бягане",
+			RPE:          5,
+			Row:          123,
+			Description:  "Easy run",
+		},
+	}
+	
+	// Create activities cache with the activity
+	activitiesCache := StravaActivitiesCache{
+		dateKey: mockStrava.activities,
+	}
+	
+	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache)
+	
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	
+	if !result.Processed {
+		t.Error("Expected processed")
+	}
+	
+	if result.SpreadsheetUpdate == nil {
+		t.Fatal("Expected spreadsheet update to be prepared")
+	}
+	
+	// Verify the prepared update
+	update := result.SpreadsheetUpdate
+	if update.Row != 123 {
+		t.Errorf("Expected row 123, got %d", update.Row)
+	}
+	
+	if update.DistanceValue != "10,25" {
+		t.Errorf("Expected distance '10,25', got %s", update.DistanceValue)
+	}
+	
+	if update.TimeValue != "01:02:05" {
+		t.Errorf("Expected time '01:02:05', got %s", update.TimeValue)
+	}
+	
+	if update.RPEValue != 5 {
+		t.Errorf("Expected RPE 5, got %d", update.RPEValue)
+	}
+	
+	if update.DescriptionValue != "Easy run" {
+		t.Errorf("Expected description 'Easy run', got %s", update.DescriptionValue)
+	}
+	
+	if !update.DescriptionBold {
+		t.Error("Expected description to be marked for bold formatting")
 	}
 }
