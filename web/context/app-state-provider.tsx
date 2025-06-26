@@ -48,21 +48,6 @@ const AppStateContext = createContext<
   | undefined
 >(undefined)
 
-const mockLogs: LogEntry[] = [
-  { id: "1", date: new Date(Date.now() - 86400000).toISOString(), status: "Success", summary: "Synced 5 activities." },
-  {
-    id: "2",
-    date: new Date(Date.now() - 2 * 86400000).toISOString(),
-    status: "Failure",
-    summary: "Strava API timeout.",
-  },
-  {
-    id: "3",
-    date: new Date(Date.now() - 3 * 86400000).toISOString(),
-    status: "SuccessWithWarning",
-    summary: "Synced 3 activities, 1 skipped (duplicate).",
-  },
-]
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter()
@@ -102,8 +87,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           // Convert spreadsheet_id to Google Sheets URL
           spreadsheetUrl: user?.spreadsheet_id ? 
                          `https://docs.google.com/spreadsheets/d/${user.spreadsheet_id}` : undefined,
-          // Use activity logs from user data, fallback to mock data if empty
-          activityLogs: user?.recent_activity_logs?.length ? user.recent_activity_logs : mockLogs,
+          // Use activity logs from user data
+          activityLogs: user?.recent_activity_logs || [],
           isLogsLoading: false
         }))
 
@@ -323,21 +308,13 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }
 
 
-  // Load mock logs only if no real logs are present
+  // Remove the loading state after initial load
   useEffect(() => {
-    if (state.user && state.activityLogs.length === 0) {
-      setState((s) => ({ ...s, isLogsLoading: true }))
-      setTimeout(() => {
-        setState((s) => {
-          // Only set mock logs if still no real logs present
-          if (s.activityLogs.length === 0) {
-            return { ...s, activityLogs: mockLogs, isLogsLoading: false }
-          }
-          return { ...s, isLogsLoading: false }
-        })
-      }, 1000)
+    if (state.user && state.isLogsLoading) {
+      // Just remove the loading state - we already have the real logs from the auth check
+      setState((s) => ({ ...s, isLogsLoading: false }))
     }
-  }, [state.user])
+  }, [state.user, state.isLogsLoading])
 
   const actions: AppActions = {
     signIn,
