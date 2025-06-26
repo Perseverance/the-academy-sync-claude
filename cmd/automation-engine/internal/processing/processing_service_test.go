@@ -3,6 +3,7 @@ package processing
 import (
 	"context"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,7 +103,7 @@ func TestFetchAllTrainingPlanEntries_Success(t *testing.T) {
 		},
 	}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	startDate, _ := time.Parse("2006-01-02", "2025-05-01")
@@ -143,7 +144,7 @@ func TestFetchAllTrainingPlanEntries_SmartRangeCalculation(t *testing.T) {
 		readRangeData: [][]interface{}{},
 	}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	// Test mid-year dates (June 22-25)
@@ -161,7 +162,7 @@ func TestFetchAllTrainingPlanEntries_SmartRangeCalculation(t *testing.T) {
 
 // Test date parsing with standard format
 func TestParseTrainingPlanRow_StandardDateFormat(t *testing.T) {
-	service := NewProcessingService(nil, nil, createTestLogger())
+	service := NewProcessingService(nil, nil, nil, createTestLogger())
 
 	testCases := []struct {
 		dateStr      string
@@ -186,7 +187,7 @@ func TestParseTrainingPlanRow_StandardDateFormat(t *testing.T) {
 
 // Test invalid date handling
 func TestParseTrainingPlanRow_InvalidDate(t *testing.T) {
-	service := NewProcessingService(nil, nil, createTestLogger())
+	service := NewProcessingService(nil, nil, nil, createTestLogger())
 
 	// Invalid date format
 	row := []interface{}{"32.13.2025", "", "", "Бягане", "10", "01:00:00", "", "", "5", "Test"}
@@ -204,7 +205,7 @@ func TestProcessSingleDay_NoTrainingPlan(t *testing.T) {
 	}
 	mockSheets := &MockSheetsClient{}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	date, _ := time.Parse("2006-01-02", "2025-05-01")
@@ -231,7 +232,7 @@ func TestProcessSingleDay_AlreadyProcessed(t *testing.T) {
 	mockStrava := &MockStravaClient{}
 	mockSheets := &MockSheetsClient{}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	date, _ := time.Parse("2006-01-02", "2025-05-01")
@@ -279,7 +280,7 @@ func TestProcessSingleDay_RestDayWithActivity(t *testing.T) {
 	}
 	mockSheets := &MockSheetsClient{}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	cache := TrainingPlanCache{
@@ -321,7 +322,7 @@ func TestProcessSingleDay_ScheduledRunNoActivity(t *testing.T) {
 	}
 	mockSheets := &MockSheetsClient{}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	cache := TrainingPlanCache{
@@ -371,7 +372,7 @@ func TestProcessing_SingleAPICall(t *testing.T) {
 		},
 	}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	// Test processing multiple days with cache
@@ -410,7 +411,7 @@ func TestFetchAllTrainingPlanEntries_EmptySpreadsheet(t *testing.T) {
 		readRangeData: [][]interface{}{}, // Empty data
 	}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	startDate, _ := time.Parse("2006-01-02", "2025-05-01")
@@ -429,7 +430,7 @@ func TestFetchAllTrainingPlanEntries_EmptySpreadsheet(t *testing.T) {
 
 // Test distance and time formatting
 func TestFormatting(t *testing.T) {
-	service := NewProcessingService(nil, nil, createTestLogger())
+	service := NewProcessingService(nil, nil, nil, createTestLogger())
 
 	// Test distance formatting
 	testDistances := []struct {
@@ -486,7 +487,7 @@ func TestFormatting(t *testing.T) {
 
 // Test processActivities filtering
 func TestProcessActivities(t *testing.T) {
-	service := NewProcessingService(nil, nil, createTestLogger())
+	service := NewProcessingService(nil, nil, nil, createTestLogger())
 
 	activities := []strava.Activity{
 		{
@@ -545,7 +546,7 @@ func TestFetchAllTrainingPlanEntries_YearBoundary(t *testing.T) {
 		},
 	}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	// Test crossing year boundary
@@ -595,7 +596,7 @@ func TestProcessPreviousDay_WithCache(t *testing.T) {
 	}
 	mockSheets := &MockSheetsClient{}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	// Create cache with yesterday's plan
@@ -635,7 +636,7 @@ func TestFetchAllTrainingPlanEntries_APIError(t *testing.T) {
 		readRangeErr: fmt.Errorf("API quota exceeded"),
 	}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	startDate, _ := time.Parse("2006-01-02", "2025-05-01")
@@ -671,7 +672,7 @@ func TestSpreadsheetUpdatePreparation(t *testing.T) {
 	}
 	mockSheets := &MockSheetsClient{}
 
-	service := NewProcessingService(mockStrava, mockSheets, createTestLogger())
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
 	cache := TrainingPlanCache{
@@ -721,8 +722,9 @@ func TestSpreadsheetUpdatePreparation(t *testing.T) {
 		t.Errorf("Expected RPE 5, got %d", update.RPEValue)
 	}
 
-	if update.DescriptionValue != "Easy run" {
-		t.Errorf("Expected description 'Easy run', got %s", update.DescriptionValue)
+	// Description should be generated based on RPE and activities
+	if !strings.Contains(update.DescriptionValue, "Прогресивно бягане") {
+		t.Errorf("Expected progressive run description, got %s", update.DescriptionValue)
 	}
 
 	if !update.DescriptionBold {
