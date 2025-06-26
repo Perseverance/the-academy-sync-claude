@@ -601,8 +601,32 @@ erDiagram
         TIMESTAMPTZ created_at "Creation timestamp"
     }
 
+    activity_logs {
+        SERIAL id PK "Auto-incrementing primary key"
+        INTEGER user_id FK "References users.id"
+        DATE processing_date "The calendar date being processed"
+        VARCHAR(50) processing_type "e.g., 'previous_day', 'today_so_far'"
+        VARCHAR(50) processing_scope "e.g., 'manual_sync', 'scheduled_daily'"
+        VARCHAR(20) status "e.g., 'success', 'failed', 'skipped'"
+        INTEGER activities_found "Number of Strava activities found"
+        INTEGER activities_processed "Number successfully processed"
+        DECIMAL total_distance_meters "Total distance in meters"
+        INTEGER total_duration_seconds "Total duration in seconds"
+        INTEGER spreadsheet_row "Row number that was updated"
+        BOOLEAN spreadsheet_updated "Whether sheet was updated"
+        TEXT description_generated "The generated description"
+        TEXT error_message "Error message if failed"
+        TEXT_ARRAY warning_messages "Array of warning messages"
+        TIMESTAMPTZ processing_started_at "When processing started"
+        TIMESTAMPTZ processing_completed_at "When processing completed"
+        INTEGER processing_duration_ms "Duration in milliseconds"
+        JSONB metadata "Additional context and activity IDs"
+        TIMESTAMPTZ created_at "When log entry was created"
+    }
+
     users ||--o{ user_sessions : "has"
     users ||--o{ automation_runs : "has"
+    users ||--o{ activity_logs : "has"
     automation_runs ||--o{ automation_run_logs : "contains"
 ```
 
@@ -674,6 +698,42 @@ Stores the detailed, day-by-day outcome for each processed day within a single a
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL` | The timestamp when this specific log record was created. |
 
 *Note: Using the `JSONB` data type for the `details` column is highly efficient in PostgreSQL and gives us great flexibility for storing rich diagnostic information.*
+
+## 6.5. Table: `activity_logs`
+
+Stores detailed processing outcomes from the automation engine for each day processed, providing audit trails and debugging information. This table tracks the actual work performed by the system.
+
+| Column Name | Data Type | Constraints | Description |
+| --- | --- | --- | --- |
+| `id` | `SERIAL` | `PRIMARY KEY` | Auto-incrementing unique identifier for this log entry. |
+| `user_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (users.id)` | Reference to the user this log belongs to. Has `ON DELETE CASCADE`. |
+| `processing_date` | `DATE` | `NOT NULL` | The calendar date being processed (e.g., '2025-06-26'). |
+| `processing_type` | `VARCHAR(50)` | `NOT NULL` | Type of processing: `previous_day` (US025), `today_so_far` (US028), or `lookback_period` (US026/027). |
+| `processing_scope` | `VARCHAR(50)` | `NOT NULL` | Scope identifier: `manual_sync`, `scheduled_daily`, etc. |
+| `status` | `VARCHAR(20)` | `NOT NULL` | Processing outcome: `success`, `partial`, `failed`, or `skipped`. |
+| `activities_found` | `INTEGER` | `DEFAULT 0` | Number of Strava activities found for the day. |
+| `activities_processed` | `INTEGER` | `DEFAULT 0` | Number of activities successfully processed. |
+| `total_distance_meters` | `DECIMAL(10,2)` |  | Total distance in meters across all activities. |
+| `total_duration_seconds` | `INTEGER` |  | Total duration in seconds across all activities. |
+| `spreadsheet_row` | `INTEGER` |  | Row number in spreadsheet that was updated. |
+| `spreadsheet_updated` | `BOOLEAN` | `DEFAULT false` | Whether the spreadsheet was successfully updated. |
+| `description_generated` | `TEXT` |  | The generated/updated description for the spreadsheet. |
+| `error_message` | `TEXT` |  | Error message if processing failed. |
+| `warning_messages` | `TEXT[]` |  | Array of warning messages encountered during processing. |
+| `processing_started_at` | `TIMESTAMPTZ` | `NOT NULL` | When processing started for this day. |
+| `processing_completed_at` | `TIMESTAMPTZ` |  | When processing completed for this day. |
+| `processing_duration_ms` | `INTEGER` |  | Processing duration in milliseconds. |
+| `metadata` | `JSONB` |  | Additional metadata including activity IDs, special cases (e.g., `rest_day_with_activity`), and other context. |
+| `created_at` | `TIMESTAMPTZ` | `DEFAULT CURRENT_TIMESTAMP` | When this log entry was created. |
+
+**Indexes:**
+- `idx_activity_logs_user_id` on `user_id` for querying by user
+- `idx_activity_logs_processing_date` on `processing_date` for date-based queries
+- `idx_activity_logs_status` on `status` for filtering by outcome
+- `idx_activity_logs_created_at` on `created_at` for recent logs
+- `idx_activity_logs_user_date` composite on `(user_id, processing_date)` for efficient user+date queries
+
+*Note: This table replaces the previous concept of `automation_run_logs` with a more direct, per-day logging approach that better matches the actual processing model of the automation engine.*
 
 # 7. Integration Strategy
 
