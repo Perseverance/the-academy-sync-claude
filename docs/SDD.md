@@ -555,7 +555,7 @@ This section defines the schema for the data stored in our PostgreSQL database. 
 ```mermaid
 erDiagram
     users {
-        UUID id PK "The user's unique ID"
+        SERIAL id PK "The user's unique ID"
         VARCHAR google_id "Unique ID from Google"
         VARCHAR email "User's email for notifications"
         VARCHAR full_name "User's full name"
@@ -573,7 +573,7 @@ erDiagram
 
     user_sessions {
         UUID id PK "Unique session ID"
-        UUID user_id FK "References users.id"
+        INTEGER user_id FK "References users.id"
         BYTEA refresh_token_hash "Hash of the refresh token"
         TEXT user_agent "Client User-Agent string"
         INET ip_address "Client IP address"
@@ -584,7 +584,7 @@ erDiagram
 
     automation_runs {
         UUID id PK "Unique ID for a single run"
-        UUID user_id FK "References users.id"
+        INTEGER user_id FK "References users.id"
         UUID trace_id "Unique trace ID for this job"
         VARCHAR(50) trigger_type "e.g., 'schedule' or 'manual_sync'"
         VARCHAR(50) status "e.g., 'Success', 'Failure'"
@@ -616,7 +616,7 @@ erDiagram
         BOOLEAN spreadsheet_updated "Whether sheet was updated"
         TEXT description_generated "The generated description"
         TEXT error_message "Error message if failed"
-        TEXT_ARRAY warning_messages "Array of warning messages"
+        TEXT[] warning_messages "Array of warning messages"
         TIMESTAMPTZ processing_started_at "When processing started"
         TIMESTAMPTZ processing_completed_at "When processing completed"
         INTEGER processing_duration_ms "Duration in milliseconds"
@@ -636,7 +636,7 @@ Stores all information related to a registered user, including their identity, c
 
 | Column Name | Data Type | Constraints | Description |
 | --- | --- | --- | --- |
-| `id` | `UUID` | `PRIMARY KEY` | The unique identifier for the user in our system. Generated on creation. |
+| `id` | `SERIAL` | `PRIMARY KEY` | The unique identifier for the user in our system. Auto-incrementing integer. |
 | `google_id` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | The unique subject ID (`sub`) provided by Google Sign-In. |
 | `email` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | The user's email address, used for identification and notifications. |
 | `full_name` | `VARCHAR(255)` | `NOT NULL` | The user's full name, as provided by Google. |
@@ -660,7 +660,7 @@ Stores a record for each active long-lived refresh token issued to a user. This 
 | Column Name | Data Type | Constraints | Description |
 | --- | --- | --- | --- |
 | `id` | `UUID` | `PRIMARY KEY` | The unique identifier for this session record. |
-| `user_id` | `UUID` | `NOT NULL, FOREIGN KEY (users.id)` | A reference to the user this session belongs to. Should have `ON DELETE CASCADE`. |
+| `user_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (users.id)` | A reference to the user this session belongs to. Should have `ON DELETE CASCADE`. |
 | `refresh_token_hash` | `BYTEA` | `NOT NULL, UNIQUE` | A cryptographic hash (e.g., SHA-256) of the refresh token. We store a hash, not the token itself, for security. |
 | `user_agent` | `TEXT` |  | The User-Agent string of the client that initiated the session. Useful for display and auditing. |
 | `ip_address` | `INET` |  | The IP address from which the session was created. |
@@ -675,7 +675,7 @@ Stores a high-level record for each individual execution of the automation proce
 | Column Name | Data Type | Constraints | Description |
 | --- | --- | --- | --- |
 | `id` | `UUID` | `PRIMARY KEY` | The unique identifier for this specific automation run. |
-| `user_id` | `UUID` | `NOT NULL, FOREIGN KEY (users.id)` | A reference to the user this run belongs to. Should have `ON DELETE CASCADE`. |
+| `user_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (users.id)` | A reference to the user this run belongs to. Should have `ON DELETE CASCADE`. |
 | `trace_id` | `UUID` | `NOT NULL, UNIQUE` | The unique trace ID for this job, passed from the queue. Useful for debugging. |
 | `trigger_type` | `VARCHAR(50)` | `NOT NULL` | How the job was initiated. Value will be one of: `schedule` or `manual_sync`. |
 | `status` | `VARCHAR(50)` | `NOT NULL` | The final, overall status of the entire run, e.g., `Success`, `SuccessWithWarnings`, `Failure`. |
