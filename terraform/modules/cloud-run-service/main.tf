@@ -1,6 +1,11 @@
 # Create a dedicated service account for this Cloud Run service
 resource "google_service_account" "service_account" {
-  account_id   = "${var.environment}-${var.service_name}-sa"
+  # Shorten service names to fit within 30 character limit
+  # staging-backend-api-sa = 22 chars (OK)
+  # staging-automation-engine-sa = 28 chars (OK)
+  # staging-notification-service-sa = 31 chars (TOO LONG)
+  # Use shorter names for longer service names
+  account_id = var.service_name == "notification-service" ? "${var.environment}-notif-svc-sa" : "${var.environment}-${var.service_name}-sa"
   display_name = "Service Account for ${var.environment} ${var.service_name}"
   project      = var.project_id
 }
