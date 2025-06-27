@@ -49,6 +49,11 @@ resource "google_redis_instance" "default" {
   authorized_network = "projects/${var.project_id}/global/networks/default"
   connect_mode       = "PRIVATE_SERVICE_ACCESS"
   
+  # Lifecycle configuration
+  lifecycle {
+    prevent_destroy = false  # Set to true in production
+  }
+  
   depends_on = [
     google_project_service.redis,
     google_service_networking_connection.redis_private_vpc

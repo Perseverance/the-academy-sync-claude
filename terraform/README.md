@@ -143,33 +143,40 @@ Before deploying Cloud Run services, you must build and push the container image
 
 ### Prerequisites for Container Images
 
-1. **Configure Docker for GCR:**
+1. **Use the build script (recommended):**
    ```sh
-   gcloud auth configure-docker
+   # Build and push all services for staging
+   ./scripts/build-and-push-images.sh staging all
+
+   # Or build specific services
+   ./scripts/build-and-push-images.sh prod backend-api
    ```
 
-2. **Build and push each service:**
+2. **Or manually build and push:**
    ```sh
+   # Configure Docker for GCR
+   gcloud auth configure-docker
+
    # Backend API
-   docker build --build-arg SERVICE_NAME=backend-api -t gcr.io/the-academy-sync-sdlc-test/backend-api:latest .
-   docker push gcr.io/the-academy-sync-sdlc-test/backend-api:latest
+   docker build --build-arg SERVICE_NAME=backend-api -t gcr.io/the-academy-sync-sdlc-test/backend-api:staging .
+   docker push gcr.io/the-academy-sync-sdlc-test/backend-api:staging
 
    # Automation Engine
-   docker build --build-arg SERVICE_NAME=automation-engine -t gcr.io/the-academy-sync-sdlc-test/automation-engine:latest .
-   docker push gcr.io/the-academy-sync-sdlc-test/automation-engine:latest
+   docker build --build-arg SERVICE_NAME=automation-engine -t gcr.io/the-academy-sync-sdlc-test/automation-engine:staging .
+   docker push gcr.io/the-academy-sync-sdlc-test/automation-engine:staging
 
    # Notification Service
-   docker build --build-arg SERVICE_NAME=notification-service -t gcr.io/the-academy-sync-sdlc-test/notification-service:latest .
-   docker push gcr.io/the-academy-sync-sdlc-test/notification-service:latest
+   docker build --build-arg SERVICE_NAME=notification-service -t gcr.io/the-academy-sync-sdlc-test/notification-service:staging .
+   docker push gcr.io/the-academy-sync-sdlc-test/notification-service:staging
    ```
 
 3. **Update the image URLs in your tfvars files:**
    
    Edit `staging.tfvars` or `prod.tfvars` and replace the placeholder image URLs with your actual image tags:
    ```hcl
-   backend_api_image_url          = "gcr.io/the-academy-sync-sdlc-test/backend-api:latest"
-   automation_engine_image_url    = "gcr.io/the-academy-sync-sdlc-test/automation-engine:latest"
-   notification_service_image_url = "gcr.io/the-academy-sync-sdlc-test/notification-service:latest"
+   backend_api_image_url          = "gcr.io/the-academy-sync-sdlc-test/backend-api:staging"
+   automation_engine_image_url    = "gcr.io/the-academy-sync-sdlc-test/automation-engine:staging"
+   notification_service_image_url = "gcr.io/the-academy-sync-sdlc-test/notification-service:staging"
    ```
 
 ## Known Issues and Solutions

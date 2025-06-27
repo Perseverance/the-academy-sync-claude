@@ -100,6 +100,34 @@ Runs database migrations on staging or production databases.
 - Supports both direct connection and Cloud SQL Proxy
 - Shows migration status after operations
 
+### 3. build-and-push-images.sh
+
+Builds and pushes container images to Google Container Registry for Cloud Run deployment.
+
+**Usage:**
+```bash
+./scripts/build-and-push-images.sh [staging|prod] [service-name|all]
+```
+
+**Examples:**
+```bash
+# Build all services for staging
+./scripts/build-and-push-images.sh staging all
+
+# Build only backend-api for production
+./scripts/build-and-push-images.sh prod backend-api
+
+# Build specific service for staging
+./scripts/build-and-push-images.sh staging automation-engine
+```
+
+**Features:**
+- Builds Docker images using the multi-stage Dockerfile
+- Tags images with environment-specific tags (staging/prod)
+- Pushes to Google Container Registry
+- Provides tfvars update instructions after successful build
+- Supports building individual services or all at once
+
 ## Workflow
 
 ### Initial Setup
