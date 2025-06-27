@@ -12,7 +12,7 @@ module "backend_api" {
   env_vars = {
     APP_ENV         = var.environment
     GO_ENV          = var.environment
-    PORT            = "8080"
+    # PORT is automatically set by Cloud Run, don't set it here
     LOG_LEVEL       = var.log_level
     GCP_PROJECT_ID  = var.project_id
     FAIL_FAST_ENABLED = "true"
@@ -172,6 +172,9 @@ module "notification_service" {
 
   # This is an internal service, no public access
   allow_unauthenticated = false
+
+  # For CPU < 1, we must set concurrency to 1
+  concurrency = 1
 
   depends_on = [
     google_project_service.run,

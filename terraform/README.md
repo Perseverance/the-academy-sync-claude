@@ -136,3 +136,46 @@ To deploy or make changes to an environment, first select the appropriate worksp
    ```
 
 Remember to ensure the `bucket` in `backend.tf` is set to your GCS bucket name (e.g., `the-academy-sync-claude-tfstate`) and update the project IDs in `staging.tfvars` and `prod.tfvars` with your actual values.
+
+## Container Images for Cloud Run
+
+Before deploying Cloud Run services, you must build and push the container images to Google Container Registry (GCR):
+
+### Prerequisites for Container Images
+
+1. **Configure Docker for GCR:**
+   ```sh
+   gcloud auth configure-docker
+   ```
+
+2. **Build and push each service:**
+   ```sh
+   # Backend API
+   docker build --build-arg SERVICE_NAME=backend-api -t gcr.io/the-academy-sync-sdlc-test/backend-api:latest .
+   docker push gcr.io/the-academy-sync-sdlc-test/backend-api:latest
+
+   # Automation Engine
+   docker build --build-arg SERVICE_NAME=automation-engine -t gcr.io/the-academy-sync-sdlc-test/automation-engine:latest .
+   docker push gcr.io/the-academy-sync-sdlc-test/automation-engine:latest
+
+   # Notification Service
+   docker build --build-arg SERVICE_NAME=notification-service -t gcr.io/the-academy-sync-sdlc-test/notification-service:latest .
+   docker push gcr.io/the-academy-sync-sdlc-test/notification-service:latest
+   ```
+
+3. **Update the image URLs in your tfvars files:**
+   
+   Edit `staging.tfvars` or `prod.tfvars` and replace the placeholder image URLs with your actual image tags:
+   ```hcl
+   backend_api_image_url          = "gcr.io/the-academy-sync-sdlc-test/backend-api:latest"
+   automation_engine_image_url    = "gcr.io/the-academy-sync-sdlc-test/automation-engine:latest"
+   notification_service_image_url = "gcr.io/the-academy-sync-sdlc-test/notification-service:latest"
+   ```
+
+## Known Issues and Solutions
+
+1. **PORT Environment Variable**: Cloud Run automatically sets the PORT environment variable. Do not set it in your service configuration.
+
+2. **CPU and Concurrency**: For services with CPU < 1 (like notification-service with 0.5 CPU), concurrency is automatically set to 1 as required by Cloud Run.
+
+3. **Service Account Name Length**: Service account IDs must be between 6-30 characters. The notification-service uses a shortened name `notif-svc` to fit within this limit.
