@@ -62,3 +62,130 @@ variable "redis_memory_size_gb" {
   description = "The memory size of the Redis instance in GB."
   type        = number
 }
+
+# VPC Connector configuration
+variable "vpc_connector_cidr" {
+  description = "The CIDR range for the VPC connector"
+  type        = string
+  default     = "10.8.0.0/28"
+}
+
+variable "vpc_connector_machine_type" {
+  description = "Machine type for VPC connector instances"
+  type        = string
+  default     = "e2-micro"
+}
+
+variable "vpc_connector_min_instances" {
+  description = "Minimum instances for VPC connector"
+  type        = number
+  default     = 2
+}
+
+variable "vpc_connector_max_instances" {
+  description = "Maximum instances for VPC connector"
+  type        = number
+  default     = 10
+}
+
+# Container image URLs
+variable "backend_api_image_url" {
+  description = "Container image URL for backend-api service"
+  type        = string
+}
+
+variable "automation_engine_image_url" {
+  description = "Container image URL for automation-engine service"
+  type        = string
+}
+
+variable "notification_service_image_url" {
+  description = "Container image URL for notification-service service"
+  type        = string
+}
+
+# Service resource configurations
+variable "backend_api_cpu" {
+  description = "CPU limit for backend-api service"
+  type        = string
+  default     = "1"
+}
+
+variable "backend_api_memory" {
+  description = "Memory limit for backend-api service"
+  type        = string
+  default     = "512Mi"
+}
+
+variable "backend_api_min_instances" {
+  description = "Minimum instances for backend-api service"
+  type        = number
+  default     = 1
+}
+
+variable "backend_api_max_instances" {
+  description = "Maximum instances for backend-api service"
+  type        = number
+  default     = 10
+}
+
+variable "automation_engine_cpu" {
+  description = "CPU limit for automation-engine service"
+  type        = string
+  default     = "2"
+}
+
+variable "automation_engine_memory" {
+  description = "Memory limit for automation-engine service"
+  type        = string
+  default     = "1Gi"
+}
+
+variable "automation_engine_min_instances" {
+  description = "Minimum instances for automation-engine service"
+  type        = number
+  default     = 1
+}
+
+variable "automation_engine_max_instances" {
+  description = "Maximum instances for automation-engine service"
+  type        = number
+  default     = 5
+}
+
+variable "automation_engine_max_workers" {
+  description = "Maximum worker threads for automation engine"
+  type        = number
+  default     = 20
+}
+
+variable "notification_service_cpu" {
+  description = "CPU limit for notification-service"
+  type        = string
+  default     = "0.5"
+}
+
+variable "notification_service_memory" {
+  description = "Memory limit for notification-service"
+  type        = string
+  default     = "256Mi"
+}
+
+variable "notification_service_min_instances" {
+  description = "Minimum instances for notification-service"
+  type        = number
+  default     = 0
+}
+
+variable "notification_service_max_instances" {
+  description = "Maximum instances for notification-service"
+  type        = number
+  default     = 5
+}
+
+# Common service configuration
+variable "log_level" {
+  description = "Log level for services"
+  type        = string
+  default     = "INFO"
+}

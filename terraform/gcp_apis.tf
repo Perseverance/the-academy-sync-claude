@@ -27,3 +27,21 @@ resource "google_project_service" "compute" {
   service                    = "compute.googleapis.com"
   disable_dependent_services = true
 }
+
+resource "google_project_service" "run" {
+  project                    = var.project_id
+  service                    = "run.googleapis.com"
+  disable_dependent_services = true
+}
+
+resource "google_project_service" "vpcaccess" {
+  project                    = var.project_id
+  service                    = "vpcaccess.googleapis.com"
+  disable_dependent_services = true
+}
+
+resource "google_project_service" "iam" {
+  project                    = var.project_id
+  service                    = "iam.googleapis.com"
+  disable_dependent_services = true
+}

@@ -204,6 +204,29 @@ construct_redis_url() {
     echo "$REDIS_URL"
 }
 
+# Function to construct BASE_URL from Cloud Run backend-api service
+construct_base_url() {
+    local ENV=$1
+    
+    # Get backend API URL from Terraform
+    echo "Fetching backend API URL from Terraform..."
+    
+    cd "$PROJECT_ROOT/terraform" || exit 1
+    
+    # Select the correct workspace
+    terraform workspace select "$ENV" >/dev/null 2>&1
+    
+    # Get backend API URL
+    BACKEND_URL=$(terraform output -raw backend_api_url 2>/dev/null || echo "")
+    
+    if [ -z "$BACKEND_URL" ]; then
+        print_warning "Could not fetch backend API URL from Terraform. BASE_URL secret will need to be updated manually."
+        return
+    fi
+    
+    echo "$BACKEND_URL"
+}
+
 # Main logic
 case "$COMMAND" in
     create|update)
@@ -274,15 +297,18 @@ case "$COMMAND" in
                         manage_secret "${ENVIRONMENT}-redis-url" "$value" "$COMMAND"
                     fi
                     ;;
-                # TODO: When application infrastructure is added to Terraform:
-                # BASE_URL)
-                #     # Derive from Cloud Run service URL or Load Balancer IP
-                #     manage_secret "${ENVIRONMENT}-base-url" "$value" "$COMMAND"
-                #     ;;
-                # FRONTEND_URL)
-                #     # Derive from Storage Bucket URL or CDN endpoint
-                #     manage_secret "${ENVIRONMENT}-frontend-url" "$value" "$COMMAND"
-                #     ;;
+                BASE_URL)
+                    # Skip if placeholder value, we'll construct it from Terraform outputs
+                    if [[ "$value" == *"staging-api"* || "$value" == *"api.yourdomain"* ]]; then
+                        print_warning "Skipping placeholder BASE_URL, will construct from Cloud Run outputs"
+                    else
+                        manage_secret "${ENVIRONMENT}-base-url" "$value" "$COMMAND"
+                    fi
+                    ;;
+                FRONTEND_URL)
+                    # Frontend URL is managed separately, not from Cloud Run
+                    manage_secret "${ENVIRONMENT}-frontend-url" "$value" "$COMMAND"
+                    ;;
             esac
         done < "$ENV_FILE"
         
@@ -304,6 +330,16 @@ case "$COMMAND" in
             manage_secret "${ENVIRONMENT}-redis-url" "$REDIS_URL" "$COMMAND"
         else
             print_warning "Redis URL will need to be created manually after Terraform deployment"
+        fi
+        
+        # Handle BASE_URL from Cloud Run
+        echo ""
+        echo "Constructing BASE_URL from Cloud Run..."
+        BASE_URL=$(construct_base_url "$ENVIRONMENT")
+        if [ -n "$BASE_URL" ]; then
+            manage_secret "${ENVIRONMENT}-base-url" "$BASE_URL" "$COMMAND"
+        else
+            print_warning "BASE_URL will need to be created manually after Cloud Run deployment"
         fi
         
         echo ""
