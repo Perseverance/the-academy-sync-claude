@@ -582,25 +582,6 @@ erDiagram
         TIMESTAMPTZ created_at "Creation timestamp"
     }
 
-    automation_runs {
-        UUID id PK "Unique ID for a single run"
-        INTEGER user_id FK "References users.id"
-        UUID trace_id "Unique trace ID for this job"
-        VARCHAR(50) trigger_type "e.g., 'schedule' or 'manual_sync'"
-        VARCHAR(50) status "e.g., 'Success', 'Failure'"
-        TIMESTAMPTZ created_at "When the run was initiated"
-    }
-
-    automation_run_logs {
-        UUID id PK "Unique ID for a single log line"
-        UUID run_id FK "References automation_runs.id"
-        DATE processed_date "The specific day this log is for"
-        VARCHAR(50) status "e.g., 'Logged', 'NoAction', 'Error'"
-        TEXT summary_message "The human-readable log message"
-        JSONB details "Structured diagnostic information"
-        TIMESTAMPTZ created_at "Creation timestamp"
-    }
-
     activity_logs {
         SERIAL id PK "Auto-incrementing primary key"
         INTEGER user_id FK "References users.id"
@@ -610,7 +591,7 @@ erDiagram
         VARCHAR(20) status "e.g., 'success', 'failed', 'skipped'"
         INTEGER activities_found "Number of Strava activities found"
         INTEGER activities_processed "Number successfully processed"
-        DECIMAL total_distance_meters "Total distance in meters"
+        DECIMAL(10,2) total_distance_meters "Total distance in meters"
         INTEGER total_duration_seconds "Total duration in seconds"
         INTEGER spreadsheet_row "Row number that was updated"
         BOOLEAN spreadsheet_updated "Whether sheet was updated"
@@ -625,9 +606,7 @@ erDiagram
     }
 
     users ||--o{ user_sessions : "has"
-    users ||--o{ automation_runs : "has"
     users ||--o{ activity_logs : "has"
-    automation_runs ||--o{ automation_run_logs : "contains"
 ```
 
 ## 6.1. Table: `users`
@@ -668,38 +647,7 @@ Stores a record for each active long-lived refresh token issued to a user. This 
 | `expires_at` | `TIMESTAMPTZ` | `NOT NULL` | The timestamp when this refresh token and session will expire (60 days from creation). |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL` | The timestamp when the session was created. |
 
-## 6.3. Table: `automation_runs`
-
-Stores a high-level record for each individual execution of the automation process for a given user.
-
-| Column Name | Data Type | Constraints | Description |
-| --- | --- | --- | --- |
-| `id` | `UUID` | `PRIMARY KEY` | The unique identifier for this specific automation run. |
-| `user_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (users.id)` | A reference to the user this run belongs to. Should have `ON DELETE CASCADE`. |
-| `trace_id` | `UUID` | `NOT NULL, UNIQUE` | The unique trace ID for this job, passed from the queue. Useful for debugging. |
-| `trigger_type` | `VARCHAR(50)` | `NOT NULL` | How the job was initiated. Value will be one of: `schedule` or `manual_sync`. |
-| `status` | `VARCHAR(50)` | `NOT NULL` | The final, overall status of the entire run, e.g., `Success`, `SuccessWithWarnings`, `Failure`. |
-| `created_at` | `TIMESTAMPTZ` | `NOT NULL` | The timestamp when the automation run was initiated. |
-
-*Note: In a PostgreSQL implementation, the `trigger_type` and `status` columns are excellent candidates for custom `ENUM` types to ensure data integrity.*
-
-## 6.4. Table: `automation_run_logs`
-
-Stores the detailed, day-by-day outcome for each processed day within a single automation run.
-
-| Column Name | Data Type | Constraints | Description |
-| --- | --- | --- | --- |
-| `id` | `UUID` | `PRIMARY KEY` | The unique identifier for this specific log entry. |
-| `run_id` | `UUID` | `NOT NULL, FOREIGN KEY (automation_runs.id)` | A reference to the parent run this log entry belongs to. Should have `ON DELETE CASCADE`. |
-| `processed_date` | `DATE` | `NOT NULL` | The specific calendar date that this log entry pertains to (e.g., '2025-06-08'). |
-| `status` | `VARCHAR(50)` | `NOT NULL` | The status for this specific day's processing, e.g., `Logged`, `Warning`, `Error`, `NoAction`. |
-| `summary_message` | `TEXT` | `NOT NULL` | The full, human-readable summary message for this day's outcome. |
-| `details` | `JSONB` |  | A field to store structured context, especially for errors or warnings (e.g., API error messages). |
-| `created_at` | `TIMESTAMPTZ` | `NOT NULL` | The timestamp when this specific log record was created. |
-
-*Note: Using the `JSONB` data type for the `details` column is highly efficient in PostgreSQL and gives us great flexibility for storing rich diagnostic information.*
-
-## 6.5. Table: `activity_logs`
+## 6.3. Table: `activity_logs`
 
 Stores detailed processing outcomes from the automation engine for each day processed, providing audit trails and debugging information. This table tracks the actual work performed by the system.
 
@@ -733,7 +681,7 @@ Stores detailed processing outcomes from the automation engine for each day proc
 - `idx_activity_logs_created_at` on `created_at` for recent logs
 - `idx_activity_logs_user_date` composite on `(user_id, processing_date)` for efficient user+date queries
 
-*Note: This table replaces the previous concept of `automation_run_logs` with a more direct, per-day logging approach that better matches the actual processing model of the automation engine.*
+*Note: The original design included `automation_runs` and `automation_run_logs` tables for a hierarchical logging approach. However, during implementation, the simpler `activity_logs` table was chosen as it better matches the actual processing model where each day is processed independently. This single-table approach reduces complexity and storage overhead while providing all necessary audit and debugging information.*
 
 # 7. Integration Strategy
 
