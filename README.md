@@ -686,6 +686,24 @@ The system is designed for deployment on Google Cloud Platform using:
 
 All infrastructure is managed via Terraform in the `terraform/` directory.
 
+## Future Improvements
+
+### Job Status Tracking with Long Polling
+
+Currently, the frontend polls the `/me` endpoint after triggering manual sync to detect new activity logs. A more robust solution would be:
+
+1. **Job ID Return**: Modify the manual sync endpoint to return a job ID
+2. **Status Endpoint**: Add `GET /api/sync/job/{jobId}/status` with long polling support
+3. **Redis Job Tracking**: Store job status (pending, processing, completed, failed) in Redis
+4. **Worker Updates**: Update job status throughout processing lifecycle
+5. **Frontend Integration**: Poll status endpoint until job completes, then refresh data
+
+This would provide:
+- Real-time job progress tracking
+- Reduced unnecessary API calls
+- Better error handling and retry logic
+- Ability to show processing progress to users
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

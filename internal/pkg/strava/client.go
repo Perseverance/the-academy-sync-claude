@@ -35,6 +35,31 @@ type Activity struct {
 	Comments           int       `json:"comment_count"`
 }
 
+// Lap represents a Strava activity lap with essential fields for pace calculation
+type Lap struct {
+	ID               int64   `json:"id"`
+	ActivityID       int64   `json:"activity.id"`
+	AthleteID        int64   `json:"athlete.id"`
+	ResourceState    int     `json:"resource_state"`
+	Name             string  `json:"name"`
+	ElapsedTime      int     `json:"elapsed_time"`  // seconds
+	MovingTime       int     `json:"moving_time"`   // seconds
+	StartDate        string  `json:"start_date"`
+	StartDateLocal   string  `json:"start_date_local"`
+	Distance         float64 `json:"distance"`      // meters
+	StartIndex       int     `json:"start_index"`
+	EndIndex         int     `json:"end_index"`
+	TotalElevationGain float64 `json:"total_elevation_gain"`
+	AverageSpeed     float64 `json:"average_speed"` // meters per second
+	MaxSpeed         float64 `json:"max_speed"`     // meters per second
+	AverageHeartrate float64 `json:"average_heartrate"`
+	MaxHeartrate     float64 `json:"max_heartrate"`
+	LapIndex         int     `json:"lap_index"`
+	Split            int     `json:"split"`
+	PaceZone         int     `json:"pace_zone"`
+	WorkoutType      int     `json:"workout_type"`
+}
+
 // Client provides Strava API access with automatic token lifecycle management
 // This implements US023 requirements for managing Strava access tokens using refresh tokens
 type Client struct {
@@ -452,6 +477,31 @@ func (c *Client) GetActivity(ctx context.Context, activityID int64) (*Activity, 
 		"activity_date", activity.StartDate.Format(time.RFC3339))
 
 	return &activity, nil
+}
+
+// GetActivityLaps retrieves laps for a specific activity from Strava
+func (c *Client) GetActivityLaps(ctx context.Context, activityID int64) ([]Lap, error) {
+	c.logger.Debug("Retrieving activity laps from Strava",
+		"user_id", c.userID,
+		"activity_id", activityID)
+
+	endpoint := fmt.Sprintf("/activities/%d/laps", activityID)
+
+	var laps []Lap
+	if err := c.makeAPIRequest(ctx, "GET", endpoint, &laps); err != nil {
+		c.logger.Error("Failed to retrieve activity laps from Strava",
+			"error", err,
+			"user_id", c.userID,
+			"activity_id", activityID)
+		return nil, err
+	}
+
+	c.logger.Info("Successfully retrieved activity laps from Strava",
+		"user_id", c.userID,
+		"activity_id", activityID,
+		"lap_count", len(laps))
+
+	return laps, nil
 }
 
 // GetAthleteProfile retrieves the authenticated athlete's profile information

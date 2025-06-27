@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/handlers"
@@ -102,6 +103,15 @@ func main() {
 		log.Critical("Failed to ping database", "error", err)
 		os.Exit(1)
 	}
+	
+	// Also create sqlx.DB for repositories that need it
+	sqlxDB, err := sqlx.Open("postgres", cfg.DatabaseURL)
+	if err != nil {
+		log.Critical("Failed to open sqlx database connection", "error", err)
+		os.Exit(1)
+	}
+	defer sqlxDB.Close()
+	
 	log.Info("Database connection established successfully")
 
 	// Initialize services
@@ -123,6 +133,7 @@ func main() {
 	// Initialize repositories
 	userRepository := database.NewUserRepository(db, encryptionService)
 	sessionRepository := database.NewSessionRepository(db)
+	activityLogRepo := database.NewActivityLogRepository(sqlxDB, log)
 
 	// Initialize Redis queue client
 	var queueClient *queue.Client
@@ -160,6 +171,7 @@ func main() {
 		jwtService,
 		userRepository,
 		sessionRepository,
+		activityLogRepo,
 		cfg.FrontendURL,
 		isDevelopment,
 		log.WithContext("component", "auth_handler"),

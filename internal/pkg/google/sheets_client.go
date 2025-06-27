@@ -43,12 +43,12 @@ type ActivityRow struct {
 
 // SpreadsheetUpdate represents the changes to be made to a training plan spreadsheet row
 type SpreadsheetUpdate struct {
-	Row              int    `json:"row"`               // Spreadsheet row number (1-based)
-	DistanceValue    string `json:"distance_value"`    // Column E: "0" or formatted distance
-	TimeValue        string `json:"time_value"`        // Column F: "00:00:00" or formatted time
-	RPEValue         int    `json:"rpe_value"`         // Column I: Updated RPE (e.g., 2 for rest day)
-	DescriptionValue string `json:"description_value"` // Column J: Updated description
-	DescriptionBold  bool   `json:"description_bold"`  // Column J: Make bold to mark processed
+	Row              int     `json:"row"`               // Spreadsheet row number (1-based)
+	DistanceValue    string  `json:"distance_value"`    // Column E: "0" or formatted distance
+	TimeValue        string  `json:"time_value"`        // Column F: "00:00:00" or formatted time
+	RPEValue         float64 `json:"rpe_value"`         // Column I: Updated RPE (e.g., 2 for rest day, supports decimals like 4.5)
+	DescriptionValue string  `json:"description_value"` // Column J: Updated description
+	DescriptionBold  bool    `json:"description_bold"`  // Column J: Make bold to mark processed
 }
 
 // SheetsClient provides Google Sheets API access with automatic token lifecycle management
@@ -763,7 +763,9 @@ func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetI
 		})
 
 		// Column I (index 8): RPE
-		rpeValue := float64(update.RPEValue)
+		// Note: Google Sheets API accepts numeric values and will format them
+		// according to the spreadsheet's locale settings
+		rpeValue := update.RPEValue
 		requests = append(requests, &sheets.Request{
 			UpdateCells: &sheets.UpdateCellsRequest{
 				Start: &sheets.GridCoordinate{
@@ -786,7 +788,24 @@ func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetI
 			},
 		})
 
-		// Column J (index 9): Description
+		// Column J (index 9): Description with bold formatting if requested
+		cellData := &sheets.CellData{
+			UserEnteredValue: &sheets.ExtendedValue{
+				StringValue: &update.DescriptionValue,
+			},
+		}
+		
+		// Apply bold formatting if DescriptionBold is true
+		fields := "userEnteredValue"
+		if update.DescriptionBold {
+			cellData.UserEnteredFormat = &sheets.CellFormat{
+				TextFormat: &sheets.TextFormat{
+					Bold: true,
+				},
+			}
+			fields = "userEnteredValue,userEnteredFormat.textFormat.bold"
+		}
+		
 		requests = append(requests, &sheets.Request{
 			UpdateCells: &sheets.UpdateCellsRequest{
 				Start: &sheets.GridCoordinate{
@@ -796,19 +815,10 @@ func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetI
 				},
 				Rows: []*sheets.RowData{
 					{
-						Values: []*sheets.CellData{
-							{
-								UserEnteredValue: &sheets.ExtendedValue{
-									StringValue: &update.DescriptionValue,
-								},
-								// TODO: Implement bold formatting for Column J (Description) to mark as processed
-								// This will be implemented in a separate story for better separation of concerns
-								// When implemented, add: UserEnteredFormat with TextFormat.Bold = true
-							},
-						},
+						Values: []*sheets.CellData{cellData},
 					},
 				},
-				Fields: "userEnteredValue",
+				Fields: fields,
 			},
 		})
 	}
