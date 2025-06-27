@@ -21,3 +21,9 @@ resource "google_project_service" "servicenetworking" {
   service                    = "servicenetworking.googleapis.com"
   disable_dependent_services = true
 }
+
+resource "google_project_service" "compute" {
+  project                    = var.project_id
+  service                    = "compute.googleapis.com"
+  disable_dependent_services = true
+}

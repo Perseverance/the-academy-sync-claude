@@ -6,6 +6,7 @@ resource "google_compute_global_address" "redis_private_ip" {
   address_type  = "INTERNAL"
   prefix_length = 16
   network       = "projects/${var.project_id}/global/networks/default"
+  depends_on    = [google_project_service.compute]
 }
 
 resource "google_service_networking_connection" "redis_private_vpc" {
