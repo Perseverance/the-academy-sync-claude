@@ -22,6 +22,7 @@ type AuthHandler struct {
 	jwtService        *auth.JWTService
 	userRepository    *database.UserRepository
 	sessionRepository *database.SessionRepository
+	activityLogRepo   *database.ActivityLogRepository
 	frontendURL       string
 	isDevelopment     bool
 	logger            *logger.Logger
@@ -33,6 +34,7 @@ func NewAuthHandler(
 	jwtService *auth.JWTService,
 	userRepository *database.UserRepository,
 	sessionRepository *database.SessionRepository,
+	activityLogRepo *database.ActivityLogRepository,
 	frontendURL string,
 	isDevelopment bool,
 	logger *logger.Logger,
@@ -42,6 +44,7 @@ func NewAuthHandler(
 		jwtService:        jwtService,
 		userRepository:    userRepository,
 		sessionRepository: sessionRepository,
+		activityLogRepo:   activityLogRepo,
 		frontendURL:       frontendURL,
 		isDevelopment:     isDevelopment,
 		logger:            logger,
@@ -370,10 +373,32 @@ func (h *AuthHandler) GetCurrentUser(w http.ResponseWriter, r *http.Request) {
 	// Return public user data with dashboard additions (no sensitive tokens)
 	publicUser := user.ToPublicUser()
 
-	// Create dashboard response with empty activity logs (UI uses mocked data for now)
+	// Fetch recent activity logs for the user
+	var activityLogSummaries []database.ActivityLogSummary
+	if h.activityLogRepo != nil {
+		logs, err := h.activityLogRepo.GetRecentLogs(r.Context(), user.ID, 30)
+		if err != nil {
+			h.logger.Error("Failed to fetch activity logs",
+				"error", err,
+				"user_id", user.ID)
+			// Continue without logs rather than failing the request
+			activityLogSummaries = []database.ActivityLogSummary{}
+		} else {
+			// Convert to summaries for UI
+			activityLogSummaries = make([]database.ActivityLogSummary, len(logs))
+			for i, log := range logs {
+				activityLogSummaries[i] = log.ToSummary()
+			}
+		}
+	} else {
+		// No activity log repository configured
+		activityLogSummaries = []database.ActivityLogSummary{}
+	}
+
+	// Create dashboard response with real activity logs
 	dashboardResponse := &database.DashboardUserResponse{
 		PublicUser:         publicUser,
-		RecentActivityLogs: []database.ActivityLog{}, // Empty for now, will be populated in future stories
+		RecentActivityLogs: activityLogSummaries,
 	}
 
 	h.logger.Debug("Returning user information",

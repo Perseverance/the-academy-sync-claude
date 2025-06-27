@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"os"
@@ -11,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/jmoiron/sqlx"
 	_ "github.com/lib/pq"
 
 	"github.com/Perseverance/the-academy-sync-claude/cmd/automation-engine/internal/processing"
@@ -122,7 +122,7 @@ func main() {
 	}
 
 	// Initialize database connection
-	db, err := sql.Open("postgres", cfg.DatabaseURL)
+	db, err := sqlx.Open("postgres", cfg.DatabaseURL)
 	if err != nil {
 		log.Critical("Failed to open database connection", "error", err.Error())
 		os.Exit(3)
@@ -141,16 +141,20 @@ func main() {
 	encryptionService := auth.NewEncryptionService(cfg.EncryptionSecret)
 
 	// Initialize repositories and services
-	userRepository := database.NewUserRepository(db, encryptionService)
+	userRepository := database.NewUserRepository(db.DB, encryptionService)
 	configService := automation.NewConfigService(userRepository, log)
 
 	// Initialize token persister for automatic token persistence
-	tokenPersister := database.NewTokenPersister(db, encryptionService, log)
+	tokenPersister := database.NewTokenPersister(db.DB, encryptionService, log)
+
+	// Initialize activity log repository
+	activityLogRepo := database.NewActivityLogRepository(db, log)
 
 	// Initialize processing worker
 	worker := processing.NewWorker(
 		configService,
 		tokenPersister,
+		activityLogRepo,
 		cfg.StravaClientID,
 		cfg.StravaClientSecret,
 		cfg.GoogleClientID,

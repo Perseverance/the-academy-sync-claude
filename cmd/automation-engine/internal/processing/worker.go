@@ -7,6 +7,7 @@ import (
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/google"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/strava"
@@ -24,9 +25,10 @@ import (
 // - Performance timing for each processing step
 // - Structured logging with searchable fields for monitoring
 type Worker struct {
-	configService  *automation.ConfigService
-	tokenPersister auth.TokenPersister
-	logger         *logger.Logger
+	configService     *automation.ConfigService
+	tokenPersister    auth.TokenPersister
+	activityLogRepo   ActivityLogRepository
+	logger            *logger.Logger
 
 	// OAuth credentials for API clients
 	stravaClientID     string
@@ -40,6 +42,7 @@ type Worker struct {
 func NewWorker(
 	configService *automation.ConfigService,
 	tokenPersister auth.TokenPersister,
+	activityLogRepo ActivityLogRepository,
 	stravaClientID, stravaClientSecret string,
 	googleClientID, googleClientSecret, googleRedirectURL string,
 	logger *logger.Logger,
@@ -47,6 +50,7 @@ func NewWorker(
 	return &Worker{
 		configService:      configService,
 		tokenPersister:     tokenPersister,
+		activityLogRepo:    activityLogRepo,
 		stravaClientID:     stravaClientID,
 		stravaClientSecret: stravaClientSecret,
 		googleClientID:     googleClientID,
@@ -120,6 +124,8 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		result.ProcessingTime = processingDuration
 		result.Error = fmt.Sprintf("Configuration retrieval failed: %v", err)
 		result.ErrorType = "CONFIG_ERROR"
+		// Persist failure to activity log
+		w.persistProcessingResult(ctx, userID, jobType, result, nil, 0)
 		return result
 	}
 
@@ -136,6 +142,8 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		result.ProcessingTime = processingDuration
 		result.Error = "Automation is disabled for this user"
 		result.ErrorType = "AUTOMATION_DISABLED"
+		// Persist skip to activity log
+		w.persistProcessingResult(ctx, userID, jobType, result, nil, 0)
 		return result
 	}
 
@@ -256,6 +264,8 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 			result.Error = "Google Sheets access requires re-authorization"
 			result.ErrorType = "GOOGLE_REAUTH_REQUIRED"
 			result.RequiresReauth = true
+			// Persist reauth requirement to activity log
+			w.persistProcessingResult(ctx, userID, jobType, result, nil, 0)
 			return result
 		}
 
@@ -275,11 +285,13 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		result.ProcessingTime = processingDuration
 		result.Error = fmt.Sprintf("Sheets access validation failed: %v", err)
 		result.ErrorType = "SHEETS_ACCESS_ERROR"
+		// Persist sheets access error to activity log
+		w.persistProcessingResult(ctx, userID, jobType, result, nil, 0)
 		return result
 	}
 
 	// Step 5: Create processing service
-	processingService := NewProcessingService(stravaClient, sheetsClient, w.logger)
+	processingService := NewProcessingService(stravaClient, sheetsClient, w.activityLogRepo, w.logger)
 
 	// Step 6: Calculate date range and fetch training plan cache
 	w.logger.Info("📊 Step 6: Fetching training plan data",
@@ -295,6 +307,8 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		result.ProcessingTime = time.Since(startTime)
 		result.Error = fmt.Sprintf("Invalid timezone: %v", err)
 		result.ErrorType = "TIMEZONE_ERROR"
+		// Persist timezone error to activity log
+		w.persistProcessingResult(ctx, userID, jobType, result, nil, 0)
 		return result
 	}
 
@@ -315,6 +329,8 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		result.ProcessingTime = time.Since(startTime)
 		result.Error = fmt.Sprintf("Failed to fetch training plan: %v", err)
 		result.ErrorType = "TRAINING_PLAN_ERROR"
+		// Persist training plan error to activity log
+		w.persistProcessingResult(ctx, userID, jobType, result, location, 0)
 		return result
 	}
 
@@ -333,6 +349,8 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		result.ProcessingTime = time.Since(startTime)
 		result.Error = fmt.Sprintf("Failed to fetch Strava activities: %v", err)
 		result.ErrorType = "STRAVA_API_ERROR"
+		// Persist Strava API error to activity log
+		w.persistProcessingResult(ctx, userID, jobType, result, location, 0)
 		return result
 	}
 
@@ -445,6 +463,10 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 				"user_id", userID,
 				"rows_updated", len(spreadsheetUpdates))
 		}
+	} else {
+		w.logger.Info("No spreadsheet updates needed",
+			"user_id", userID,
+			"update_count", 0)
 	}
 
 	// Step 10: Handle results
@@ -462,6 +484,8 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		result.Error = fmt.Sprintf("Processing failed with %d errors", len(processingErrors))
 		result.ErrorType = "PROCESSING_ERROR"
 		result.ActivitiesCount = totalActivities
+		// Persist processing errors to activity log
+		w.persistProcessingResult(ctx, userID, jobType, result, location, len(spreadsheetUpdates))
 		return result
 	}
 
@@ -489,6 +513,9 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 			"spreadsheet_id":         config.SpreadsheetID,
 			"final_status":           "SUCCESS",
 		})
+
+	// Persist to activity log
+	w.persistProcessingResult(ctx, userID, jobType, result, location, len(spreadsheetUpdates))
 
 	return result
 }
@@ -551,4 +578,86 @@ func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int, jobType string
 		"total_activities_processed", totalActivities)
 
 	return results
+}
+
+// persistProcessingResult saves the processing outcome to the activity log
+func (w *Worker) persistProcessingResult(ctx context.Context, userID int, jobType string, result *ProcessingResult, location *time.Location, rowsUpdated int) {
+
+	// Skip if no activity log repository configured
+	if w.activityLogRepo == nil {
+		w.logger.Debug("Activity log repository not configured, skipping persistence",
+			"user_id", userID)
+		return
+	}
+
+	// Determine processing date (today in user's timezone)
+	processingDate := time.Now()
+	if location != nil {
+		processingDate = processingDate.In(location)
+	}
+	// Truncate to date only
+	processingDateOnly := time.Date(processingDate.Year(), processingDate.Month(), processingDate.Day(), 0, 0, 0, 0, processingDate.Location())
+
+	// Determine status
+	status := "success"
+	if !result.Success {
+		if result.RequiresReauth {
+			status = "failed"
+		} else if result.ActivitiesCount > 0 {
+			status = "partial"
+		} else {
+			status = "failed"
+		}
+	}
+
+	// Determine processing scope based on job type
+	processingScope := "scheduled"
+	if jobType == "manual_sync" {
+		processingScope = "manual"
+	}
+
+	// Prepare error message if needed
+	var errorMessage *string
+	if result.Error != "" {
+		errorMessage = &result.Error
+	}
+
+	// Calculate processing duration
+	processingDurationMs := int(result.ProcessingTime.Milliseconds())
+
+	// Create activity log entry with full schema
+	logEntry := &database.ActivityLog{
+		UserID:               userID,
+		ProcessingDate:       processingDateOnly,
+		ProcessingType:       jobType,
+		ProcessingScope:      processingScope,
+		Status:               status,
+		ActivitiesFound:      result.ActivitiesCount,
+		ActivitiesProcessed:  result.ActivitiesCount, // For now, assuming all found were processed
+		SpreadsheetUpdated:   rowsUpdated > 0,
+		ErrorMessage:         errorMessage,
+		ProcessingStartedAt:  processingDate.Add(-result.ProcessingTime),
+		ProcessingCompletedAt: &processingDate,
+		ProcessingDurationMs: &processingDurationMs,
+	}
+
+	// Use a separate context with timeout for database operation
+	dbCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := w.activityLogRepo.CreateActivityLog(dbCtx, logEntry); err != nil {
+		w.logger.Error("Failed to persist activity log",
+			"error", err,
+			"user_id", userID,
+			"job_type", jobType,
+			"status", status)
+		// Don't return error - activity log persistence is non-critical
+	} else {
+		w.logger.Debug("Activity log persisted successfully",
+			"user_id", userID,
+			"job_type", jobType,
+			"status", status,
+			"activities_processed", result.ActivitiesCount,
+			"rows_updated", rowsUpdated)
+	}
 }

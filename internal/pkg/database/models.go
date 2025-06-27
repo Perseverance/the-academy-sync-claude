@@ -1,6 +1,7 @@
 package database
 
 import (
+	"fmt"
 	"time"
 )
 
@@ -107,16 +108,96 @@ func (u *User) ToPublicUser() *PublicUser {
 	}
 }
 
-// ActivityLog represents an activity log entry for the dashboard
+// ActivityLog represents an activity log entry in the database
 type ActivityLog struct {
+	ID                      int                    `json:"id" db:"id"`
+	UserID                  int                    `json:"user_id" db:"user_id"`
+	ProcessingDate          time.Time              `json:"processing_date" db:"processing_date"`
+	ProcessingType          string                 `json:"processing_type" db:"processing_type"`
+	ProcessingScope         string                 `json:"processing_scope" db:"processing_scope"`
+	Status                  string                 `json:"status" db:"status"`
+	ActivitiesFound         int                    `json:"activities_found" db:"activities_found"`
+	ActivitiesProcessed     int                    `json:"activities_processed" db:"activities_processed"`
+	TotalDistanceMeters     *float64               `json:"total_distance_meters" db:"total_distance_meters"`
+	TotalDurationSeconds    *int                   `json:"total_duration_seconds" db:"total_duration_seconds"`
+	SpreadsheetRow          *int                   `json:"spreadsheet_row" db:"spreadsheet_row"`
+	SpreadsheetUpdated      bool                   `json:"spreadsheet_updated" db:"spreadsheet_updated"`
+	DescriptionGenerated    *string                `json:"description_generated" db:"description_generated"`
+	ErrorMessage            *string                `json:"error_message" db:"error_message"`
+	WarningMessages         []string               `json:"warning_messages" db:"warning_messages"`
+	ProcessingStartedAt     time.Time              `json:"processing_started_at" db:"processing_started_at"`
+	ProcessingCompletedAt   *time.Time             `json:"processing_completed_at" db:"processing_completed_at"`
+	ProcessingDurationMs    *int                   `json:"processing_duration_ms" db:"processing_duration_ms"`
+	Metadata                map[string]interface{} `json:"metadata" db:"metadata"`
+	CreatedAt               time.Time              `json:"created_at" db:"created_at"`
+}
+
+// ActivityLogSummary represents a simplified activity log for the dashboard UI
+type ActivityLogSummary struct {
 	ID      string `json:"id"`
 	Date    string `json:"date"`
 	Status  string `json:"status"` // "Success", "Failure", "SuccessWithWarning"
 	Summary string `json:"summary"`
 }
 
+// ToSummary converts an ActivityLog to ActivityLogSummary for UI display
+func (a *ActivityLog) ToSummary() ActivityLogSummary {
+	// Determine UI status based on database status and warnings
+	uiStatus := "Success"
+	if a.Status == "failed" {
+		uiStatus = "Failure"
+	} else if a.Status == "success" && len(a.WarningMessages) > 0 {
+		uiStatus = "SuccessWithWarning"
+	}
+
+	// Generate summary text
+	summary := a.generateSummary()
+
+	return ActivityLogSummary{
+		ID:      fmt.Sprintf("log-%d", a.ID),
+		Date:    a.CreatedAt.Format(time.RFC3339),
+		Status:  uiStatus,
+		Summary: summary,
+	}
+}
+
+// generateSummary creates a human-readable summary of the processing result
+func (a *ActivityLog) generateSummary() string {
+	if a.Status == "failed" && a.ErrorMessage != nil {
+		return *a.ErrorMessage
+	}
+
+	if a.Status == "skipped" {
+		if len(a.WarningMessages) > 0 {
+			return a.WarningMessages[0]
+		}
+		return "Processing skipped"
+	}
+
+	// Success case
+	summary := fmt.Sprintf("Processed %s: ", a.ProcessingDate.Format("2006-01-02"))
+	
+	if a.ActivitiesFound == 0 {
+		summary += "No activities found"
+	} else if a.ActivitiesFound == 1 {
+		summary += "1 activity found"
+	} else {
+		summary += fmt.Sprintf("%d activities found", a.ActivitiesFound)
+	}
+
+	if a.ActivitiesProcessed > 0 {
+		summary += fmt.Sprintf(", %d processed", a.ActivitiesProcessed)
+	}
+
+	if a.SpreadsheetUpdated {
+		summary += ", spreadsheet updated"
+	}
+
+	return summary
+}
+
 // DashboardUserResponse represents user data with dashboard-specific additions
 type DashboardUserResponse struct {
 	*PublicUser
-	RecentActivityLogs []ActivityLog `json:"recent_activity_logs"`
+	RecentActivityLogs []ActivityLogSummary `json:"recent_activity_logs"`
 }

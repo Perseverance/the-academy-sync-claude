@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -11,22 +12,25 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/strava"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/transformation"
 )
 
 // ProcessingService handles the core processing logic for automation engine
 // This service implements the business logic for processing user data across different time scopes
 type ProcessingService struct {
-	stravaClient StravaClient
-	sheetsClient SheetsClient
-	logger       *logger.Logger
+	stravaClient  StravaClient
+	sheetsClient  SheetsClient
+	activityLogRepo ActivityLogRepository
+	logger        *logger.Logger
 }
 
 // NewProcessingService creates a new processing service instance
-func NewProcessingService(stravaClient StravaClient, sheetsClient SheetsClient, logger *logger.Logger) *ProcessingService {
+func NewProcessingService(stravaClient StravaClient, sheetsClient SheetsClient, activityLogRepo ActivityLogRepository, logger *logger.Logger) *ProcessingService {
 	return &ProcessingService{
-		stravaClient: stravaClient,
-		sheetsClient: sheetsClient,
-		logger:       logger.WithContext("component", "processing_service"),
+		stravaClient:    stravaClient,
+		sheetsClient:    sheetsClient,
+		activityLogRepo: activityLogRepo,
+		logger:          logger.WithContext("component", "processing_service"),
 	}
 }
 
@@ -35,7 +39,7 @@ type TrainingPlanEntry struct {
 	Date         time.Time
 	ActivityType string   // Column D: "Почивка" (Rest) or "Бягане" (Run)
 	Description  string   // Column J: "Описание на тренировката"
-	RPE          int      // Column I: RPE value
+	RPE          float64  // Column I: RPE value (supports decimals like 4.5)
 	IsProcessed  bool     // Based on bold formatting in Column J
 	Distance     *float64 // Column E: Current distance (may be nil/empty)
 	Time         *string  // Column F: Current time (may be empty)
@@ -54,11 +58,11 @@ type ProcessedActivity struct {
 // SpreadsheetUpdate represents the changes to be made to a spreadsheet row
 type SpreadsheetUpdate struct {
 	Row              int
-	DistanceValue    string // Column E: "0" or formatted distance
-	TimeValue        string // Column F: "00:00:00" or formatted time
-	RPEValue         int    // Column I: Updated RPE (e.g., 2 for rest day)
-	DescriptionValue string // Column J: Updated description
-	DescriptionBold  bool   // Column J: Make bold to mark processed
+	DistanceValue    string  // Column E: "0" or formatted distance
+	TimeValue        string  // Column F: "00:00:00" or formatted time
+	RPEValue         float64 // Column I: Updated RPE (e.g., 2 for rest day)
+	DescriptionValue string  // Column J: Updated description
+	DescriptionBold  bool    // Column J: Make bold to mark processed
 }
 
 // DayProcessingResult represents the outcome of processing a single day
@@ -309,7 +313,7 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 	result.TotalTime = totalTime
 
 	// Step 6: Prepare spreadsheet update
-	spreadsheetUpdate := s.prepareSpreadsheetUpdate(planEntry, processedActivities, totalDistance, totalTime)
+	spreadsheetUpdate := s.prepareSpreadsheetUpdate(ctx, planEntry, processedActivities, totalDistance, totalTime)
 	result.SpreadsheetUpdate = spreadsheetUpdate
 
 	// Log the prepared update
@@ -448,6 +452,17 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 		return nil, fmt.Errorf("failed to read training plan: %w", err)
 	}
 
+	// We also need to fetch cell formatting to check for bold text
+	// This requires a separate API call to get formatting info
+	boldStatuses, err := s.fetchBoldStatuses(ctx, config.SpreadsheetID, rangeSpec, startRow, len(rows))
+	if err != nil {
+		// Log warning but continue - we can process without bold status
+		s.logger.Warn("Failed to fetch bold statuses, continuing without formatting info",
+			"error", err,
+			"user_id", config.UserID)
+		boldStatuses = make(map[int]bool)
+	}
+
 	// Build the cache
 	cache := make(TrainingPlanCache)
 
@@ -456,8 +471,12 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 			continue
 		}
 
-		entry := s.parseTrainingPlanRow(row, startRow+rowIndex)
+		actualRow := startRow + rowIndex
+		entry := s.parseTrainingPlanRow(row, actualRow)
 		if entry != nil && !entry.Date.IsZero() {
+			// Set IsProcessed based on bold status of description column (J)
+			entry.IsProcessed = boldStatuses[actualRow]
+			
 			// Store in cache with normalized date key (YYYY-MM-DD)
 			dateKey := entry.Date.Format("2006-01-02")
 			cache[dateKey] = entry
@@ -489,6 +508,22 @@ func (s *ProcessingService) fetchTrainingPlanEntry(ctx context.Context, config *
 		"date", dateKey)
 
 	return nil, nil
+}
+
+// fetchBoldStatuses retrieves formatting info to determine which rows have bold descriptions
+func (s *ProcessingService) fetchBoldStatuses(ctx context.Context, spreadsheetID, rangeSpec string, startRow, rowCount int) (map[int]bool, error) {
+	// This will make a separate API call to get cell formatting
+	// For now, we'll return an empty map and add this to the SheetsClient interface later
+	// The actual implementation will check the bold status of column J for each row
+	s.logger.Debug("Checking bold statuses for training plan entries",
+		"spreadsheet_id", spreadsheetID,
+		"range", rangeSpec,
+		"start_row", startRow,
+		"row_count", rowCount)
+	
+	// TODO: Implement actual bold status checking via Sheets API
+	// This requires adding a new method to SheetsClient interface
+	return make(map[int]bool), nil
 }
 
 // parseTrainingPlanRow parses a spreadsheet row into a TrainingPlanEntry
@@ -554,9 +589,11 @@ func (s *ProcessingService) parseTrainingPlanRow(row []interface{}, rowNumber in
 	if index := 8; index < len(row) && row[index] != nil {
 		switch v := row[index].(type) {
 		case float64:
-			entry.RPE = int(v)
+			entry.RPE = v
 		case string:
-			if rpe, err := strconv.Atoi(v); err == nil {
+			// Handle comma decimal separator (e.g., "4,5" -> 4.5)
+			v = strings.Replace(v, ",", ".", 1)
+			if rpe, err := strconv.ParseFloat(v, 64); err == nil {
 				entry.RPE = rpe
 			}
 		}
@@ -565,9 +602,7 @@ func (s *ProcessingService) parseTrainingPlanRow(row []interface{}, rowNumber in
 	// Description (Column J - index 9)
 	entry.Description = getString(9)
 
-	// TODO: Check if description is bold to determine IsProcessed
-	// This requires an additional API call to get cell formatting
-	// For now, we'll assume not processed to allow testing
+	// Note: IsProcessed is set later based on bold formatting check
 	entry.IsProcessed = false
 
 	return entry
@@ -612,7 +647,7 @@ func (s *ProcessingService) processActivities(activities []strava.Activity) ([]P
 }
 
 // prepareSpreadsheetUpdate prepares the update data for the spreadsheet
-func (s *ProcessingService) prepareSpreadsheetUpdate(planEntry *TrainingPlanEntry, activities []ProcessedActivity, totalDistance float64, totalTime int) *SpreadsheetUpdate {
+func (s *ProcessingService) prepareSpreadsheetUpdate(ctx context.Context, planEntry *TrainingPlanEntry, activities []ProcessedActivity, totalDistance float64, totalTime int) *SpreadsheetUpdate {
 	update := &SpreadsheetUpdate{
 		Row:             planEntry.Row,
 		DescriptionBold: true, // Always mark as processed
@@ -636,7 +671,7 @@ func (s *ProcessingService) prepareSpreadsheetUpdate(planEntry *TrainingPlanEntr
 	}
 
 	// Prepare description update
-	update.DescriptionValue = s.prepareDescriptionUpdate(planEntry.Description, activities, update.RPEValue)
+	update.DescriptionValue = s.prepareDescriptionUpdate(ctx, planEntry.Description, activities, update.RPEValue)
 
 	return update
 }
@@ -676,11 +711,64 @@ func (s *ProcessingService) formatDuration(seconds int) string {
 }
 
 // prepareDescriptionUpdate prepares the description text based on RPE and activities
-func (s *ProcessingService) prepareDescriptionUpdate(originalDescription string, activities []ProcessedActivity, rpe int) string {
-	// TODO: Implement RPE-based description updates
-	// - RPE 4-5: Progressive run logic
-	// - RPE 6: Steady state logic
-	// - RPE 7-9: Tempo/interval logic with manual splits
-	// For now, return original description
+func (s *ProcessingService) prepareDescriptionUpdate(ctx context.Context, originalDescription string, activities []ProcessedActivity, rpe float64) string {
+	// If no activities were found, return original description
+	if len(activities) == 0 {
+		return originalDescription
+	}
+
+	// For multiple activities in one day, return original description
+	// (transformation functions expect single activity lap data)
+	if len(activities) > 1 {
+		return originalDescription
+	}
+
+	// Get the single activity
+	activity := activities[0]
+
+	// Fetch lap data for the activity
+	laps, err := s.stravaClient.GetActivityLaps(ctx, activity.StravaActivity.ID)
+	if err != nil {
+		s.logger.Warn("Failed to fetch activity laps, using original description",
+			"activity_id", activity.StravaActivity.ID,
+			"error", err)
+		return originalDescription
+	}
+
+
+	// Apply transformation based on RPE and description content
+	if rpe == 4.5 {
+		// Progressive run
+		return transformation.UpdateProgressiveRunDescription(originalDescription, laps)
+	} else if rpe == 6 {
+		// Steady state run
+		return transformation.UpdateSteadyStateRunDescription(originalDescription, laps)
+	} else if rpe >= 7 && rpe <= 9 {
+		// Check if it's tempo or interval based on description
+		if strings.Contains(originalDescription, "темпово бягане (") {
+			// Tempo run
+			return transformation.UpdateTempoRunDescription(originalDescription, laps)
+		} else if matched, _ := regexp.MatchString(`\d+\s*x\s*[\d\w]+`, originalDescription); matched {
+			// Interval workout
+			return transformation.UpdateIntervalWorkoutDescription(originalDescription, laps)
+		}
+	}
+
+	// For all other cases, return original description
 	return originalDescription
 }
+
+
+// calculatePacePerKm calculates pace in min:sec per kilometer format
+func calculatePacePerKm(seconds int, distanceKm float64) string {
+	if distanceKm == 0 {
+		return "0:00"
+	}
+	
+	paceSeconds := float64(seconds) / distanceKm
+	minutes := int(paceSeconds / 60)
+	secs := int(paceSeconds) % 60
+	
+	return fmt.Sprintf("%d:%02d", minutes, secs)
+}
+

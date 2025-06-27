@@ -555,7 +555,7 @@ This section defines the schema for the data stored in our PostgreSQL database. 
 ```mermaid
 erDiagram
     users {
-        UUID id PK "The user's unique ID"
+        SERIAL id PK "The user's unique ID"
         VARCHAR google_id "Unique ID from Google"
         VARCHAR email "User's email for notifications"
         VARCHAR full_name "User's full name"
@@ -573,7 +573,7 @@ erDiagram
 
     user_sessions {
         UUID id PK "Unique session ID"
-        UUID user_id FK "References users.id"
+        INTEGER user_id FK "References users.id"
         BYTEA refresh_token_hash "Hash of the refresh token"
         TEXT user_agent "Client User-Agent string"
         INET ip_address "Client IP address"
@@ -582,28 +582,31 @@ erDiagram
         TIMESTAMPTZ created_at "Creation timestamp"
     }
 
-    automation_runs {
-        UUID id PK "Unique ID for a single run"
-        UUID user_id FK "References users.id"
-        UUID trace_id "Unique trace ID for this job"
-        VARCHAR(50) trigger_type "e.g., 'schedule' or 'manual_sync'"
-        VARCHAR(50) status "e.g., 'Success', 'Failure'"
-        TIMESTAMPTZ created_at "When the run was initiated"
-    }
-
-    automation_run_logs {
-        UUID id PK "Unique ID for a single log line"
-        UUID run_id FK "References automation_runs.id"
-        DATE processed_date "The specific day this log is for"
-        VARCHAR(50) status "e.g., 'Logged', 'NoAction', 'Error'"
-        TEXT summary_message "The human-readable log message"
-        JSONB details "Structured diagnostic information"
-        TIMESTAMPTZ created_at "Creation timestamp"
+    activity_logs {
+        SERIAL id PK "Auto-incrementing primary key"
+        INTEGER user_id FK "References users.id"
+        DATE processing_date "The calendar date being processed"
+        VARCHAR(50) processing_type "e.g., 'previous_day', 'today_so_far'"
+        VARCHAR(50) processing_scope "e.g., 'manual_sync', 'scheduled_daily'"
+        VARCHAR(20) status "e.g., 'success', 'failed', 'skipped'"
+        INTEGER activities_found "Number of Strava activities found"
+        INTEGER activities_processed "Number successfully processed"
+        DECIMAL(10,2) total_distance_meters "Total distance in meters"
+        INTEGER total_duration_seconds "Total duration in seconds"
+        INTEGER spreadsheet_row "Row number that was updated"
+        BOOLEAN spreadsheet_updated "Whether sheet was updated"
+        TEXT description_generated "The generated description"
+        TEXT error_message "Error message if failed"
+        TEXT[] warning_messages "Array of warning messages"
+        TIMESTAMPTZ processing_started_at "When processing started"
+        TIMESTAMPTZ processing_completed_at "When processing completed"
+        INTEGER processing_duration_ms "Duration in milliseconds"
+        JSONB metadata "Additional context and activity IDs"
+        TIMESTAMPTZ created_at "When log entry was created"
     }
 
     users ||--o{ user_sessions : "has"
-    users ||--o{ automation_runs : "has"
-    automation_runs ||--o{ automation_run_logs : "contains"
+    users ||--o{ activity_logs : "has"
 ```
 
 ## 6.1. Table: `users`
@@ -612,7 +615,7 @@ Stores all information related to a registered user, including their identity, c
 
 | Column Name | Data Type | Constraints | Description |
 | --- | --- | --- | --- |
-| `id` | `UUID` | `PRIMARY KEY` | The unique identifier for the user in our system. Generated on creation. |
+| `id` | `SERIAL` | `PRIMARY KEY` | The unique identifier for the user in our system. Auto-incrementing integer. |
 | `google_id` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | The unique subject ID (`sub`) provided by Google Sign-In. |
 | `email` | `VARCHAR(255)` | `NOT NULL, UNIQUE` | The user's email address, used for identification and notifications. |
 | `full_name` | `VARCHAR(255)` | `NOT NULL` | The user's full name, as provided by Google. |
@@ -636,7 +639,7 @@ Stores a record for each active long-lived refresh token issued to a user. This 
 | Column Name | Data Type | Constraints | Description |
 | --- | --- | --- | --- |
 | `id` | `UUID` | `PRIMARY KEY` | The unique identifier for this session record. |
-| `user_id` | `UUID` | `NOT NULL, FOREIGN KEY (users.id)` | A reference to the user this session belongs to. Should have `ON DELETE CASCADE`. |
+| `user_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (users.id)` | A reference to the user this session belongs to. Should have `ON DELETE CASCADE`. |
 | `refresh_token_hash` | `BYTEA` | `NOT NULL, UNIQUE` | A cryptographic hash (e.g., SHA-256) of the refresh token. We store a hash, not the token itself, for security. |
 | `user_agent` | `TEXT` |  | The User-Agent string of the client that initiated the session. Useful for display and auditing. |
 | `ip_address` | `INET` |  | The IP address from which the session was created. |
@@ -644,36 +647,41 @@ Stores a record for each active long-lived refresh token issued to a user. This 
 | `expires_at` | `TIMESTAMPTZ` | `NOT NULL` | The timestamp when this refresh token and session will expire (60 days from creation). |
 | `created_at` | `TIMESTAMPTZ` | `NOT NULL` | The timestamp when the session was created. |
 
-## 6.3. Table: `automation_runs`
+## 6.3. Table: `activity_logs`
 
-Stores a high-level record for each individual execution of the automation process for a given user.
-
-| Column Name | Data Type | Constraints | Description |
-| --- | --- | --- | --- |
-| `id` | `UUID` | `PRIMARY KEY` | The unique identifier for this specific automation run. |
-| `user_id` | `UUID` | `NOT NULL, FOREIGN KEY (users.id)` | A reference to the user this run belongs to. Should have `ON DELETE CASCADE`. |
-| `trace_id` | `UUID` | `NOT NULL, UNIQUE` | The unique trace ID for this job, passed from the queue. Useful for debugging. |
-| `trigger_type` | `VARCHAR(50)` | `NOT NULL` | How the job was initiated. Value will be one of: `schedule` or `manual_sync`. |
-| `status` | `VARCHAR(50)` | `NOT NULL` | The final, overall status of the entire run, e.g., `Success`, `SuccessWithWarnings`, `Failure`. |
-| `created_at` | `TIMESTAMPTZ` | `NOT NULL` | The timestamp when the automation run was initiated. |
-
-*Note: In a PostgreSQL implementation, the `trigger_type` and `status` columns are excellent candidates for custom `ENUM` types to ensure data integrity.*
-
-## 6.4. Table: `automation_run_logs`
-
-Stores the detailed, day-by-day outcome for each processed day within a single automation run.
+Stores detailed processing outcomes from the automation engine for each day processed, providing audit trails and debugging information. This table tracks the actual work performed by the system.
 
 | Column Name | Data Type | Constraints | Description |
 | --- | --- | --- | --- |
-| `id` | `UUID` | `PRIMARY KEY` | The unique identifier for this specific log entry. |
-| `run_id` | `UUID` | `NOT NULL, FOREIGN KEY (automation_runs.id)` | A reference to the parent run this log entry belongs to. Should have `ON DELETE CASCADE`. |
-| `processed_date` | `DATE` | `NOT NULL` | The specific calendar date that this log entry pertains to (e.g., '2025-06-08'). |
-| `status` | `VARCHAR(50)` | `NOT NULL` | The status for this specific day's processing, e.g., `Logged`, `Warning`, `Error`, `NoAction`. |
-| `summary_message` | `TEXT` | `NOT NULL` | The full, human-readable summary message for this day's outcome. |
-| `details` | `JSONB` |  | A field to store structured context, especially for errors or warnings (e.g., API error messages). |
-| `created_at` | `TIMESTAMPTZ` | `NOT NULL` | The timestamp when this specific log record was created. |
+| `id` | `SERIAL` | `PRIMARY KEY` | Auto-incrementing unique identifier for this log entry. |
+| `user_id` | `INTEGER` | `NOT NULL, FOREIGN KEY (users.id)` | Reference to the user this log belongs to. Has `ON DELETE CASCADE`. |
+| `processing_date` | `DATE` | `NOT NULL` | The calendar date being processed (e.g., '2025-06-26'). |
+| `processing_type` | `VARCHAR(50)` | `NOT NULL` | Type of processing: `previous_day` (US025), `today_so_far` (US028), or `lookback_period` (US026/027). |
+| `processing_scope` | `VARCHAR(50)` | `NOT NULL` | Scope identifier: `manual_sync`, `scheduled_daily`, etc. |
+| `status` | `VARCHAR(20)` | `NOT NULL` | Processing outcome: `success`, `partial`, `failed`, or `skipped`. |
+| `activities_found` | `INTEGER` | `DEFAULT 0` | Number of Strava activities found for the day. |
+| `activities_processed` | `INTEGER` | `DEFAULT 0` | Number of activities successfully processed. |
+| `total_distance_meters` | `DECIMAL(10,2)` |  | Total distance in meters across all activities. |
+| `total_duration_seconds` | `INTEGER` |  | Total duration in seconds across all activities. |
+| `spreadsheet_row` | `INTEGER` |  | Row number in spreadsheet that was updated. |
+| `spreadsheet_updated` | `BOOLEAN` | `DEFAULT false` | Whether the spreadsheet was successfully updated. |
+| `description_generated` | `TEXT` |  | The generated/updated description for the spreadsheet. |
+| `error_message` | `TEXT` |  | Error message if processing failed. |
+| `warning_messages` | `TEXT[]` |  | Array of warning messages encountered during processing. |
+| `processing_started_at` | `TIMESTAMPTZ` | `NOT NULL` | When processing started for this day. |
+| `processing_completed_at` | `TIMESTAMPTZ` |  | When processing completed for this day. |
+| `processing_duration_ms` | `INTEGER` |  | Processing duration in milliseconds. |
+| `metadata` | `JSONB` |  | Additional metadata including activity IDs, special cases (e.g., `rest_day_with_activity`), and other context. |
+| `created_at` | `TIMESTAMPTZ` | `DEFAULT CURRENT_TIMESTAMP` | When this log entry was created. |
 
-*Note: Using the `JSONB` data type for the `details` column is highly efficient in PostgreSQL and gives us great flexibility for storing rich diagnostic information.*
+**Indexes:**
+- `idx_activity_logs_user_id` on `user_id` for querying by user
+- `idx_activity_logs_processing_date` on `processing_date` for date-based queries
+- `idx_activity_logs_status` on `status` for filtering by outcome
+- `idx_activity_logs_created_at` on `created_at` for recent logs
+- `idx_activity_logs_user_date` composite on `(user_id, processing_date)` for efficient user+date queries
+
+*Note: The original design included `automation_runs` and `automation_run_logs` tables for a hierarchical logging approach. However, during implementation, the simpler `activity_logs` table was chosen as it better matches the actual processing model where each day is processed independently. This single-table approach reduces complexity and storage overhead while providing all necessary audit and debugging information.*
 
 # 7. Integration Strategy
 
