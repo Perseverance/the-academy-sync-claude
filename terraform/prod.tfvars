@@ -24,3 +24,7 @@ authorized_networks = [
     value = "198.51.100.0/24" # Replace with your actual VPN range
   }
 ]
+
+# Redis configuration for production
+redis_tier           = "STANDARD_HA"
+redis_memory_size_gb = 1

@@ -9,3 +9,15 @@ resource "google_project_service" "secretmanager" {
   service                    = "secretmanager.googleapis.com"
   disable_dependent_services = true
 }
+
+resource "google_project_service" "redis" {
+  project                    = var.project_id
+  service                    = "redis.googleapis.com"
+  disable_dependent_services = true
+}
+
+resource "google_project_service" "servicenetworking" {
+  project                    = var.project_id
+  service                    = "servicenetworking.googleapis.com"
+  disable_dependent_services = true
+}

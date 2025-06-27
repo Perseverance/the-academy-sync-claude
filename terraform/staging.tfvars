@@ -16,6 +16,14 @@ environment = "staging"
 authorized_networks = [
   {
     name  = "Development Network"
-    value = "203.0.113.0/24" # Replace with your actual development IP range
+    value = "203.0.113.0/24" 
+  },
+  {
+    name  = "Development Network"
+    value = "78.128.35.0/24" 
   }
 ]
+
+# Redis configuration for staging
+redis_tier           = "BASIC"
+redis_memory_size_gb = 1

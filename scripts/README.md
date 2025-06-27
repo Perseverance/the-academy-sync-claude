@@ -55,6 +55,7 @@ VERBOSE=true ./scripts/manage-secrets.sh view staging
 **Features:**
 - Reads configuration from `.env.staging` or `.env.prod`
 - Automatically constructs database URL from Terraform outputs
+- Automatically constructs Redis URL from Terraform outputs (when Memorystore is deployed)
 - Handles URL encoding for special characters in passwords
 - Maps environment variables to secret names
 
@@ -206,7 +207,7 @@ SMTP_USERNAME=xxx
 SMTP_PASSWORD=xxx
 FROM_EMAIL=xxx
 
-# Redis URL
+# Redis URL (optional - will be auto-constructed if using Terraform Memorystore)
 REDIS_URL=redis://host:port
 
 # URLs (update based on your deployment)
@@ -214,4 +215,4 @@ BASE_URL=https://api.yourdomain.com
 FRONTEND_URL=https://yourdomain.com
 ```
 
-The database URL is automatically constructed from Terraform outputs and doesn't need to be in the env file.
+The database URL and Redis URL (when using Memorystore) are automatically constructed from Terraform outputs and don't need to be in the env file.

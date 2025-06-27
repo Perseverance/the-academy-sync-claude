@@ -52,3 +52,13 @@ variable "authorized_networks" {
   }))
   default = []
 }
+
+variable "redis_tier" {
+  description = "The tier of the Redis instance. Either BASIC or STANDARD_HA."
+  type        = string
+}
+
+variable "redis_memory_size_gb" {
+  description = "The memory size of the Redis instance in GB."
+  type        = number
+}

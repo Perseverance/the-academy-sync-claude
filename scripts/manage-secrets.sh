@@ -169,6 +169,41 @@ construct_database_url() {
     echo "$DATABASE_URL"
 }
 
+# Function to construct Redis URL
+construct_redis_url() {
+    local ENV=$1
+    
+    # Get Redis connection info from Terraform
+    echo "Fetching Redis information from Terraform..."
+    
+    cd "$PROJECT_ROOT/terraform" || exit 1
+    
+    # Select the correct workspace
+    terraform workspace select "$ENV" >/dev/null 2>&1
+    
+    # Get Redis outputs
+    REDIS_HOST=$(terraform output -raw redis_host 2>/dev/null || echo "")
+    REDIS_PORT=$(terraform output -raw redis_port 2>/dev/null || echo "")
+    
+    if [ -z "$REDIS_HOST" ] || [ -z "$REDIS_PORT" ]; then
+        print_warning "Could not fetch Redis info from Terraform. Redis URL secret will need to be updated manually."
+        return
+    fi
+    
+    # Get the Redis auth string from Secret Manager
+    REDIS_AUTH=$(gcloud secrets versions access latest --secret="${ENV}-redis-auth" --project="$PROJECT_ID" 2>/dev/null || echo "")
+    
+    if [ -z "$REDIS_AUTH" ]; then
+        print_warning "Could not fetch Redis auth string. Redis URL secret will need to be updated manually."
+        return
+    fi
+    
+    # Construct the Redis URL
+    REDIS_URL="redis://:${REDIS_AUTH}@${REDIS_HOST}:${REDIS_PORT}"
+    
+    echo "$REDIS_URL"
+}
+
 # Main logic
 case "$COMMAND" in
     create|update)
@@ -232,9 +267,12 @@ case "$COMMAND" in
                     manage_secret "${ENVIRONMENT}-from-email" "$value" "$COMMAND"
                     ;;
                 REDIS_URL)
-                    # TODO: When Redis/Memorystore is added to Terraform, derive this from Terraform outputs
-                    # similar to how DATABASE_URL is constructed
-                    manage_secret "${ENVIRONMENT}-redis-url" "$value" "$COMMAND"
+                    # Skip if placeholder value, we'll construct it from Terraform
+                    if [[ "$value" == "redis://"* ]] && [[ "$value" == *"redis-staging"* || "$value" == *"redis-prod"* ]]; then
+                        print_warning "Skipping placeholder Redis URL, will construct from Terraform outputs"
+                    else
+                        manage_secret "${ENVIRONMENT}-redis-url" "$value" "$COMMAND"
+                    fi
                     ;;
                 # TODO: When application infrastructure is added to Terraform:
                 # BASE_URL)
@@ -256,6 +294,16 @@ case "$COMMAND" in
             manage_secret "${ENVIRONMENT}-database-url" "$DB_URL" "$COMMAND"
         else
             print_warning "Database URL will need to be created manually after Terraform deployment"
+        fi
+        
+        # Handle Redis URL from Terraform
+        echo ""
+        echo "Constructing Redis URL..."
+        REDIS_URL=$(construct_redis_url "$ENVIRONMENT")
+        if [ -n "$REDIS_URL" ]; then
+            manage_secret "${ENVIRONMENT}-redis-url" "$REDIS_URL" "$COMMAND"
+        else
+            print_warning "Redis URL will need to be created manually after Terraform deployment"
         fi
         
         echo ""
