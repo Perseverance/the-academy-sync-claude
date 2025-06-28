@@ -157,11 +157,12 @@ module "notification_service" {
 
   # Secrets from Secret Manager
   secrets = {
-    DATABASE_URL  = "${var.environment}-database-url" # Optional for notification service
-    SMTP_USERNAME = "${var.environment}-smtp-username"
-    SMTP_PASSWORD = "${var.environment}-smtp-password"
-    FROM_EMAIL    = "${var.environment}-from-email"
-    JWT_SECRET    = "${var.environment}-jwt-secret"  # Required by config validation
+    DATABASE_URL      = "${var.environment}-database-url" # Optional for notification service
+    SMTP_USERNAME     = "${var.environment}-smtp-username"
+    SMTP_PASSWORD     = "${var.environment}-smtp-password"
+    FROM_EMAIL        = "${var.environment}-from-email"
+    JWT_SECRET        = "${var.environment}-jwt-secret"  # Required by config validation
+    ENCRYPTION_SECRET = "${var.environment}-encryption-secret"  # Required by config validation
   }
 
   # Required secrets for IAM permissions
@@ -170,7 +171,8 @@ module "notification_service" {
     "${var.environment}-smtp-username",
     "${var.environment}-smtp-password",
     "${var.environment}-from-email",
-    "${var.environment}-jwt-secret"
+    "${var.environment}-jwt-secret",
+    "${var.environment}-encryption-secret"
   ]
 
   # Resource configuration
