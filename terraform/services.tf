@@ -19,6 +19,9 @@ module "backend_api" {
     # These will be replaced with actual URLs after deployment
     BASE_URL        = "https://staging-backend-api-placeholder.a.run.app"
     FRONTEND_URL    = "https://staging.example.com"
+    # SMTP configuration
+    SMTP_HOST       = "smtp.gmail.com"
+    SMTP_PORT       = "587"
   }
 
   # Secrets from Secret Manager
