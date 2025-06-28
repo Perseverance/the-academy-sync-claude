@@ -135,7 +135,7 @@ construct_database_url() {
     local ENV=$1
     
     # Get database connection info from Terraform
-    echo "Fetching database information from Terraform..."
+    print_info "Fetching database information from Terraform..." >&2
     
     cd "$PROJECT_ROOT/terraform" || exit 1
     
@@ -148,7 +148,7 @@ construct_database_url() {
     DB_USER=$(terraform output -raw db_user 2>/dev/null || echo "")
     
     if [ -z "$DB_IP" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ]; then
-        print_warning "Could not fetch database info from Terraform. Database URL secret will need to be updated manually."
+        print_warning "Could not fetch database info from Terraform. Database URL secret will need to be updated manually." >&2
         return
     fi
     
@@ -156,7 +156,7 @@ construct_database_url() {
     DB_PASSWORD=$(gcloud secrets versions access latest --secret="${ENV}-db-password" --project="$PROJECT_ID" 2>/dev/null || echo "")
     
     if [ -z "$DB_PASSWORD" ]; then
-        print_warning "Could not fetch database password. Database URL secret will need to be updated manually."
+        print_warning "Could not fetch database password. Database URL secret will need to be updated manually." >&2
         return
     fi
     
@@ -174,7 +174,7 @@ construct_redis_url() {
     local ENV=$1
     
     # Get Redis connection info from Terraform
-    echo "Fetching Redis information from Terraform..."
+    print_info "Fetching Redis information from Terraform..." >&2
     
     cd "$PROJECT_ROOT/terraform" || exit 1
     
@@ -186,7 +186,7 @@ construct_redis_url() {
     REDIS_PORT=$(terraform output -raw redis_port 2>/dev/null || echo "")
     
     if [ -z "$REDIS_HOST" ] || [ -z "$REDIS_PORT" ]; then
-        print_warning "Could not fetch Redis info from Terraform. Redis URL secret will need to be updated manually."
+        print_warning "Could not fetch Redis info from Terraform. Redis URL secret will need to be updated manually." >&2
         return
     fi
     
@@ -194,7 +194,7 @@ construct_redis_url() {
     REDIS_AUTH=$(gcloud secrets versions access latest --secret="${ENV}-redis-auth" --project="$PROJECT_ID" 2>/dev/null || echo "")
     
     if [ -z "$REDIS_AUTH" ]; then
-        print_warning "Could not fetch Redis auth string. Redis URL secret will need to be updated manually."
+        print_warning "Could not fetch Redis auth string. Redis URL secret will need to be updated manually." >&2
         return
     fi
     
@@ -209,7 +209,7 @@ construct_base_url() {
     local ENV=$1
     
     # Get backend API URL from Terraform
-    echo "Fetching backend API URL from Terraform..."
+    print_info "Fetching backend API URL from Terraform..." >&2
     
     cd "$PROJECT_ROOT/terraform" || exit 1
     
@@ -220,7 +220,7 @@ construct_base_url() {
     BACKEND_URL=$(terraform output -raw backend_api_url 2>/dev/null || echo "")
     
     if [ -z "$BACKEND_URL" ]; then
-        print_warning "Could not fetch backend API URL from Terraform. BASE_URL secret will need to be updated manually."
+        print_warning "Could not fetch backend API URL from Terraform. BASE_URL secret will need to be updated manually." >&2
         return
     fi
     
@@ -230,8 +230,8 @@ construct_base_url() {
 # Main logic
 case "$COMMAND" in
     create|update)
-        echo "Processing secrets for $ENVIRONMENT environment..."
-        echo ""
+        print_info "Processing secrets for $ENVIRONMENT environment..." >&2
+        echo "" >&2
         
         # Read the env file and process each line
         while IFS='=' read -r key value; do
@@ -313,8 +313,8 @@ case "$COMMAND" in
         done < "$ENV_FILE"
         
         # Handle database URL specially
-        echo ""
-        echo "Constructing database URL..."
+        echo "" >&2
+        print_info "Constructing database URL..." >&2
         DB_URL=$(construct_database_url "$ENVIRONMENT")
         if [ -n "$DB_URL" ]; then
             manage_secret "${ENVIRONMENT}-database-url" "$DB_URL" "$COMMAND"
@@ -323,8 +323,8 @@ case "$COMMAND" in
         fi
         
         # Handle Redis URL from Terraform
-        echo ""
-        echo "Constructing Redis URL..."
+        echo "" >&2
+        print_info "Constructing Redis URL..." >&2
         REDIS_URL=$(construct_redis_url "$ENVIRONMENT")
         if [ -n "$REDIS_URL" ]; then
             manage_secret "${ENVIRONMENT}-redis-url" "$REDIS_URL" "$COMMAND"
@@ -333,8 +333,8 @@ case "$COMMAND" in
         fi
         
         # Handle BASE_URL from Cloud Run
-        echo ""
-        echo "Constructing BASE_URL from Cloud Run..."
+        echo "" >&2
+        print_info "Constructing BASE_URL from Cloud Run..." >&2
         BASE_URL=$(construct_base_url "$ENVIRONMENT")
         if [ -n "$BASE_URL" ]; then
             manage_secret "${ENVIRONMENT}-base-url" "$BASE_URL" "$COMMAND"
@@ -342,7 +342,7 @@ case "$COMMAND" in
             print_warning "BASE_URL will need to be created manually after Cloud Run deployment"
         fi
         
-        echo ""
+        echo "" >&2
         print_success "Secret management completed for $ENVIRONMENT environment!"
         ;;
         
