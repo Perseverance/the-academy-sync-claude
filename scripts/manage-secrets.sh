@@ -29,6 +29,10 @@ print_warning() {
     echo -e "${YELLOW}⚠ $1${NC}"
 }
 
+print_info() {
+    echo -e "${NC}ℹ $1${NC}"
+}
+
 # Function to display usage
 usage() {
     echo "Usage: $0 [create|view|update] [staging|prod]"
