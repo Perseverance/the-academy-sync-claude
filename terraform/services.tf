@@ -89,6 +89,8 @@ module "automation_engine" {
     GCP_PROJECT_ID    = var.project_id
     FAIL_FAST_ENABLED = "false"  # Disable for initial deployment
     MAX_WORKERS       = tostring(var.automation_engine_max_workers)
+    # BASE_URL required by config validation even for internal services
+    BASE_URL          = "https://staging-automation-engine.a.run.app"
   }
 
   # Secrets from Secret Manager
@@ -96,13 +98,15 @@ module "automation_engine" {
     DATABASE_URL      = "${var.environment}-database-url"
     REDIS_URL         = "${var.environment}-redis-url"
     ENCRYPTION_SECRET = "${var.environment}-encryption-secret"
+    JWT_SECRET        = "${var.environment}-jwt-secret"
   }
 
   # Required secrets for IAM permissions
   required_secrets = [
     "${var.environment}-database-url",
     "${var.environment}-redis-url",
-    "${var.environment}-encryption-secret"
+    "${var.environment}-encryption-secret",
+    "${var.environment}-jwt-secret"
   ]
 
   # Resource configuration
@@ -144,6 +148,8 @@ module "notification_service" {
     FAIL_FAST_ENABLED = "false" # Notification service can run without DB
     SMTP_HOST         = "smtp.gmail.com"
     SMTP_PORT         = "587"
+    # BASE_URL required by config validation even for internal services
+    BASE_URL          = "https://staging-notification-service.a.run.app"
   }
 
   # Secrets from Secret Manager
@@ -152,6 +158,7 @@ module "notification_service" {
     SMTP_USERNAME = "${var.environment}-smtp-username"
     SMTP_PASSWORD = "${var.environment}-smtp-password"
     FROM_EMAIL    = "${var.environment}-from-email"
+    JWT_SECRET    = "${var.environment}-jwt-secret"  # Required by config validation
   }
 
   # Required secrets for IAM permissions
@@ -159,7 +166,8 @@ module "notification_service" {
     "${var.environment}-database-url",
     "${var.environment}-smtp-username",
     "${var.environment}-smtp-password",
-    "${var.environment}-from-email"
+    "${var.environment}-from-email",
+    "${var.environment}-jwt-secret"
   ]
 
   # Resource configuration
