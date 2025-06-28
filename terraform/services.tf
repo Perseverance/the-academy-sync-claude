@@ -15,7 +15,10 @@ module "backend_api" {
     # PORT is automatically set by Cloud Run, don't set it here
     LOG_LEVEL       = var.log_level
     GCP_PROJECT_ID  = var.project_id
-    FAIL_FAST_ENABLED = "true"
+    FAIL_FAST_ENABLED = "false"  # Disable for initial deployment
+    # These will be replaced with actual URLs after deployment
+    BASE_URL        = "https://staging-backend-api-placeholder.a.run.app"
+    FRONTEND_URL    = "https://staging.example.com"
   }
 
   # Secrets from Secret Manager
@@ -84,7 +87,7 @@ module "automation_engine" {
     GO_ENV            = var.environment
     LOG_LEVEL         = var.log_level
     GCP_PROJECT_ID    = var.project_id
-    FAIL_FAST_ENABLED = "true"
+    FAIL_FAST_ENABLED = "false"  # Disable for initial deployment
     MAX_WORKERS       = tostring(var.automation_engine_max_workers)
   }
 

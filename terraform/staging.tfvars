@@ -31,9 +31,9 @@ redis_memory_size_gb = 1
 # Container image URLs - Build and push images first, then update these
 # Example build command: docker build --build-arg SERVICE_NAME=backend-api -t gcr.io/the-academy-sync-sdlc-test/backend-api:latest .
 # Example push command: docker push gcr.io/the-academy-sync-sdlc-test/backend-api:latest
-backend_api_image_url          = "gcr.io/the-academy-sync-sdlc-test/backend-api:placeholder"
-automation_engine_image_url    = "gcr.io/the-academy-sync-sdlc-test/automation-engine:placeholder"
-notification_service_image_url = "gcr.io/the-academy-sync-sdlc-test/notification-service:placeholder"
+backend_api_image_url          = "gcr.io/the-academy-sync-sdlc-test/backend-api:staging"
+automation_engine_image_url    = "gcr.io/the-academy-sync-sdlc-test/automation-engine:staging"
+notification_service_image_url = "gcr.io/the-academy-sync-sdlc-test/notification-service:staging"
 
 # Service configurations for staging (cost-optimized)
 backend_api_cpu            = "1"

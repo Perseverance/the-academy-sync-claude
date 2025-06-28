@@ -84,6 +84,17 @@ resource "google_cloud_run_v2_service" "service" {
     # Request handling
     max_instance_request_concurrency = var.concurrency
     timeout                          = "${var.timeout_seconds}s"
+    
+    # Startup probe - give services time to connect to database
+    startup_probe {
+      initial_delay_seconds = 0
+      timeout_seconds       = 3
+      period_seconds        = 3
+      failure_threshold     = 30  # 90 seconds total for startup
+      tcp_socket {
+        port = 8080
+      }
+    }
   }
 
   # Traffic configuration - send 100% to latest revision
