@@ -203,8 +203,17 @@ func WithHTTPRetry(ctx context.Context, client *http.Client, req *http.Request, 
 		}
 
 		// Read response body for error details
-		bodyBytes, _ := io.ReadAll(resp.Body)
+		bodyBytes, readErr := io.ReadAll(resp.Body)
 		resp.Body.Close()
+
+		// If we can't read the body, log it but continue with empty body
+		if readErr != nil {
+			log.Warn("Failed to read HTTP error response body",
+				"operation", operationName,
+				"status_code", resp.StatusCode,
+				"read_error", readErr.Error())
+			bodyBytes = []byte{}
+		}
 
 		httpErr := &HTTPError{
 			StatusCode: resp.StatusCode,
