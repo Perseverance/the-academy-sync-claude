@@ -147,7 +147,7 @@ construct_database_url() {
     terraform workspace select "$ENV" >/dev/null 2>&1
     
     # Get database outputs
-    DB_IP=$(terraform output -raw db_instance_ip 2>/dev/null | jq -r '.[0].ip_address' 2>/dev/null || echo "")
+    DB_IP=$(terraform output -json db_instance_ip 2>/dev/null | jq -r '.[0].ip_address' 2>/dev/null || echo "")
     DB_NAME=$(terraform output -raw db_name 2>/dev/null || echo "")
     DB_USER=$(terraform output -raw db_user 2>/dev/null || echo "")
     

@@ -158,6 +158,7 @@ module "notification_service" {
   # Secrets from Secret Manager
   secrets = {
     DATABASE_URL      = "${var.environment}-database-url" # Optional for notification service
+    REDIS_URL         = "${var.environment}-redis-url"    # Required by config validation
     SMTP_USERNAME     = "${var.environment}-smtp-username"
     SMTP_PASSWORD     = "${var.environment}-smtp-password"
     FROM_EMAIL        = "${var.environment}-from-email"
@@ -168,6 +169,7 @@ module "notification_service" {
   # Required secrets for IAM permissions
   required_secrets = [
     "${var.environment}-database-url",
+    "${var.environment}-redis-url",
     "${var.environment}-smtp-username",
     "${var.environment}-smtp-password",
     "${var.environment}-from-email",
