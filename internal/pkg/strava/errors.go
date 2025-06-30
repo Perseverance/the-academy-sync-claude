@@ -64,6 +64,11 @@ type APIError struct {
 	Cause      error
 }
 
+// HTTPStatusCode returns the HTTP status code for retry logic compatibility
+func (e *APIError) HTTPStatusCode() int {
+	return e.StatusCode
+}
+
 func (e *APIError) Error() string {
 	if e.Cause != nil {
 		return fmt.Sprintf("strava api error (status %d, type %s): %s (caused by: %v)",
@@ -82,6 +87,11 @@ type NetworkError struct {
 	Operation string
 	Message   string
 	Cause     error
+}
+
+// IsTemporary indicates this is a temporary network error
+func (e *NetworkError) IsTemporary() bool {
+	return true
 }
 
 func (e *NetworkError) Error() string {
