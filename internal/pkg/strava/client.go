@@ -121,10 +121,14 @@ func NewClient(userID int, refreshToken string, logger *logger.Logger) *Client {
 		MaxRetryAfter:     30 * time.Second,
 	}
 
+	// Create HTTP client with retry and preserve the original 30-second timeout
+	httpClient := retry.NewHTTPClientWithRetry(retryConfig, logger)
+	httpClient.Timeout = 30 * time.Second
+
 	return &Client{
 		userID:       userID,
 		refreshToken: refreshToken,
-		httpClient:   retry.NewHTTPClientWithRetry(retryConfig, logger),
+		httpClient:   httpClient,
 		retryConfig:  retryConfig,
 		oauthConfig:  oauthConfig,
 		logger:       logger.WithContext("component", "strava_client", "user_id", userID),
