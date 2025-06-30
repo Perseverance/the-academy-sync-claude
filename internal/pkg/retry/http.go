@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"net/http"
 	"strconv"
@@ -308,8 +309,8 @@ func NewHTTPClientWithRetry(config HTTPConfig, logger *logger.Logger) *http.Clie
 // - Maximum delay limits
 // Priority is given to Retry-After headers when present and within limits.
 func calculateHTTPRetryDelay(attempt int, config HTTPConfig, resp *http.Response, log *logger.Logger, operationName string) time.Duration {
-	// Calculate base delay using exponential backoff
-	baseDelay := time.Duration(float64(config.BaseDelay) * float64(attempt-1) * float64(attempt-1))
+	// Calculate base delay using exponential backoff (2^(attempt-1) * baseDelay)
+	baseDelay := time.Duration(float64(config.BaseDelay) * math.Pow(2, float64(attempt-1)))
 	if baseDelay > config.MaxDelay {
 		baseDelay = config.MaxDelay
 	}

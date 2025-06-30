@@ -1,13 +1,18 @@
 -- Create activity_logs table to track activity processing history
+-- Create ENUM types for constrained values
+CREATE TYPE processing_type_enum AS ENUM ('daily', 'manual', 'backfill');
+CREATE TYPE processing_scope_enum AS ENUM ('single_day', 'date_range');
+CREATE TYPE processing_status_enum AS ENUM ('success', 'failed', 'skipped', 'in_progress');
+
 CREATE TABLE activity_logs (
-    id SERIAL PRIMARY KEY,                                      -- Auto-incrementing primary key
+    id BIGSERIAL PRIMARY KEY,                                   -- Auto-incrementing primary key (using BIGSERIAL for larger range)
     user_id INTEGER NOT NULL,                                   -- Foreign key to users table
     
     -- Processing information
     processing_date DATE NOT NULL,                              -- Date being processed (e.g., 2024-01-15)
-    processing_type VARCHAR(50) NOT NULL,                       -- Type of processing (e.g., 'daily', 'manual', 'backfill')
-    processing_scope VARCHAR(50) NOT NULL,                      -- Scope of processing (e.g., 'single_day', 'date_range')
-    status VARCHAR(50) NOT NULL,                                -- Processing status ('success', 'failed', 'skipped')
+    processing_type processing_type_enum NOT NULL,              -- Type of processing (constrained to enum values)
+    processing_scope processing_scope_enum NOT NULL,            -- Scope of processing (constrained to enum values)
+    status processing_status_enum NOT NULL,                     -- Processing status (constrained to enum values)
     
     -- Activity statistics
     activities_found INTEGER DEFAULT 0,                         -- Number of activities found from Strava
