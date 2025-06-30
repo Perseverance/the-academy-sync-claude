@@ -277,7 +277,6 @@ func (t *HTTPRetryTransport) RoundTrip(req *http.Request) (*http.Response, error
 	// Create a client with the base transport
 	client := &http.Client{
 		Transport: t.Base,
-		Timeout:   30 * time.Second, // Default timeout, can be overridden
 	}
 
 	return WithHTTPRetry(req.Context(), client, req, t.Config, t.Logger)
@@ -298,7 +297,6 @@ func NewHTTPClientWithRetry(config HTTPConfig, logger *logger.Logger) *http.Clie
 			Config: config,
 			Logger: logger,
 		},
-		Timeout: 30 * time.Second,
 	}
 }
 
