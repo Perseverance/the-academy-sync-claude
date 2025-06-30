@@ -12,6 +12,7 @@ import (
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
 )
 
 // Activity represents a Strava activity with essential fields for automation processing
@@ -74,6 +75,9 @@ type Client struct {
 	// HTTP client for API requests
 	httpClient *http.Client
 
+	// Retry configuration
+	retryConfig retry.HTTPConfig
+
 	// OAuth configuration for token refresh
 	oauthConfig *oauth2.Config
 
@@ -97,10 +101,31 @@ func NewClient(userID int, refreshToken string, logger *logger.Logger) *Client {
 		// For now, we'll set them when needed in token refresh
 	}
 
+	// Create retry configuration for Strava API
+	retryConfig := retry.HTTPConfig{
+		ConfigWithJitter: retry.ConfigWithJitter{
+			Config: retry.Config{
+				MaxAttempts: 3,
+				BaseDelay:   1 * time.Second,
+				MaxDelay:    10 * time.Second,
+			},
+			JitterFactor: 0.2,
+		},
+		RetryableStatusCodes: []int{
+			http.StatusTooManyRequests,     // 429
+			http.StatusBadGateway,          // 502
+			http.StatusServiceUnavailable,  // 503
+			http.StatusGatewayTimeout,      // 504
+		},
+		RespectRetryAfter: true,
+		MaxRetryAfter:     30 * time.Second,
+	}
+
 	return &Client{
 		userID:       userID,
 		refreshToken: refreshToken,
-		httpClient:   &http.Client{Timeout: 30 * time.Second},
+		httpClient:   retry.NewHTTPClientWithRetry(retryConfig, logger),
+		retryConfig:  retryConfig,
 		oauthConfig:  oauthConfig,
 		logger:       logger.WithContext("component", "strava_client", "user_id", userID),
 	}
@@ -188,8 +213,26 @@ func (c *Client) ensureValidToken(ctx context.Context) error {
 		RefreshToken: c.refreshToken,
 	}
 
-	tokenSource := c.oauthConfig.TokenSource(ctx, token)
-	newToken, err := tokenSource.Token()
+	// Use retry for token refresh
+	var newToken *oauth2.Token
+	tokenRefreshFn := func() error {
+		tokenSource := c.oauthConfig.TokenSource(ctx, token)
+		var tokenErr error
+		newToken, tokenErr = tokenSource.Token()
+		return tokenErr
+	}
+
+	// Create a custom retry config for token refresh with fewer attempts
+	tokenRetryConfig := retry.ConfigWithJitter{
+		Config: retry.Config{
+			MaxAttempts: 2,
+			BaseDelay:   2 * time.Second,
+			MaxDelay:    5 * time.Second,
+		},
+		JitterFactor: 0.2,
+	}
+
+	err := retry.WithExponentialBackoffJitter(ctx, tokenRetryConfig, c.logger, "strava_token_refresh", tokenRefreshFn)
 
 	requestDuration := time.Since(startTime)
 
