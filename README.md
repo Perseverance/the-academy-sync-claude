@@ -686,6 +686,238 @@ The system is designed for deployment on Google Cloud Platform using:
 
 All infrastructure is managed via Terraform in the `terraform/` directory.
 
+### Prerequisites
+
+Before deploying, ensure you have:
+
+1. **Google Cloud SDK** installed and configured
+2. **Terraform** v1.5+ installed
+3. **Docker** installed for building images
+4. **PostgreSQL migrate tool** installed
+5. **Cloud SQL Proxy** (optional, for secure database connections)
+
+### Initial Deployment
+
+Follow these steps for a fresh deployment to a new environment:
+
+#### 1. Infrastructure Setup
+
+```bash
+cd terraform
+
+# Initialize Terraform
+terraform init
+
+# Create workspace for your environment
+terraform workspace new staging  # or "prod" for production
+
+# Plan infrastructure changes
+terraform plan -var-file=staging.tfvars
+
+# Apply infrastructure
+terraform apply -var-file=staging.tfvars
+```
+
+#### 2. Configure Secrets
+
+After infrastructure is created, set up the required secrets:
+
+```bash
+# Run the secrets management script
+./scripts/manage-secrets.sh staging
+
+# The script will prompt for:
+# - Database password
+# - JWT secret
+# - OAuth credentials (Google & Strava)
+# - SMTP credentials
+# - Any other required secrets
+```
+
+#### 3. Database Initialization
+
+Run migrations to set up the database schema:
+
+```bash
+# Option 1: Direct connection (if your IP is allowlisted)
+./scripts/migrate-db.sh staging --verbose
+
+# Option 2: Using Cloud SQL Proxy (recommended)
+./scripts/migrate-db.sh staging --proxy --verbose
+```
+
+#### 4. Build and Deploy Services
+
+Build and push container images:
+
+```bash
+# Run the build and push script
+./scripts/build-and-push-images.sh staging
+
+# This will:
+# 1. Build all service images
+# 2. Tag them appropriately
+# 3. Push to Google Container Registry
+# 4. Update Cloud Run services
+```
+
+#### 5. Deploy Frontend
+
+```bash
+cd web
+
+# Build the frontend
+npm run build
+
+# Deploy to Cloud Storage
+gsutil -m rsync -r -d dist/ gs://your-frontend-bucket/
+```
+
+### Update Deployment
+
+For updating an existing deployment with new code changes:
+
+#### 1. Code Updates
+
+```bash
+# Pull latest changes
+git pull origin main
+
+# Switch to deployment branch if needed
+git checkout feature/deployment-scripts
+```
+
+#### 2. Infrastructure Updates (if needed)
+
+Only run if infrastructure changes are required:
+
+```bash
+cd terraform
+terraform workspace select staging
+terraform plan -var-file=staging.tfvars
+terraform apply -var-file=staging.tfvars
+```
+
+#### 3. Database Migrations (if needed)
+
+Only run if there are new migrations:
+
+```bash
+# Check current migration version
+./scripts/migrate-db.sh staging --status
+
+# Apply new migrations
+./scripts/migrate-db.sh staging --verbose
+```
+
+#### 4. Deploy Updated Services
+
+```bash
+# Build and deploy all services
+./scripts/build-and-push-images.sh staging
+
+# Or deploy specific services:
+./scripts/build-and-push-images.sh staging --service backend-api
+./scripts/build-and-push-images.sh staging --service automation-engine
+```
+
+### Deployment Sequence Summary
+
+The correct order for deployment operations:
+
+1. **Terraform** - Create/update infrastructure
+2. **Secrets** - Configure application secrets
+3. **Migrations** - Update database schema
+4. **Images** - Build and deploy application code
+
+### Environment-Specific Configurations
+
+#### Staging Environment
+
+- Uses smaller Cloud SQL instance (db-f1-micro)
+- Single Cloud Run instance per service
+- Lower memory allocations
+- Basic monitoring
+
+#### Production Environment
+
+- Uses larger Cloud SQL instance (db-n1-standard-1)
+- Multiple Cloud Run instances with autoscaling
+- Higher memory allocations
+- Full monitoring and alerting
+
+### Monitoring Deployments
+
+Monitor deployment status:
+
+```bash
+# Check Cloud Run service status
+gcloud run services list --region=us-central1
+
+# View service logs
+gcloud run services logs read backend-api --region=us-central1 --limit=50
+
+# Check database connectivity
+gcloud sql instances describe academy-sync-db-staging
+
+# Monitor job processing
+gcloud logging read "resource.type=cloud_run_revision AND jsonPayload.job_type=manual_sync" --limit=20
+```
+
+### Rollback Procedures
+
+If deployment issues occur:
+
+#### Service Rollback
+
+```bash
+# List available revisions
+gcloud run revisions list --service=backend-api --region=us-central1
+
+# Rollback to previous revision
+gcloud run services update-traffic backend-api \
+  --to-revisions=backend-api-00001-abc=100 \
+  --region=us-central1
+```
+
+#### Database Rollback
+
+```bash
+# Rollback last migration
+./scripts/migrate-db.sh staging --down 1
+
+# Force to specific version (use with caution)
+./scripts/migrate-db.sh staging --force 3
+```
+
+### Automation Scripts
+
+The deployment process is automated through several scripts in the `scripts/` directory:
+
+- **`build-and-push-images.sh`** - Builds and deploys container images
+- **`manage-secrets.sh`** - Manages Google Secret Manager secrets
+- **`migrate-db.sh`** - Runs database migrations with various options
+- **`run-migrations.sh`** - Used by Docker for containerized migrations
+
+Each script includes:
+- Help documentation (`--help` flag)
+- Dry-run mode for testing
+- Verbose output options
+- Error handling and validation
+
+### CI/CD Integration
+
+For automated deployments, integrate these scripts into your CI/CD pipeline:
+
+```yaml
+# Example GitHub Actions workflow
+steps:
+  - name: Deploy to Staging
+    run: |
+      ./scripts/build-and-push-images.sh staging
+      ./scripts/migrate-db.sh staging --verbose
+```
+
 ## Future Improvements
 
 ### Job Status Tracking with Long Polling
