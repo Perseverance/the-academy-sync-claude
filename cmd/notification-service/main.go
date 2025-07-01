@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -92,8 +93,35 @@ func main() {
 		os.Exit(2) // Exit code 2 indicates dependency failure
 	}
 
+	// Start HTTP server for health checks (required by Cloud Run)
+	go startHealthServer(log)
+
 	for {
 		log.Debug("Processing notification queue", "environment", cfg.Environment)
 		time.Sleep(30 * time.Second)
+	}
+}
+
+// startHealthServer starts an HTTP server for health checks required by Cloud Run
+func startHealthServer(log *logger.Logger) {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Notification Service is running\n")
+	})
+
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "OK\n")
+	})
+
+	log.Info("Starting HTTP server for health checks", "port", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Error("Failed to start HTTP server", "error", err)
+		os.Exit(1)
 	}
 }
