@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,6 +57,17 @@ func NewClient(redisURL string, queueName string, logger *logger.Logger) (*Clien
 	opts.DialTimeout = 5 * time.Second
 	opts.ReadTimeout = 3 * time.Second
 	opts.WriteTimeout = 3 * time.Second
+
+	// Configure TLS if the URL uses rediss:// protocol
+	if strings.HasPrefix(redisURL, "rediss://") {
+		// Always override TLS config to enable InsecureSkipVerify for Google Cloud Memorystore
+		opts.TLSConfig = &tls.Config{
+			InsecureSkipVerify: true, // Required for Google Cloud Memorystore self-signed certificates
+		}
+		logger.Info("Configured TLS for Redis connection with InsecureSkipVerify", "url_prefix", redisURL[:20])
+	} else {
+		logger.Info("Non-TLS Redis connection detected", "url_prefix", redisURL[:20])
+	}
 
 	client := redis.NewClient(opts)
 
