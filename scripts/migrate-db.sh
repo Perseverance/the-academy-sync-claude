@@ -24,15 +24,15 @@ print_error() {
 }
 
 print_success() {
-    echo -e "${GREEN}✓ $1${NC}"
+    echo -e "${GREEN}✓ $1${NC}" >&2
 }
 
 print_warning() {
-    echo -e "${YELLOW}⚠ $1${NC}"
+    echo -e "${YELLOW}⚠ $1${NC}" >&2
 }
 
 print_info() {
-    echo -e "${BLUE}ℹ $1${NC}"
+    echo -e "${BLUE}ℹ $1${NC}" >&2
 }
 
 # Function to display usage
@@ -45,6 +45,7 @@ usage() {
     echo ""
     echo "Options:"
     echo "  --proxy  - Use Cloud SQL Proxy for connection (recommended)"
+    echo "  --verbose - Show detailed migration output"
     echo "  --down N - Rollback N migrations"
     echo "  --force VERSION - Force database to specific version"
     echo "  --status - Show current migration status"
@@ -61,6 +62,13 @@ usage() {
 if ! command -v migrate &> /dev/null; then
     print_error "migrate command not found. Please install it:"
     echo "  brew install golang-migrate"
+    exit 1
+fi
+
+# Check if jq is installed
+if ! command -v jq &> /dev/null; then
+    print_error "jq command not found. Please install it:"
+    echo "  brew install jq"
     exit 1
 fi
 
@@ -82,11 +90,16 @@ fi
 USE_PROXY=false
 MIGRATION_COMMAND="up"
 MIGRATION_ARGS=""
+VERBOSE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
         --proxy)
             USE_PROXY=true
+            shift
+            ;;
+        --verbose|-v)
+            VERBOSE=true
             shift
             ;;
         --down)
@@ -151,20 +164,39 @@ get_database_url() {
         
         # Check if cloud-sql-proxy is installed
         if ! command -v cloud-sql-proxy &> /dev/null; then
-            print_error "cloud-sql-proxy not found. Installing..."
-            curl -o /tmp/cloud-sql-proxy https://storage.googleapis.com/cloud-sql-connectors/cloud-sql-proxy/v2.11.0/cloud-sql-proxy.darwin.amd64
-            chmod +x /tmp/cloud-sql-proxy
-            PROXY_CMD="/tmp/cloud-sql-proxy"
+            print_warning "cloud-sql-proxy not found. Please install it using one of these methods:"
+            print_info "  Option 1: gcloud components install cloud-sql-proxy"
+            print_info "  Option 2: brew install cloud-sql-proxy" 
+            print_info "  Option 3: Download from https://github.com/GoogleCloudPlatform/cloud-sql-proxy/releases"
+            print_info ""
+            print_info "Attempting to use gcloud's built-in proxy..."
+            
+            # Try to use gcloud sql proxy as fallback
+            if command -v gcloud &> /dev/null; then
+                PROXY_CMD="gcloud sql connect $INSTANCE_CONNECTION --port=5433"
+                USE_GCLOUD_PROXY=true
+            else
+                print_error "Neither cloud-sql-proxy nor gcloud is available"
+                exit 1
+            fi
         else
             PROXY_CMD="cloud-sql-proxy"
+            USE_GCLOUD_PROXY=false
         fi
         
         # Kill any existing proxy on port 5433
         lsof -ti:5433 | xargs kill -9 2>/dev/null || true
         
         # Start proxy in background
-        $PROXY_CMD --port=5433 "$INSTANCE_CONNECTION" &
-        PROXY_PID=$!
+        if [ "$USE_GCLOUD_PROXY" = true ]; then
+            # gcloud sql proxy doesn't support background mode easily
+            print_error "gcloud sql proxy doesn't support background mode needed for migrations"
+            print_info "Please install cloud-sql-proxy using: brew install cloud-sql-proxy"
+            exit 1
+        else
+            $PROXY_CMD --port=5433 "$INSTANCE_CONNECTION" &
+            PROXY_PID=$!
+        fi
         
         # Wait for proxy to start
         sleep 3
@@ -176,14 +208,28 @@ get_database_url() {
         echo "postgres://${DB_USER}:${ENCODED_PASSWORD}@localhost:5433/${DB_NAME}?sslmode=disable"
     else
         # Direct connection
-        DB_IP=$(terraform output -raw db_instance_ip 2>/dev/null | jq -r '.[0].ip_address' 2>/dev/null || echo "")
-        DB_NAME=$(terraform output -raw db_name 2>/dev/null || echo "")
-        DB_USER=$(terraform output -raw db_user 2>/dev/null || echo "")
+        print_info "Fetching database IP from Terraform..."
         
-        if [ -z "$DB_IP" ]; then
-            print_error "Could not fetch database IP from Terraform"
+        # Try to get the raw JSON output first
+        DB_IP_JSON=$(terraform output -json db_instance_ip 2>&1)
+        if [ $? -ne 0 ]; then
+            print_error "Failed to get db_instance_ip from Terraform: $DB_IP_JSON"
             exit 1
         fi
+        
+        # Parse the IP address
+        DB_IP=$(echo "$DB_IP_JSON" | jq -r '.[0].ip_address' 2>/dev/null || echo "")
+        
+        if [ -z "$DB_IP" ]; then
+            print_error "Could not parse database IP from Terraform output"
+            print_info "Raw output: $DB_IP_JSON"
+            exit 1
+        fi
+        
+        print_info "Database IP: $DB_IP"
+        
+        DB_NAME=$(terraform output -raw db_name 2>/dev/null || echo "")
+        DB_USER=$(terraform output -raw db_user 2>/dev/null || echo "")
         
         # Get password from Secret Manager
         DB_PASSWORD=$(gcloud secrets versions access latest --secret="${ENV}-db-password" --project="$PROJECT_ID" 2>/dev/null || echo "")
@@ -229,12 +275,28 @@ if [ ! -d "$MIGRATIONS_PATH" ]; then
     exit 1
 fi
 
+# Build verbose flag if requested
+VERBOSE_FLAG=""
+if [ "$VERBOSE" = true ]; then
+    VERBOSE_FLAG="-verbose"
+    print_info "Verbose mode enabled"
+    # Debug: show the database URL (with password masked)
+    MASKED_URL=$(echo "$DATABASE_URL" | sed -E 's/(postgres:\/\/[^:]+:)[^@]+(@)/\1***\2/')
+    print_info "Database URL: $MASKED_URL"
+fi
+
 # Run migration command
 print_info "Executing migration command: $MIGRATION_COMMAND $MIGRATION_ARGS"
 
 case "$MIGRATION_COMMAND" in
     up)
-        migrate -path "$MIGRATIONS_PATH" -database "$DATABASE_URL" up
+        # Debug: Check if URL starts with postgres://
+        if [[ ! "$DATABASE_URL" =~ ^postgres:// ]]; then
+            print_error "Invalid database URL format. Must start with postgres://"
+            print_info "Actual URL prefix: ${DATABASE_URL:0:20}..."
+            exit 1
+        fi
+        migrate -path "$MIGRATIONS_PATH" -database "$DATABASE_URL" $VERBOSE_FLAG up
         print_success "Migrations completed successfully!"
         ;;
     down)
@@ -242,7 +304,7 @@ case "$MIGRATION_COMMAND" in
             print_error "Please specify number of migrations to rollback"
             exit 1
         fi
-        migrate -path "$MIGRATIONS_PATH" -database "$DATABASE_URL" down "$MIGRATION_ARGS"
+        migrate -path "$MIGRATIONS_PATH" -database "$DATABASE_URL" $VERBOSE_FLAG down "$MIGRATION_ARGS"
         print_success "Rolled back $MIGRATION_ARGS migration(s)"
         ;;
     force)
@@ -251,12 +313,12 @@ case "$MIGRATION_COMMAND" in
             exit 1
         fi
         print_warning "Forcing database to version $MIGRATION_ARGS"
-        migrate -path "$MIGRATIONS_PATH" -database "$DATABASE_URL" force "$MIGRATION_ARGS"
+        migrate -path "$MIGRATIONS_PATH" -database "$DATABASE_URL" $VERBOSE_FLAG force "$MIGRATION_ARGS"
         print_success "Database forced to version $MIGRATION_ARGS"
         ;;
     version)
         echo "Current migration version:"
-        migrate -path "$MIGRATIONS_PATH" -database "$DATABASE_URL" version
+        migrate -path "$MIGRATIONS_PATH" -database "$DATABASE_URL" $VERBOSE_FLAG version
         ;;
 esac
 

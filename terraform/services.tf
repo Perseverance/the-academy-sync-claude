@@ -51,7 +51,8 @@ module "backend_api" {
     "${var.environment}-strava-client-secret",
     "${var.environment}-smtp-username",
     "${var.environment}-smtp-password",
-    "${var.environment}-from-email"
+    "${var.environment}-from-email",
+    "${var.environment}-db-password"  # Added for config loading
   ]
 
   # Resource configuration
@@ -60,6 +61,9 @@ module "backend_api" {
 
   # VPC connector for private access to Cloud SQL and Redis
   vpc_connector_id = google_vpc_access_connector.connector.id
+
+  # Cloud SQL connection
+  cloud_sql_connection_name = google_sql_database_instance.default.connection_name
 
   # Scaling configuration
   min_instances = var.backend_api_min_instances
@@ -70,7 +74,8 @@ module "backend_api" {
 
   depends_on = [
     google_project_service.run,
-    google_vpc_access_connector.connector
+    google_vpc_access_connector.connector,
+    google_sql_database_instance.default
   ]
 }
 
@@ -109,7 +114,8 @@ module "automation_engine" {
     "${var.environment}-database-url",
     "${var.environment}-redis-url",
     "${var.environment}-encryption-secret",
-    "${var.environment}-jwt-secret"
+    "${var.environment}-jwt-secret",
+    "${var.environment}-db-password"  # Added for config loading
   ]
 
   # Resource configuration
@@ -118,6 +124,9 @@ module "automation_engine" {
 
   # VPC connector for private access to Cloud SQL and Redis
   vpc_connector_id = google_vpc_access_connector.connector.id
+
+  # Cloud SQL connection
+  cloud_sql_connection_name = google_sql_database_instance.default.connection_name
 
   # Scaling configuration
   min_instances = var.automation_engine_min_instances
@@ -128,7 +137,8 @@ module "automation_engine" {
 
   depends_on = [
     google_project_service.run,
-    google_vpc_access_connector.connector
+    google_vpc_access_connector.connector,
+    google_sql_database_instance.default
   ]
 }
 
@@ -174,7 +184,8 @@ module "notification_service" {
     "${var.environment}-smtp-password",
     "${var.environment}-from-email",
     "${var.environment}-jwt-secret",
-    "${var.environment}-encryption-secret"
+    "${var.environment}-encryption-secret",
+    "${var.environment}-db-password"  # Added for config loading
   ]
 
   # Resource configuration
@@ -183,6 +194,9 @@ module "notification_service" {
 
   # VPC connector for private access to Cloud SQL
   vpc_connector_id = google_vpc_access_connector.connector.id
+
+  # Cloud SQL connection
+  cloud_sql_connection_name = google_sql_database_instance.default.connection_name
 
   # Scaling configuration
   min_instances = var.notification_service_min_instances
@@ -196,7 +210,8 @@ module "notification_service" {
 
   depends_on = [
     google_project_service.run,
-    google_vpc_access_connector.connector
+    google_vpc_access_connector.connector,
+    google_sql_database_instance.default
   ]
 }
 

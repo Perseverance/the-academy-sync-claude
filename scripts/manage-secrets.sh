@@ -147,11 +147,11 @@ construct_database_url() {
     terraform workspace select "$ENV" >/dev/null 2>&1
     
     # Get database outputs
-    DB_IP=$(terraform output -json db_instance_ip 2>/dev/null | jq -r '.[0].ip_address' 2>/dev/null || echo "")
+    DB_CONNECTION_NAME=$(terraform output -raw db_instance_connection_name 2>/dev/null || echo "")
     DB_NAME=$(terraform output -raw db_name 2>/dev/null || echo "")
     DB_USER=$(terraform output -raw db_user 2>/dev/null || echo "")
     
-    if [ -z "$DB_IP" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ]; then
+    if [ -z "$DB_CONNECTION_NAME" ] || [ -z "$DB_NAME" ] || [ -z "$DB_USER" ]; then
         print_warning "Could not fetch database info from Terraform. Database URL secret will need to be updated manually." >&2
         return
     fi
@@ -164,11 +164,12 @@ construct_database_url() {
         return
     fi
     
-    # URL-encode the password
+    # URL-encode the password (special characters need encoding)
     ENCODED_PASSWORD=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$DB_PASSWORD'''))")
     
-    # Construct the database URL
-    DATABASE_URL="postgres://${DB_USER}:${ENCODED_PASSWORD}@${DB_IP}:5432/${DB_NAME}?sslmode=require"
+    # Construct the database URL for Cloud SQL socket connection
+    # This format is used by Cloud Run services connecting via Cloud SQL Proxy
+    DATABASE_URL="postgres://${DB_USER}:${ENCODED_PASSWORD}@/${DB_NAME}?host=/cloudsql/${DB_CONNECTION_NAME}"
     
     echo "$DATABASE_URL"
 }
@@ -202,8 +203,10 @@ construct_redis_url() {
         return
     fi
     
-    # Construct the Redis URL
-    REDIS_URL="redis://:${REDIS_AUTH}@${REDIS_HOST}:${REDIS_PORT}"
+    # Construct the Redis URL with TLS support for Google Cloud Memorystore
+    # Format: rediss://:[password]@[host]:[port]/[database]
+    # Note: rediss:// protocol enables TLS
+    REDIS_URL="rediss://:${REDIS_AUTH}@${REDIS_HOST}:${REDIS_PORT}/0"
     
     echo "$REDIS_URL"
 }

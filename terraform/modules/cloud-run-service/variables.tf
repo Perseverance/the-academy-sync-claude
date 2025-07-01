@@ -88,3 +88,9 @@ variable "allow_unauthenticated" {
   type        = bool
   default     = false
 }
+
+variable "cloud_sql_connection_name" {
+  description = "The Cloud SQL instance connection name (e.g., project:region:instance)"
+  type        = string
+  default     = ""
+}

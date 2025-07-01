@@ -29,6 +29,17 @@ resource "google_cloud_run_v2_service" "service" {
   template {
     service_account = google_service_account.service_account.email
     
+    # Add annotations including Cloud SQL instance
+    annotations = merge(
+      var.cloud_sql_connection_name != "" ? {
+        "run.googleapis.com/cloudsql-instances" = var.cloud_sql_connection_name
+      } : {},
+      {
+        # Use gen1 for CPU < 1, gen2 for CPU >= 1
+        "run.googleapis.com/execution-environment" = tonumber(var.cpu_limit) < 1 ? "gen1" : "gen2"
+      }
+    )
+    
     # Configure VPC connector if provided
     dynamic "vpc_access" {
       for_each = var.vpc_connector_id != "" ? [1] : []
