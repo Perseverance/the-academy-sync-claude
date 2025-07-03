@@ -42,4 +42,3 @@ build-errors.log
 terraform/.terraform/
 *.tfstate
 *.tfstate.backup
-.terraform.lock.hcl
