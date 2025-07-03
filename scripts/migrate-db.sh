@@ -149,7 +149,7 @@ get_database_url() {
         DB_USER=$(terraform output -raw db_user 2>/dev/null || echo "")
         
         # Get password from Secret Manager
-        DB_PASSWORD=$(gcloud secrets versions access latest --secret="${ENV}-db-password" --project="$PROJECT_ID" 2>/dev/null || echo "")
+        DB_PASSWORD=$(gcloud secrets versions access latest --secret="db-password" --project="$PROJECT_ID" 2>/dev/null || echo "")
         
         if [ -z "$DB_PASSWORD" ]; then
             print_error "Could not fetch database password from Secret Manager"
@@ -194,12 +194,39 @@ get_database_url() {
             print_info "Please install cloud-sql-proxy using: brew install cloud-sql-proxy"
             exit 1
         else
-            $PROXY_CMD --port=5433 "$INSTANCE_CONNECTION" &
+            print_info "Starting proxy with command: $PROXY_CMD --port=5433 $INSTANCE_CONNECTION"
+            $PROXY_CMD --port=5433 "$INSTANCE_CONNECTION" 2>&1 | while read line; do
+                echo "[PROXY] $line" >&2
+            done &
             PROXY_PID=$!
         fi
         
         # Wait for proxy to start
-        sleep 3
+        print_info "Waiting for proxy to start (PID: $PROXY_PID)..."
+        sleep 5
+        
+        # Check if proxy is running
+        if ! ps -p $PROXY_PID > /dev/null; then
+            print_error "Cloud SQL Proxy failed to start"
+            exit 1
+        fi
+        
+        # Test connection with retries
+        print_info "Testing proxy connection..."
+        RETRIES=10
+        for i in $(seq 1 $RETRIES); do
+            if nc -z localhost 5433 2>/dev/null; then
+                print_success "Connected to proxy on port 5433"
+                break
+            fi
+            if [ $i -eq $RETRIES ]; then
+                print_error "Cannot connect to proxy on port 5433 after $RETRIES attempts"
+                kill $PROXY_PID 2>/dev/null
+                exit 1
+            fi
+            print_info "Waiting for proxy to be ready... (attempt $i/$RETRIES)"
+            sleep 1
+        done
         
         # Export proxy PID for cleanup
         export PROXY_PID
@@ -217,12 +244,17 @@ get_database_url() {
             exit 1
         fi
         
-        # Parse the IP address
-        DB_IP=$(echo "$DB_IP_JSON" | jq -r '.[0].ip_address' 2>/dev/null || echo "")
+        # Get the public IP address from Cloud SQL instance
+        print_info "Fetching public IP from Cloud SQL instance..."
+        DB_IP=$(gcloud sql instances describe "$ENV-primary-instance" --project="$PROJECT_ID" --format=json | jq -r '.ipAddresses[] | select(.type=="PRIMARY") | .ipAddress' 2>/dev/null || echo "")
         
         if [ -z "$DB_IP" ]; then
-            print_error "Could not parse database IP from Terraform output"
-            print_info "Raw output: $DB_IP_JSON"
+            print_warning "No public IP found, trying private IP..."
+            DB_IP=$(echo "$DB_IP_JSON" | jq -r '.[0].ip_address' 2>/dev/null || echo "")
+        fi
+        
+        if [ -z "$DB_IP" ]; then
+            print_error "Could not find any database IP"
             exit 1
         fi
         
@@ -232,7 +264,7 @@ get_database_url() {
         DB_USER=$(terraform output -raw db_user 2>/dev/null || echo "")
         
         # Get password from Secret Manager
-        DB_PASSWORD=$(gcloud secrets versions access latest --secret="${ENV}-db-password" --project="$PROJECT_ID" 2>/dev/null || echo "")
+        DB_PASSWORD=$(gcloud secrets versions access latest --secret="db-password" --project="$PROJECT_ID" 2>/dev/null || echo "")
         
         if [ -z "$DB_PASSWORD" ]; then
             print_error "Could not fetch database password from Secret Manager"
@@ -249,6 +281,7 @@ get_database_url() {
 
 # Cleanup function
 cleanup() {
+    print_info "Running cleanup..."
     if [ -n "$PROXY_PID" ]; then
         print_info "Stopping Cloud SQL Proxy..."
         kill $PROXY_PID 2>/dev/null || true
@@ -263,6 +296,7 @@ print_info "Running database migrations for $ENVIRONMENT environment..."
 
 # Get database URL
 DATABASE_URL=$(get_database_url "$ENVIRONMENT" "$USE_PROXY")
+print_info "Migration will use database URL: ${DATABASE_URL//:*@/:****@/}"
 
 if [ -z "$DATABASE_URL" ]; then
     print_error "Failed to construct database URL"

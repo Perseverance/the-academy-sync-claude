@@ -680,11 +680,34 @@ The system is designed for deployment on Google Cloud Platform using:
 - **Cloud Run** for Go services
 - **Cloud Storage + CDN** for React frontend
 - **Cloud SQL** for PostgreSQL
-- **Memorystore** for Redis
+- **Memorystore** for Redis with TLS
 - **Cloud Scheduler** for automated triggers
 - **Secret Manager** for credential storage
 
 All infrastructure is managed via Terraform in the `terraform/` directory.
+
+### Quick Start Deployment
+
+```bash
+# 1. Enable APIs (one-time)
+gcloud services enable compute.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com run.googleapis.com vpcaccess.googleapis.com redis.googleapis.com servicenetworking.googleapis.com --project=<project-id>
+
+# 2. Deploy infrastructure
+cd terraform && terraform init && terraform workspace select staging
+terraform apply -var-file=staging.tfvars
+
+# 3. Configure secrets
+cd ../scripts && cp ../.env.staging.example ../.env.staging
+# Edit ../.env.staging with your values
+./manage-secrets.sh update staging
+
+# 4. Build and deploy
+./build-and-push-images.sh staging
+./migrate-db.sh staging
+
+# 5. Redeploy Cloud Run services
+cd ../terraform && terraform apply -var-file=staging.tfvars -target=google_cloud_run_service.backend_api -target=google_cloud_run_service.automation_engine -target=google_cloud_run_service.notification_service
+```
 
 ### Prerequisites
 
@@ -692,15 +715,32 @@ Before deploying, ensure you have:
 
 1. **Google Cloud SDK** installed and configured
 2. **Terraform** v1.5+ installed
-3. **Docker** installed for building images
-4. **PostgreSQL migrate tool** installed
-5. **Cloud SQL Proxy** (optional, for secure database connections)
+3. **Docker** installed and authenticated to GCR (`gcloud auth configure-docker`)
+4. **Go** 1.23+ installed (for building services)
+5. **Authenticated to GCP**: `gcloud auth login` and `gcloud auth application-default login`
 
 ### Initial Deployment
 
 Follow these steps for a fresh deployment to a new environment:
 
-#### 1. Infrastructure Setup
+#### 1. Enable Google Cloud APIs
+
+**IMPORTANT**: Enable APIs first to avoid "API not enabled" errors during Terraform apply:
+
+```bash
+# Enable all required APIs
+gcloud services enable \
+  compute.googleapis.com \
+  sqladmin.googleapis.com \
+  secretmanager.googleapis.com \
+  run.googleapis.com \
+  vpcaccess.googleapis.com \
+  redis.googleapis.com \
+  servicenetworking.googleapis.com \
+  --project=the-academy-sync-sdlc-test
+```
+
+#### 2. Infrastructure Setup
 
 ```bash
 cd terraform
@@ -711,66 +751,100 @@ terraform init
 # Create workspace for your environment
 terraform workspace new staging  # or "prod" for production
 
+# Select the workspace
+terraform workspace select staging
+
 # Plan infrastructure changes
-terraform plan -var-file=staging.tfvars
+terraform plan -var-file=staging.tfvars -out=staging.tfplan
 
 # Apply infrastructure
-terraform apply -var-file=staging.tfvars
+terraform apply staging.tfplan
 ```
 
-#### 2. Configure Secrets
+**Note**: The first apply will show Cloud Run deployment failures - this is expected because Docker images don't exist yet.
 
-After infrastructure is created, set up the required secrets:
+#### 3. Configure Secrets
+
+Terraform creates secrets with placeholder values. You need to update them with actual values:
 
 ```bash
-# Run the secrets management script
-./scripts/manage-secrets.sh staging
+# First, prepare your environment file
+cp .env.staging.example .env.staging
 
-# The script will prompt for:
-# - Database password
-# - JWT secret
+# Edit with your actual values:
 # - OAuth credentials (Google & Strava)
 # - SMTP credentials
-# - Any other required secrets
+# - Frontend URL
+vim .env.staging
+
+# Update secrets in Google Secret Manager
+cd scripts
+./manage-secrets.sh update staging  # Use 'update', not 'create'
 ```
 
-#### 3. Database Initialization
+The script will:
+- Read values from `.env.staging`
+- Generate secure JWT_SECRET and ENCRYPTION_SECRET if needed
+- Construct DATABASE_URL from Terraform outputs
+- Construct REDIS_URL with TLS support
+- Update all secrets in Google Secret Manager
+
+#### 4. Build and Push Docker Images
+
+```bash
+# Build and push all service images
+./build-and-push-images.sh staging
+```
+
+This builds and pushes:
+- `gcr.io/<project-id>/backend-api:staging`
+- `gcr.io/<project-id>/automation-engine:staging`
+- `gcr.io/<project-id>/notification-service:staging`
+
+#### 5. Database Initialization
 
 Run migrations to set up the database schema:
 
 ```bash
-# Option 1: Direct connection (if your IP is allowlisted)
-./scripts/migrate-db.sh staging --verbose
-
-# Option 2: Using Cloud SQL Proxy (recommended)
-./scripts/migrate-db.sh staging --proxy --verbose
+# Run database migrations
+./migrate-db.sh staging
 ```
 
-#### 4. Build and Deploy Services
+#### 6. Deploy Cloud Run Services
 
-Build and push container images:
+Now that images exist, deploy the Cloud Run services:
 
 ```bash
-# Run the build and push script
-./scripts/build-and-push-images.sh staging
-
-# This will:
-# 1. Build all service images
-# 2. Tag them appropriately
-# 3. Push to Google Container Registry
-# 4. Update Cloud Run services
+cd ../terraform
+terraform apply -var-file=staging.tfvars \
+  -target=google_cloud_run_service.backend_api \
+  -target=google_cloud_run_service.automation_engine \
+  -target=google_cloud_run_service.notification_service
 ```
 
-#### 5. Deploy Frontend
+#### 7. Verify Deployment
 
 ```bash
-cd web
+# Get service URLs
+terraform output backend_api_url
+terraform output automation_engine_url
+terraform output notification_service_url
 
-# Build the frontend
-npm run build
+# Test health endpoints
+curl $(terraform output -raw backend_api_url)/health
+curl $(terraform output -raw automation_engine_url)/health
+curl $(terraform output -raw notification_service_url)/health
 
-# Deploy to Cloud Storage
-gsutil -m rsync -r -d dist/ gs://your-frontend-bucket/
+# View logs if needed
+gcloud run services logs read staging-backend-api --region=europe-central2 --limit=50
+```
+
+### Quick Deployment (One-Liner)
+
+For experienced users, enable APIs and deploy infrastructure in one command:
+
+```bash
+gcloud services enable compute.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com run.googleapis.com vpcaccess.googleapis.com redis.googleapis.com servicenetworking.googleapis.com --project=<project-id> && terraform apply -var-file=staging.tfvars
 ```
 
 ### Update Deployment
@@ -782,9 +856,6 @@ For updating an existing deployment with new code changes:
 ```bash
 # Pull latest changes
 git pull origin main
-
-# Switch to deployment branch if needed
-git checkout feature/deployment-scripts
 ```
 
 #### 2. Infrastructure Updates (if needed)
@@ -815,11 +886,53 @@ Only run if there are new migrations:
 ```bash
 # Build and deploy all services
 ./scripts/build-and-push-images.sh staging
-
-# Or deploy specific services:
-./scripts/build-and-push-images.sh staging --service backend-api
-./scripts/build-and-push-images.sh staging --service automation-engine
 ```
+
+### Common Issues and Solutions
+
+#### API Not Enabled Errors
+
+If you see "API has not been used in project" errors:
+```bash
+# Enable the specific API
+gcloud services enable <api-name>.googleapis.com --project=<project-id>
+# Wait 2-3 minutes for propagation
+```
+
+#### VPC Peering Deletion Issues
+
+If destroying infrastructure fails with "Failed to delete connection":
+```bash
+# List and manually delete VPC peerings
+gcloud compute networks peerings list --network=<vpc-name> --project=<project-id>
+gcloud compute networks peerings delete <peering-name> --network=<vpc-name> --project=<project-id>
+```
+
+#### Secret Already Exists
+
+Use `update` instead of `create` when running manage-secrets.sh:
+```bash
+./manage-secrets.sh update staging  # NOT 'create'
+```
+
+### Project Configuration for Production
+
+When deploying to production with a different GCP project:
+
+1. Update `terraform/prod.tfvars`:
+   ```hcl
+   project_id = "your-production-project-id"
+   ```
+
+2. Update `scripts/manage-secrets.sh` line 15:
+   ```bash
+   PROJECT_ID="your-production-project-id"
+   ```
+
+3. Switch Terraform workspace:
+   ```bash
+   terraform workspace select prod
+   ```
 
 ### Deployment Sequence Summary
 
