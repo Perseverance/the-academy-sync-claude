@@ -479,6 +479,7 @@ func startHealthServer(log *logger.Logger) {
 	log.Info("Starting HTTP server for health checks", "port", port)
 	if err := http.ListenAndServe(":"+port, nil); err != nil {
 		log.Error("Failed to start HTTP server", "error", err)
-		os.Exit(1)
+		// Continue running even if health server fails to start
+		// os.Exit(1) - removed to prevent application termination
 	}
 }
