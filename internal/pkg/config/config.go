@@ -199,35 +199,22 @@ func loadFromSecretManager() (*Config, error) {
 	}
 	defer client.Close()
 
-	// Determine environment prefix for secrets
-	env := getEnv("APP_ENV", getEnv("GO_ENV", "production"))
-	var secretPrefix string
-	switch env {
-	case "staging":
-		secretPrefix = "staging-"
-	case "production", "prod":
-		secretPrefix = "prod-"
-	default:
-		// Default to prod if environment is not clearly staging
-		secretPrefix = "prod-"
-	}
+	log.Printf("Info: Loading configuration from Google Secret Manager for project: %s\n", projectID)
 
-	log.Printf("Info: Loading configuration from Google Secret Manager for project: %s with prefix: %s\n", projectID, secretPrefix)
-
-	// Define secrets to fetch from Secret Manager with environment prefix
+	// Define secrets to fetch from Secret Manager (no environment prefix)
 	secrets := map[string]*string{
-		secretPrefix + "database-url":         new(string),
-		secretPrefix + "redis-url":            new(string),
-		secretPrefix + "google-client-id":     new(string),
-		secretPrefix + "google-client-secret": new(string),
-		secretPrefix + "strava-client-id":     new(string),
-		secretPrefix + "strava-client-secret": new(string),
-		secretPrefix + "jwt-secret":           new(string),
-		secretPrefix + "encryption-secret":    new(string),
-		secretPrefix + "smtp-username":        new(string),
-		secretPrefix + "smtp-password":        new(string),
-		secretPrefix + "from-email":           new(string),
-		secretPrefix + "db-password":         new(string), // Changed to match Terraform naming
+		"database-url":         new(string),
+		"redis-url":            new(string),
+		"google-client-id":     new(string),
+		"google-client-secret": new(string),
+		"strava-client-id":     new(string),
+		"strava-client-secret": new(string),
+		"jwt-secret":           new(string),
+		"encryption-secret":    new(string),
+		"smtp-username":        new(string),
+		"smtp-password":        new(string),
+		"from-email":           new(string),
+		"database-password":    new(string),
 	}
 
 	// Fetch each secret
@@ -253,17 +240,17 @@ func loadFromSecretManager() (*Config, error) {
 		LogLevel:    getEnv("LOG_LEVEL", "INFO"),
 
 		// Use secrets if available, otherwise fall back to env vars
-		DatabaseURL:        getValueOrEnv(secrets[secretPrefix+"database-url"], "DATABASE_URL", ""),
-		RedisURL:           getValueOrEnv(secrets[secretPrefix+"redis-url"], "REDIS_URL", ""),
-		GoogleClientID:     getValueOrEnv(secrets[secretPrefix+"google-client-id"], "GOOGLE_CLIENT_ID", ""),
-		GoogleClientSecret: getValueOrEnv(secrets[secretPrefix+"google-client-secret"], "GOOGLE_CLIENT_SECRET", ""),
-		StravaClientID:     getValueOrEnv(secrets[secretPrefix+"strava-client-id"], "STRAVA_CLIENT_ID", ""),
-		StravaClientSecret: getValueOrEnv(secrets[secretPrefix+"strava-client-secret"], "STRAVA_CLIENT_SECRET", ""),
-		JWTSecret:          getValueOrEnv(secrets[secretPrefix+"jwt-secret"], "JWT_SECRET", ""),
-		EncryptionSecret:   getValueOrEnv(secrets[secretPrefix+"encryption-secret"], "ENCRYPTION_SECRET", ""),
-		SMTPUsername:       getValueOrEnv(secrets[secretPrefix+"smtp-username"], "SMTP_USERNAME", ""),
-		SMTPPassword:       getValueOrEnv(secrets[secretPrefix+"smtp-password"], "SMTP_PASSWORD", ""),
-		FromEmail:          getValueOrEnv(secrets[secretPrefix+"from-email"], "FROM_EMAIL", ""),
+		DatabaseURL:        getValueOrEnv(secrets["database-url"], "DATABASE_URL", ""),
+		RedisURL:           getValueOrEnv(secrets["redis-url"], "REDIS_URL", ""),
+		GoogleClientID:     getValueOrEnv(secrets["google-client-id"], "GOOGLE_CLIENT_ID", ""),
+		GoogleClientSecret: getValueOrEnv(secrets["google-client-secret"], "GOOGLE_CLIENT_SECRET", ""),
+		StravaClientID:     getValueOrEnv(secrets["strava-client-id"], "STRAVA_CLIENT_ID", ""),
+		StravaClientSecret: getValueOrEnv(secrets["strava-client-secret"], "STRAVA_CLIENT_SECRET", ""),
+		JWTSecret:          getValueOrEnv(secrets["jwt-secret"], "JWT_SECRET", ""),
+		EncryptionSecret:   getValueOrEnv(secrets["encryption-secret"], "ENCRYPTION_SECRET", ""),
+		SMTPUsername:       getValueOrEnv(secrets["smtp-username"], "SMTP_USERNAME", ""),
+		SMTPPassword:       getValueOrEnv(secrets["smtp-password"], "SMTP_PASSWORD", ""),
+		FromEmail:          getValueOrEnv(secrets["from-email"], "FROM_EMAIL", ""),
 
 		// These typically come from environment in GCP
 		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
@@ -290,7 +277,7 @@ func loadFromSecretManager() (*Config, error) {
 	// Build database URL if not provided from secrets
 	if config.DatabaseURL == "" {
 		// Try to get database password from secrets or env
-		dbPassword := getValueOrEnv(secrets[secretPrefix+"db-password"], "POSTGRES_PASSWORD", "")
+		dbPassword := getValueOrEnv(secrets["database-password"], "POSTGRES_PASSWORD", "")
 		if dbPassword != "" {
 			config.PostgresPassword = dbPassword
 			config.DatabaseURL = fmt.Sprintf(

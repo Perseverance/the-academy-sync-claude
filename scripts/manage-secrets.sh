@@ -13,6 +13,7 @@ NC='\033[0m' # No Color
 
 # Configuration
 PROJECT_ID="the-academy-sync-sdlc-test"
+REGION="europe-central2"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 
@@ -112,8 +113,8 @@ view_secrets() {
     echo "Secrets for $ENVIRONMENT environment:"
     echo ""
     
-    # List all secrets with the environment prefix
-    SECRETS=$(gcloud secrets list --project="$PROJECT_ID" --format="value(name)" | grep "^${ENVIRONMENT}-" || true)
+    # List all secrets (no environment prefix)
+    SECRETS=$(gcloud secrets list --project="$PROJECT_ID" --format="value(name)" || true)
     
     if [ -z "$SECRETS" ]; then
         print_warning "No secrets found for $ENVIRONMENT environment"
@@ -157,7 +158,7 @@ construct_database_url() {
     fi
     
     # Get the database password from Secret Manager
-    DB_PASSWORD=$(gcloud secrets versions access latest --secret="${ENV}-db-password" --project="$PROJECT_ID" 2>/dev/null || echo "")
+    DB_PASSWORD=$(gcloud secrets versions access latest --secret="db-password" --project="$PROJECT_ID" 2>/dev/null || echo "")
     
     if [ -z "$DB_PASSWORD" ]; then
         print_warning "Could not fetch database password. Database URL secret will need to be updated manually." >&2
@@ -167,9 +168,19 @@ construct_database_url() {
     # URL-encode the password (special characters need encoding)
     ENCODED_PASSWORD=$(python3 -c "import urllib.parse; print(urllib.parse.quote('''$DB_PASSWORD'''))")
     
-    # Construct the database URL for Cloud SQL socket connection
-    # This format is used by Cloud Run services connecting via Cloud SQL Proxy
-    DATABASE_URL="postgres://${DB_USER}:${ENCODED_PASSWORD}@/${DB_NAME}?host=/cloudsql/${DB_CONNECTION_NAME}"
+    # Get the private IP address of the database
+    print_info "Fetching database private IP..." >&2
+    DB_PRIVATE_IP=$(gcloud sql instances describe "${ENV}-primary-instance" --project="$PROJECT_ID" --format=json | jq -r '.ipAddresses[] | select(.type=="PRIVATE") | .ipAddress' 2>/dev/null || echo "")
+    
+    if [ -z "$DB_PRIVATE_IP" ]; then
+        print_warning "Could not fetch database private IP. Using Cloud SQL socket format instead." >&2
+        # Fallback to Cloud SQL socket connection format
+        DATABASE_URL="postgres://${DB_USER}:${ENCODED_PASSWORD}@/${DB_NAME}?host=/cloudsql/${DB_CONNECTION_NAME}"
+    else
+        # Use direct private IP connection (works better with Cloud Run)
+        DATABASE_URL="postgres://${DB_USER}:${ENCODED_PASSWORD}@${DB_PRIVATE_IP}:5432/${DB_NAME}?sslmode=disable"
+        print_info "Using private IP connection: ${DB_PRIVATE_IP}" >&2
+    fi
     
     echo "$DATABASE_URL"
 }
@@ -195,13 +206,18 @@ construct_redis_url() {
         return
     fi
     
-    # Get the Redis auth string from Secret Manager
-    REDIS_AUTH=$(gcloud secrets versions access latest --secret="${ENV}-redis-auth" --project="$PROJECT_ID" 2>/dev/null || echo "")
+    # Get the Redis auth string directly from the Redis instance
+    print_info "Fetching Redis auth string from Redis instance..." >&2
+    REDIS_AUTH=$(gcloud redis instances get-auth-string "${ENV}-redis-instance" --region="$REGION" --project="$PROJECT_ID" --format="value(authString)" 2>/dev/null || echo "")
     
     if [ -z "$REDIS_AUTH" ]; then
-        print_warning "Could not fetch Redis auth string. Redis URL secret will need to be updated manually." >&2
+        print_warning "Could not fetch Redis auth string from instance. Redis URL secret will need to be updated manually." >&2
         return
     fi
+    
+    # Also update the redis-auth secret with the actual value
+    print_info "Updating Redis auth secret..." >&2
+    echo -n "$REDIS_AUTH" | gcloud secrets versions add "redis-auth" --data-file=- --project="$PROJECT_ID" >/dev/null 2>&1
     
     # Construct the Redis URL with TLS support for Google Cloud Memorystore
     # Format: rediss://:[password]@[host]:[port]/[database]
@@ -258,16 +274,16 @@ case "$COMMAND" in
             # Map env variables to secret names
             case "$key" in
                 GOOGLE_CLIENT_ID)
-                    manage_secret "${ENVIRONMENT}-google-client-id" "$value" "$COMMAND"
+                    manage_secret "google-client-id" "$value" "$COMMAND"
                     ;;
                 GOOGLE_CLIENT_SECRET)
-                    manage_secret "${ENVIRONMENT}-google-client-secret" "$value" "$COMMAND"
+                    manage_secret "google-client-secret" "$value" "$COMMAND"
                     ;;
                 STRAVA_CLIENT_ID)
-                    manage_secret "${ENVIRONMENT}-strava-client-id" "$value" "$COMMAND"
+                    manage_secret "strava-client-id" "$value" "$COMMAND"
                     ;;
                 STRAVA_CLIENT_SECRET)
-                    manage_secret "${ENVIRONMENT}-strava-client-secret" "$value" "$COMMAND"
+                    manage_secret "strava-client-secret" "$value" "$COMMAND"
                     ;;
                 JWT_SECRET)
                     # Generate JWT secret if it's a placeholder
@@ -276,7 +292,7 @@ case "$COMMAND" in
                         value=$(openssl rand -base64 32)
                         print_success "Generated JWT secret"
                     fi
-                    manage_secret "${ENVIRONMENT}-jwt-secret" "$value" "$COMMAND"
+                    manage_secret "jwt-secret" "$value" "$COMMAND"
                     ;;
                 ENCRYPTION_SECRET)
                     # Generate encryption secret if it's a placeholder
@@ -285,23 +301,23 @@ case "$COMMAND" in
                         value=$(openssl rand -base64 48)
                         print_success "Generated encryption secret"
                     fi
-                    manage_secret "${ENVIRONMENT}-encryption-secret" "$value" "$COMMAND"
+                    manage_secret "encryption-secret" "$value" "$COMMAND"
                     ;;
                 SMTP_USERNAME)
-                    manage_secret "${ENVIRONMENT}-smtp-username" "$value" "$COMMAND"
+                    manage_secret "smtp-username" "$value" "$COMMAND"
                     ;;
                 SMTP_PASSWORD)
-                    manage_secret "${ENVIRONMENT}-smtp-password" "$value" "$COMMAND"
+                    manage_secret "smtp-password" "$value" "$COMMAND"
                     ;;
                 FROM_EMAIL)
-                    manage_secret "${ENVIRONMENT}-from-email" "$value" "$COMMAND"
+                    manage_secret "from-email" "$value" "$COMMAND"
                     ;;
                 REDIS_URL)
                     # Skip if placeholder value, we'll construct it from Terraform
                     if [[ "$value" == "redis://"* ]] && [[ "$value" == *"redis-staging"* || "$value" == *"redis-prod"* ]]; then
                         print_warning "Skipping placeholder Redis URL, will construct from Terraform outputs"
                     else
-                        manage_secret "${ENVIRONMENT}-redis-url" "$value" "$COMMAND"
+                        manage_secret "redis-url" "$value" "$COMMAND"
                     fi
                     ;;
                 BASE_URL)
@@ -309,12 +325,12 @@ case "$COMMAND" in
                     if [[ "$value" == *"staging-api"* || "$value" == *"api.yourdomain"* ]]; then
                         print_warning "Skipping placeholder BASE_URL, will construct from Cloud Run outputs"
                     else
-                        manage_secret "${ENVIRONMENT}-base-url" "$value" "$COMMAND"
+                        manage_secret "base-url" "$value" "$COMMAND"
                     fi
                     ;;
                 FRONTEND_URL)
                     # Frontend URL is managed separately, not from Cloud Run
-                    manage_secret "${ENVIRONMENT}-frontend-url" "$value" "$COMMAND"
+                    manage_secret "frontend-url" "$value" "$COMMAND"
                     ;;
             esac
         done < "$ENV_FILE"
@@ -324,7 +340,7 @@ case "$COMMAND" in
         print_info "Constructing database URL..." >&2
         DB_URL=$(construct_database_url "$ENVIRONMENT")
         if [ -n "$DB_URL" ]; then
-            manage_secret "${ENVIRONMENT}-database-url" "$DB_URL" "$COMMAND"
+            manage_secret "database-url" "$DB_URL" "$COMMAND"
         else
             print_warning "Database URL will need to be created manually after Terraform deployment"
         fi
@@ -334,7 +350,7 @@ case "$COMMAND" in
         print_info "Constructing Redis URL..." >&2
         REDIS_URL=$(construct_redis_url "$ENVIRONMENT")
         if [ -n "$REDIS_URL" ]; then
-            manage_secret "${ENVIRONMENT}-redis-url" "$REDIS_URL" "$COMMAND"
+            manage_secret "redis-url" "$REDIS_URL" "$COMMAND"
         else
             print_warning "Redis URL will need to be created manually after Terraform deployment"
         fi
@@ -344,7 +360,7 @@ case "$COMMAND" in
         print_info "Constructing BASE_URL from Cloud Run..." >&2
         BASE_URL=$(construct_base_url "$ENVIRONMENT")
         if [ -n "$BASE_URL" ]; then
-            manage_secret "${ENVIRONMENT}-base-url" "$BASE_URL" "$COMMAND"
+            manage_secret "base-url" "$BASE_URL" "$COMMAND"
         else
             print_warning "BASE_URL will need to be created manually after Cloud Run deployment"
         fi

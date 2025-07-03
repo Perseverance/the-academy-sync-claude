@@ -1,232 +1,588 @@
+# Cloud Run Services Configuration
+
 # Backend API Service
-module "backend_api" {
-  source = "./modules/cloud-run-service"
+resource "google_cloud_run_service" "backend_api" {
+  name     = "${var.environment}-backend-api"
+  location = var.region
+  project  = var.project_id
 
-  service_name = "backend-api"
-  project_id   = var.project_id
-  region       = var.region
-  environment  = var.environment
-  image_url    = var.backend_api_image_url
+  template {
+    spec {
+      containers {
+        image = "gcr.io/${var.project_id}/backend-api:${var.environment}"
+        
+        resources {
+          limits = {
+            memory = "512Mi"
+            cpu    = "1"
+          }
+        }
 
-  # Environment variables
-  env_vars = {
-    APP_ENV         = var.environment
-    GO_ENV          = var.environment
-    # PORT is automatically set by Cloud Run, don't set it here
-    LOG_LEVEL       = var.log_level
-    GCP_PROJECT_ID  = var.project_id
-    FAIL_FAST_ENABLED = "false"  # Disable for initial deployment
-    # These will be replaced with actual URLs after deployment
-    BASE_URL        = "https://staging-backend-api-placeholder.a.run.app"
-    FRONTEND_URL    = "https://staging.example.com"
-    # SMTP configuration
-    SMTP_HOST       = "smtp.gmail.com"
-    SMTP_PORT       = "587"
+        env {
+          name = "APP_ENV"
+          value = var.environment
+        }
+
+        env {
+          name = "GCP_PROJECT_ID"
+          value = var.project_id
+        }
+
+        # Environment variables from secrets
+        env {
+          name = "DATABASE_URL"
+          value_from {
+            secret_key_ref {
+              name = "database-url"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "REDIS_URL"
+          value_from {
+            secret_key_ref {
+              name = "redis-url"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "JWT_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "jwt-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "GOOGLE_CLIENT_ID"
+          value_from {
+            secret_key_ref {
+              name = "google-client-id"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "GOOGLE_CLIENT_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "google-client-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "STRAVA_CLIENT_ID"
+          value_from {
+            secret_key_ref {
+              name = "strava-client-id"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "STRAVA_CLIENT_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "strava-client-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "BASE_URL"
+          value_from {
+            secret_key_ref {
+              name = "base-url"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "FRONTEND_URL"
+          value_from {
+            secret_key_ref {
+              name = "frontend-url"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "ENCRYPTION_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "encryption-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "SMTP_HOST"
+          value = "smtp.sendgrid.net"
+        }
+
+        env {
+          name = "SMTP_PORT"
+          value = "587"
+        }
+      }
+
+      service_account_name = google_service_account.backend_api_sa.email
+    }
+
+    metadata {
+      annotations = {
+        "autoscaling.knative.dev/maxScale"      = "100"
+        "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.main.connection_name
+        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.main.id
+        "run.googleapis.com/vpc-access-egress"     = "all-traffic"
+        "run.googleapis.com/deletion-protection" = "true"
+      }
+    }
   }
 
-  # Secrets from Secret Manager
-  secrets = {
-    DATABASE_URL         = "${var.environment}-database-url"
-    REDIS_URL            = "${var.environment}-redis-url"
-    JWT_SECRET           = "${var.environment}-jwt-secret"
-    ENCRYPTION_SECRET    = "${var.environment}-encryption-secret"
-    GOOGLE_CLIENT_ID     = "${var.environment}-google-client-id"
-    GOOGLE_CLIENT_SECRET = "${var.environment}-google-client-secret"
-    STRAVA_CLIENT_ID     = "${var.environment}-strava-client-id"
-    STRAVA_CLIENT_SECRET = "${var.environment}-strava-client-secret"
-    SMTP_USERNAME        = "${var.environment}-smtp-username"
-    SMTP_PASSWORD        = "${var.environment}-smtp-password"
-    FROM_EMAIL           = "${var.environment}-from-email"
+  traffic {
+    percent         = 100
+    latest_revision = true
   }
-
-  # Required secrets for IAM permissions
-  required_secrets = [
-    "${var.environment}-database-url",
-    "${var.environment}-redis-url",
-    "${var.environment}-jwt-secret",
-    "${var.environment}-encryption-secret",
-    "${var.environment}-google-client-id",
-    "${var.environment}-google-client-secret",
-    "${var.environment}-strava-client-id",
-    "${var.environment}-strava-client-secret",
-    "${var.environment}-smtp-username",
-    "${var.environment}-smtp-password",
-    "${var.environment}-from-email",
-    "${var.environment}-db-password"  # Added for config loading
-  ]
-
-  # Resource configuration
-  cpu_limit    = var.backend_api_cpu
-  memory_limit = var.backend_api_memory
-
-  # VPC connector for private access to Cloud SQL and Redis
-  vpc_connector_id = google_vpc_access_connector.connector.id
-
-  # Cloud SQL connection
-  cloud_sql_connection_name = google_sql_database_instance.default.connection_name
-
-  # Scaling configuration
-  min_instances = var.backend_api_min_instances
-  max_instances = var.backend_api_max_instances
-
-  # Allow public access for the API
-  allow_unauthenticated = true
 
   depends_on = [
+    google_secret_manager_secret_version.database_url,
+    google_secret_manager_secret_version.redis_url,
+    google_secret_manager_secret_version.jwt_secret,
+    google_secret_manager_secret_version.google_client_id,
+    google_secret_manager_secret_version.google_client_secret,
+    google_secret_manager_secret_version.strava_client_id,
+    google_secret_manager_secret_version.strava_client_secret,
+    google_secret_manager_secret_version.base_url,
+    google_secret_manager_secret_version.frontend_url,
     google_project_service.run,
-    google_vpc_access_connector.connector,
-    google_sql_database_instance.default
+    google_vpc_access_connector.main
   ]
 }
 
 # Automation Engine Service
-module "automation_engine" {
-  source = "./modules/cloud-run-service"
+resource "google_cloud_run_service" "automation_engine" {
+  name     = "${var.environment}-automation-engine"
+  location = var.region
+  project  = var.project_id
 
-  service_name = "automation-engine"
-  project_id   = var.project_id
-  region       = var.region
-  environment  = var.environment
-  image_url    = var.automation_engine_image_url
+  template {
+    spec {
+      containers {
+        image = "gcr.io/${var.project_id}/automation-engine:${var.environment}"
+        
+        resources {
+          limits = {
+            memory = "1Gi"
+            cpu    = "2"
+          }
+        }
 
-  # Environment variables
-  env_vars = {
-    APP_ENV           = var.environment
-    GO_ENV            = var.environment
-    LOG_LEVEL         = var.log_level
-    GCP_PROJECT_ID    = var.project_id
-    FAIL_FAST_ENABLED = "false"  # Disable for initial deployment
-    MAX_WORKERS       = tostring(var.automation_engine_max_workers)
-    # BASE_URL required by config validation even for internal services
-    BASE_URL          = "https://staging-automation-engine.a.run.app"
+        env {
+          name = "APP_ENV"
+          value = var.environment
+        }
+
+        env {
+          name = "GCP_PROJECT_ID"
+          value = var.project_id
+        }
+
+        env {
+          name = "MAX_WORKERS"
+          value = "20"
+        }
+
+        # Environment variables from secrets
+        env {
+          name = "DATABASE_URL"
+          value_from {
+            secret_key_ref {
+              name = "database-url"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "REDIS_URL"
+          value_from {
+            secret_key_ref {
+              name = "redis-url"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "ENCRYPTION_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "encryption-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "GOOGLE_CLIENT_ID"
+          value_from {
+            secret_key_ref {
+              name = "google-client-id"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "GOOGLE_CLIENT_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "google-client-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "STRAVA_CLIENT_ID"
+          value_from {
+            secret_key_ref {
+              name = "strava-client-id"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "STRAVA_CLIENT_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "strava-client-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "JWT_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "jwt-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "BASE_URL"
+          value_from {
+            secret_key_ref {
+              name = "base-url"
+              key  = "latest"
+            }
+          }
+        }
+      }
+
+      service_account_name = google_service_account.automation_engine_sa.email
+    }
+
+    metadata {
+      annotations = {
+        "autoscaling.knative.dev/maxScale"      = "10"
+        "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.main.connection_name
+        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.main.id
+        "run.googleapis.com/vpc-access-egress"     = "all-traffic"
+        "run.googleapis.com/deletion-protection" = "true"
+      }
+    }
   }
 
-  # Secrets from Secret Manager
-  secrets = {
-    DATABASE_URL      = "${var.environment}-database-url"
-    REDIS_URL         = "${var.environment}-redis-url"
-    ENCRYPTION_SECRET = "${var.environment}-encryption-secret"
-    JWT_SECRET        = "${var.environment}-jwt-secret"
+  traffic {
+    percent         = 100
+    latest_revision = true
   }
-
-  # Required secrets for IAM permissions
-  required_secrets = [
-    "${var.environment}-database-url",
-    "${var.environment}-redis-url",
-    "${var.environment}-encryption-secret",
-    "${var.environment}-jwt-secret",
-    "${var.environment}-db-password"  # Added for config loading
-  ]
-
-  # Resource configuration
-  cpu_limit    = var.automation_engine_cpu
-  memory_limit = var.automation_engine_memory
-
-  # VPC connector for private access to Cloud SQL and Redis
-  vpc_connector_id = google_vpc_access_connector.connector.id
-
-  # Cloud SQL connection
-  cloud_sql_connection_name = google_sql_database_instance.default.connection_name
-
-  # Scaling configuration
-  min_instances = var.automation_engine_min_instances
-  max_instances = var.automation_engine_max_instances
-
-  # This is an internal service, no public access
-  allow_unauthenticated = false
 
   depends_on = [
+    google_secret_manager_secret_version.database_url,
+    google_secret_manager_secret_version.redis_url,
+    google_secret_manager_secret_version.encryption_secret,
+    google_secret_manager_secret_version.google_client_id,
+    google_secret_manager_secret_version.google_client_secret,
+    google_secret_manager_secret_version.strava_client_id,
+    google_secret_manager_secret_version.strava_client_secret,
     google_project_service.run,
-    google_vpc_access_connector.connector,
-    google_sql_database_instance.default
+    google_vpc_access_connector.main
   ]
 }
 
 # Notification Service
-module "notification_service" {
-  source = "./modules/cloud-run-service"
+resource "google_cloud_run_service" "notification_service" {
+  name     = "${var.environment}-notification-service"
+  location = var.region
+  project  = var.project_id
 
-  service_name = "notification-service"
-  project_id   = var.project_id
-  region       = var.region
-  environment  = var.environment
-  image_url    = var.notification_service_image_url
+  template {
+    spec {
+      containers {
+        image = "gcr.io/${var.project_id}/notification-service:${var.environment}"
+        
+        resources {
+          limits = {
+            memory = "512Mi"
+            cpu    = "1"
+          }
+        }
 
-  # Environment variables
-  env_vars = {
-    APP_ENV           = var.environment
-    GO_ENV            = var.environment
-    LOG_LEVEL         = var.log_level
-    GCP_PROJECT_ID    = var.project_id
-    FAIL_FAST_ENABLED = "false" # Notification service can run without DB
-    SMTP_HOST         = "smtp.gmail.com"
-    SMTP_PORT         = "587"
-    # BASE_URL required by config validation even for internal services
-    BASE_URL          = "https://staging-notification-service.a.run.app"
+        env {
+          name = "APP_ENV"
+          value = var.environment
+        }
+
+        env {
+          name = "GCP_PROJECT_ID"
+          value = var.project_id
+        }
+
+        # Environment variables from secrets
+        env {
+          name = "DATABASE_URL"
+          value_from {
+            secret_key_ref {
+              name = "database-url"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "REDIS_URL"
+          value_from {
+            secret_key_ref {
+              name = "redis-url"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "ENCRYPTION_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "encryption-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "SMTP_HOST"
+          value = "smtp.sendgrid.net"
+        }
+
+        env {
+          name = "SMTP_PORT"
+          value = "587"
+        }
+
+        env {
+          name = "SMTP_USERNAME"
+          value_from {
+            secret_key_ref {
+              name = "smtp-username"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "SMTP_PASSWORD"
+          value_from {
+            secret_key_ref {
+              name = "smtp-password"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "FROM_EMAIL"
+          value_from {
+            secret_key_ref {
+              name = "from-email"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "JWT_SECRET"
+          value_from {
+            secret_key_ref {
+              name = "jwt-secret"
+              key  = "latest"
+            }
+          }
+        }
+
+        env {
+          name = "BASE_URL"
+          value_from {
+            secret_key_ref {
+              name = "base-url"
+              key  = "latest"
+            }
+          }
+        }
+      }
+
+      service_account_name = google_service_account.notification_service_sa.email
+    }
+
+    metadata {
+      annotations = {
+        "autoscaling.knative.dev/maxScale"      = "5"
+        "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.main.connection_name
+        "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.main.id
+        "run.googleapis.com/vpc-access-egress"     = "all-traffic"
+        "run.googleapis.com/deletion-protection" = "true"
+      }
+    }
   }
 
-  # Secrets from Secret Manager
-  secrets = {
-    DATABASE_URL      = "${var.environment}-database-url" # Optional for notification service
-    REDIS_URL         = "${var.environment}-redis-url"    # Required by config validation
-    SMTP_USERNAME     = "${var.environment}-smtp-username"
-    SMTP_PASSWORD     = "${var.environment}-smtp-password"
-    FROM_EMAIL        = "${var.environment}-from-email"
-    JWT_SECRET        = "${var.environment}-jwt-secret"  # Required by config validation
-    ENCRYPTION_SECRET = "${var.environment}-encryption-secret"  # Required by config validation
+  traffic {
+    percent         = 100
+    latest_revision = true
   }
-
-  # Required secrets for IAM permissions
-  required_secrets = [
-    "${var.environment}-database-url",
-    "${var.environment}-redis-url",
-    "${var.environment}-smtp-username",
-    "${var.environment}-smtp-password",
-    "${var.environment}-from-email",
-    "${var.environment}-jwt-secret",
-    "${var.environment}-encryption-secret",
-    "${var.environment}-db-password"  # Added for config loading
-  ]
-
-  # Resource configuration
-  cpu_limit    = var.notification_service_cpu
-  memory_limit = var.notification_service_memory
-
-  # VPC connector for private access to Cloud SQL
-  vpc_connector_id = google_vpc_access_connector.connector.id
-
-  # Cloud SQL connection
-  cloud_sql_connection_name = google_sql_database_instance.default.connection_name
-
-  # Scaling configuration
-  min_instances = var.notification_service_min_instances
-  max_instances = var.notification_service_max_instances
-
-  # This is an internal service, no public access
-  allow_unauthenticated = false
-
-  # For CPU < 1, we must set concurrency to 1
-  concurrency = 1
 
   depends_on = [
+    google_secret_manager_secret_version.database_url,
+    google_secret_manager_secret_version.redis_url,
+    google_secret_manager_secret_version.encryption_secret,
+    google_secret_manager_secret_version.smtp_username,
+    google_secret_manager_secret_version.smtp_password,
+    google_secret_manager_secret_version.from_email,
     google_project_service.run,
-    google_vpc_access_connector.connector,
-    google_sql_database_instance.default
+    google_vpc_access_connector.main
   ]
 }
 
-# Output the service URLs
-output "backend_api_url" {
-  description = "The URL of the backend API service"
-  value       = module.backend_api.service_url
+# Service Accounts
+resource "google_service_account" "backend_api_sa" {
+  account_id   = "${var.environment}-backend-api-sa"
+  display_name = "Backend API Service Account"
+  project      = var.project_id
 }
 
-output "automation_engine_url" {
-  description = "The URL of the automation engine service"
-  value       = module.automation_engine.service_url
+resource "google_service_account" "automation_engine_sa" {
+  account_id   = "${var.environment}-automation-engine-sa"
+  display_name = "Automation Engine Service Account"
+  project      = var.project_id
 }
 
-output "notification_service_url" {
-  description = "The URL of the notification service"
-  value       = module.notification_service.service_url
+resource "google_service_account" "notification_service_sa" {
+  account_id   = "${var.environment}-notification-svc-sa"
+  display_name = "Notification Service Account"
+  project      = var.project_id
+}
+
+# IAM bindings for service accounts
+resource "google_project_iam_member" "backend_api_sql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.backend_api_sa.email}"
+}
+
+resource "google_project_iam_member" "automation_engine_sql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.automation_engine_sa.email}"
+}
+
+resource "google_project_iam_member" "notification_service_sql_client" {
+  project = var.project_id
+  role    = "roles/cloudsql.client"
+  member  = "serviceAccount:${google_service_account.notification_service_sa.email}"
+}
+
+# Secret Manager access for service accounts
+resource "google_secret_manager_secret_iam_member" "backend_api_secrets" {
+  for_each = toset([
+    "database-url",
+    "redis-url",
+    "jwt-secret",
+    "encryption-secret",
+    "google-client-id",
+    "google-client-secret",
+    "strava-client-id",
+    "strava-client-secret",
+    "base-url",
+    "frontend-url",
+  ])
+  
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.backend_api_sa.email}"
+  project   = var.project_id
+}
+
+resource "google_secret_manager_secret_iam_member" "automation_engine_secrets" {
+  for_each = toset([
+    "database-url",
+    "redis-url",
+    "encryption-secret",
+    "jwt-secret",
+    "base-url",
+    "google-client-id",
+    "google-client-secret",
+    "strava-client-id",
+    "strava-client-secret",
+  ])
+  
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.automation_engine_sa.email}"
+  project   = var.project_id
+}
+
+resource "google_secret_manager_secret_iam_member" "notification_service_secrets" {
+  for_each = toset([
+    "database-url",
+    "redis-url",
+    "encryption-secret",
+    "jwt-secret",
+    "base-url",
+    "smtp-username",
+    "smtp-password",
+    "from-email",
+  ])
+  
+  secret_id = each.value
+  role      = "roles/secretmanager.secretAccessor"
+  member    = "serviceAccount:${google_service_account.notification_service_sa.email}"
+  project   = var.project_id
+}
+
+# Allow unauthenticated access to backend API
+resource "google_cloud_run_service_iam_member" "backend_api_invoker" {
+  service  = google_cloud_run_service.backend_api.name
+  location = google_cloud_run_service.backend_api.location
+  project  = var.project_id
+  role     = "roles/run.invoker"
+  member   = "allUsers"
 }
