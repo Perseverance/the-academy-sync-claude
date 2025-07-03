@@ -16,6 +16,28 @@ output "database_private_ip" {
   value       = google_sql_database_instance.main.private_ip_address
 }
 
+output "db_instance_ip" {
+  description = "The public IP address of the Cloud SQL instance"
+  value       = google_sql_database_instance.main.public_ip_address
+  sensitive   = true
+}
+
+# Additional database outputs for scripts
+output "db_instance_connection_name" {
+  description = "The connection name of the database instance"
+  value       = google_sql_database_instance.main.connection_name
+}
+
+output "db_name" {
+  description = "The name of the database"
+  value       = google_sql_database.default.name
+}
+
+output "db_user" {
+  description = "The database user name"
+  value       = google_sql_user.default.name
+}
+
 # Redis outputs
 output "redis_host" {
   description = "The IP address of the Redis instance"

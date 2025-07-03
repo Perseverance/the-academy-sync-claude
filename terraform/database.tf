@@ -70,36 +70,12 @@ resource "google_sql_user" "default" {
   project  = var.project_id
   instance = google_sql_database_instance.main.name
   password = random_password.db_password.result
-}
-
-output "db_instance_connection_name" {
-  description = "The connection name of the database instance."
-  value       = google_sql_database_instance.main.connection_name
-  sensitive   = true
-}
-
-output "db_instance_ip" {
-  description = "The IP address of the database instance."
-  value       = google_sql_database_instance.main.ip_address
-  sensitive   = true
-}
-
-output "db_instance_name" {
-  description = "The name of the database instance."
-  value       = google_sql_database_instance.main.name
-}
-
-output "db_name" {
-  description = "The name of the database."
-  value       = google_sql_database.default.name
-}
-
-output "db_user" {
-  description = "The name of the database user."
-  value       = google_sql_user.default.name
-}
-
-output "secret_name" {
-  description = "The name of the secret containing the database password."
-  value       = google_secret_manager_secret.db_password_secret.secret_id
+  
+  # This ensures the database is deleted before the user
+  depends_on = [google_sql_database.default]
+  
+  lifecycle {
+    # Create the user before the database
+    create_before_destroy = true
+  }
 }

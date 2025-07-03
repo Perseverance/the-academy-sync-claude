@@ -15,7 +15,11 @@ environment = "staging"
 # For staging, we can be more permissive but still avoid 0.0.0.0/0
 authorized_networks = [
   {
-    name  = "Developer Machine"
-    value = "84.21.206.55/32" # Your current IP address
+    name  = "Developer Machine Current"
+    value = "78.128.35.238/32" # Your current IP address
+  },
+  {
+    name  = "Developer Machine Previous"
+    value = "84.21.206.55/32" # Previous IP address
   }
 ]

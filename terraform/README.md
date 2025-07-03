@@ -186,3 +186,20 @@ Before deploying Cloud Run services, you must build and push the container image
 2. **CPU and Concurrency**: For services with CPU < 1 (like notification-service with 0.5 CPU), concurrency is automatically set to 1 as required by Cloud Run.
 
 3. **Service Account Name Length**: Service account IDs must be between 6-30 characters. The notification-service uses a shortened name `notif-svc` to fit within this limit.
+
+4. **Database Connection Timeouts**: If you get connection timeouts when running migrations or connecting to Cloud SQL, ensure your IP address is in the authorized networks:
+   ```sh
+   # Get your current IP
+   curl ifconfig.me
+   
+   # Update staging.tfvars or prod.tfvars with your IP
+   authorized_networks = [
+     {
+       name  = "Your Machine"
+       value = "YOUR.IP.ADDRESS.HERE/32"
+     }
+   ]
+   
+   # Apply the change
+   terraform apply -var-file="staging.tfvars" -target=google_sql_database_instance.main
+   ```
