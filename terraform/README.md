@@ -136,3 +136,79 @@ To deploy or make changes to an environment, first select the appropriate worksp
    ```
 
 Remember to ensure the `bucket` in `backend.tf` is set to your GCS bucket name (e.g., `the-academy-sync-claude-tfstate`) and update the project IDs in `staging.tfvars` and `prod.tfvars` with your actual values.
+
+## Container Images for Cloud Run
+
+Before deploying Cloud Run services, you must build and push the container images to Google Container Registry (GCR):
+
+### Prerequisites for Container Images
+
+1. **Use the build script (recommended):**
+   ```sh
+   # Build and push all services for staging
+   ./scripts/build-and-push-images.sh staging all
+
+   # Or build specific services
+   ./scripts/build-and-push-images.sh prod backend-api
+   ```
+
+2. **Or manually build and push:**
+   ```sh
+   # Configure Docker for GCR
+   gcloud auth configure-docker
+
+   # Backend API
+   docker build --build-arg SERVICE_NAME=backend-api -t gcr.io/the-academy-sync-sdlc-test/backend-api:staging .
+   docker push gcr.io/the-academy-sync-sdlc-test/backend-api:staging
+
+   # Automation Engine
+   docker build --build-arg SERVICE_NAME=automation-engine -t gcr.io/the-academy-sync-sdlc-test/automation-engine:staging .
+   docker push gcr.io/the-academy-sync-sdlc-test/automation-engine:staging
+
+   # Notification Service
+   docker build --build-arg SERVICE_NAME=notification-service -t gcr.io/the-academy-sync-sdlc-test/notification-service:staging .
+   docker push gcr.io/the-academy-sync-sdlc-test/notification-service:staging
+   ```
+
+3. **Update the image URLs in your tfvars files:**
+   
+   Edit `staging.tfvars` or `prod.tfvars` and replace the placeholder image URLs with your actual image tags:
+   ```hcl
+   backend_api_image_url          = "gcr.io/the-academy-sync-sdlc-test/backend-api:staging"
+   automation_engine_image_url    = "gcr.io/the-academy-sync-sdlc-test/automation-engine:staging"
+   notification_service_image_url = "gcr.io/the-academy-sync-sdlc-test/notification-service:staging"
+   ```
+
+## Known Issues and Solutions
+
+1. **PORT Environment Variable**: Cloud Run automatically sets the PORT environment variable. Do not set it in your service configuration.
+
+2. **CPU and Concurrency**: For services with CPU < 1 (like notification-service with 0.5 CPU), concurrency is automatically set to 1 as required by Cloud Run.
+
+3. **Service Account Name Length**: Service account IDs must be between 6-30 characters. The notification-service uses a shortened name `notif-svc` to fit within this limit.
+
+4. **Database Access**: The database is configured with private IP only for enhanced security. To access the database for migrations or administration:
+
+   **Option 1: Cloud SQL Proxy (Recommended)**
+   ```sh
+   # Install Cloud SQL Proxy if not already installed
+   curl -o cloud_sql_proxy https://dl.google.com/cloudsql/cloud_sql_proxy.darwin.amd64
+   chmod +x cloud_sql_proxy
+   
+   # Connect to the database
+   ./cloud_sql_proxy -instances=PROJECT_ID:REGION:INSTANCE_NAME=tcp:5432
+   
+   # In another terminal, connect using psql or run migrations
+   psql -h localhost -p 5432 -U DB_USER -d DB_NAME
+   ```
+
+   **Option 2: IAP Tunneling**
+   ```sh
+   # Create a tunnel through a Compute Engine instance
+   gcloud compute ssh INSTANCE_NAME --tunnel-through-iap --zone=ZONE -- -L 5432:DB_PRIVATE_IP:5432
+   
+   # Connect to database via the tunnel
+   psql -h localhost -p 5432 -U DB_USER -d DB_NAME
+   ```
+
+   **Note**: The database no longer has a public IP address and requires SSL connections for security. The authorized_networks configuration is no longer applicable.

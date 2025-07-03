@@ -52,3 +52,9 @@ variable "authorized_networks" {
   }))
   default = []
 }
+
+variable "redis_memory_size_gb" {
+  description = "The memory size in GB for the Redis instance."
+  type        = number
+  default     = 1
+}

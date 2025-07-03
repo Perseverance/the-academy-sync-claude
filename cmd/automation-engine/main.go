@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"os"
 	"os/signal"
 	"sync"
@@ -202,6 +203,8 @@ func main() {
 		startWorkerPool(queueClient, worker, cfg.MaxWorkers, log)
 	} else {
 		log.Warn("Redis not configured - running in test mode with single user processing")
+		// Start HTTP server for health checks even in test mode
+		go startHealthServer(log)
 		// Fall back to test processing for development
 		runTestMode(worker, log)
 	}
@@ -212,6 +215,9 @@ func startWorkerPool(queueClient *queue.Client, worker *processing.Worker, maxWo
 	log.Info("Starting worker pool",
 		"max_workers", maxWorkers,
 		"queue", "jobs_queue")
+
+	// Start HTTP server for health checks (required by Cloud Run)
+	go startHealthServer(log)
 
 	// Create context for graceful shutdown
 	ctx, cancel := context.WithCancel(context.Background())
@@ -450,5 +456,30 @@ func runTestMode(worker *processing.Worker, log *logger.Logger) {
 			"next_cycle_at", time.Now().Add(60*time.Second).Format(time.RFC3339),
 			"wait_seconds", 60)
 		time.Sleep(60 * time.Second) // Process every minute for testing
+	}
+}
+
+// startHealthServer starts an HTTP server for health checks required by Cloud Run
+func startHealthServer(log *logger.Logger) {
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "Automation Engine is running\n")
+	})
+
+	http.HandleFunc("/health", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprintf(w, "OK\n")
+	})
+
+	log.Info("Starting HTTP server for health checks", "port", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Error("Failed to start HTTP server", "error", err)
+		// Continue running even if health server fails to start
+		// os.Exit(1) - removed to prevent application termination
 	}
 }

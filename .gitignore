@@ -26,6 +26,8 @@ go.work.sum
 
 # env file
 .env
+.env.staging
+.env.prod
 
 # Air live reload
 tmp/
@@ -35,3 +37,8 @@ build-errors.log
 # .idea/
 .vscode/
 .claude/
+
+# Terraform
+terraform/.terraform/
+*.tfstate
+*.tfstate.backup

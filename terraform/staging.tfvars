@@ -12,10 +12,5 @@ db_deletion_protection            = false
 
 environment = "staging"
 
-# For staging, we can be more permissive but still avoid 0.0.0.0/0
-authorized_networks = [
-  {
-    name  = "Development Network"
-    value = "203.0.113.0/24" # Replace with your actual development IP range
-  }
-]
+# Database access is restricted to private network only for security
+# Use Cloud SQL Proxy or IAP tunneling for administrative access

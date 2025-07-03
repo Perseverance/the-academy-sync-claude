@@ -2,6 +2,7 @@ package queue
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -57,6 +58,26 @@ func NewClient(redisURL string, queueName string, logger *logger.Logger) (*Clien
 	opts.ReadTimeout = 3 * time.Second
 	opts.WriteTimeout = 3 * time.Second
 
+	// Configure TLS if the URL uses rediss:// protocol
+	if strings.HasPrefix(redisURL, "rediss://") {
+		// Always override TLS config to enable InsecureSkipVerify for Google Cloud Memorystore
+		opts.TLSConfig = &tls.Config{
+			InsecureSkipVerify: true, // Required for Google Cloud Memorystore self-signed certificates
+			MinVersion:         tls.VersionTLS12, // Ensure at least TLS 1.2 is used
+		}
+		urlPrefix := redisURL
+		if len(urlPrefix) > 20 {
+			urlPrefix = urlPrefix[:20]
+		}
+		logger.Info("Configured TLS for Redis connection with InsecureSkipVerify", "url_prefix", urlPrefix)
+	} else {
+		urlPrefix := redisURL
+		if len(urlPrefix) > 20 {
+			urlPrefix = urlPrefix[:20]
+		}
+		logger.Info("Non-TLS Redis connection detected", "url_prefix", urlPrefix)
+	}
+
 	client := redis.NewClient(opts)
 
 	// Test connection
@@ -64,7 +85,11 @@ func NewClient(redisURL string, queueName string, logger *logger.Logger) (*Clien
 	defer cancel()
 
 	if err := client.Ping(ctx).Err(); err != nil {
-		logger.Error("Failed to connect to Redis", "error", err, "url", redisURL)
+		logger.Error("Failed to connect to Redis", 
+			"error", err, 
+			"url", redisURL,
+			"has_tls", opts.TLSConfig != nil,
+			"addr", opts.Addr)
 		return nil, fmt.Errorf("failed to connect to Redis: %w", err)
 	}
 

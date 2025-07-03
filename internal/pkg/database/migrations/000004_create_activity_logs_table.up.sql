@@ -48,7 +48,15 @@ CREATE TABLE activity_logs (
 );
 
 -- Create indexes for efficient queries
-CREATE INDEX idx_activity_logs_user_id ON activity_logs(user_id);                     -- Index on user_id for user queries
-CREATE INDEX idx_activity_logs_processing_date ON activity_logs(processing_date);     -- Index on date for date range queries
-CREATE INDEX idx_activity_logs_status ON activity_logs(status);                       -- Index on status for filtering
-CREATE INDEX idx_activity_logs_created_at ON activity_logs(created_at DESC);          -- Index on created_at for ordering
+CREATE INDEX idx_activity_logs_user_id ON activity_logs(user_id);                           -- Query logs by user
+CREATE INDEX idx_activity_logs_processing_date ON activity_logs(processing_date);           -- Query by date
+CREATE INDEX idx_activity_logs_status ON activity_logs(status);                             -- Query by status
+CREATE INDEX idx_activity_logs_created_at ON activity_logs(created_at DESC);                -- Query by creation time
+CREATE INDEX idx_activity_logs_user_date ON activity_logs(user_id, processing_date);        -- Composite index for user+date queries
+
+-- Add comments for documentation
+COMMENT ON TABLE activity_logs IS 'Tracks processing outcomes from the automation engine for audit and debugging purposes';
+COMMENT ON COLUMN activity_logs.processing_type IS 'Type of processing: daily (US025), manual (US028), backfill (US026/027)';
+COMMENT ON COLUMN activity_logs.processing_scope IS 'Scope of processing: single_day (one specific date), date_range (multiple dates)';
+COMMENT ON COLUMN activity_logs.status IS 'Processing outcome: success (all good), failed (error), skipped (no action needed), in_progress (currently processing)';
+COMMENT ON COLUMN activity_logs.metadata IS 'JSON data including activity_ids, special_cases (e.g., rest_day_with_activity), and other context';

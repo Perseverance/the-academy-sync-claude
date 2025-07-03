@@ -201,7 +201,7 @@ func loadFromSecretManager() (*Config, error) {
 
 	log.Printf("Info: Loading configuration from Google Secret Manager for project: %s\n", projectID)
 
-	// Define secrets to fetch from Secret Manager
+	// Define secrets to fetch from Secret Manager (no environment prefix)
 	secrets := map[string]*string{
 		"database-url":         new(string),
 		"redis-url":            new(string),

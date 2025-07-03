@@ -5,7 +5,7 @@ resource "random_password" "db_password" {
 }
 
 resource "google_secret_manager_secret" "db_password_secret" {
-  secret_id = "${var.environment}-db-password"
+  secret_id = "db-password"
   project   = var.project_id
   replication {
     auto {}
@@ -18,7 +18,7 @@ resource "google_secret_manager_secret_version" "db_password_secret_version" {
   secret_data = random_password.db_password.result
 }
 
-resource "google_sql_database_instance" "default" {
+resource "google_sql_database_instance" "main" {
   name             = "${var.environment}-primary-instance"
   project          = var.project_id
   region           = var.region
@@ -32,19 +32,13 @@ resource "google_sql_database_instance" "default" {
       point_in_time_recovery_enabled = var.db_point_in_time_recovery_enabled
     }
     ip_configuration {
-      ipv4_enabled = true
-
-      dynamic "authorized_networks" {
-        for_each = var.authorized_networks
-        content {
-          name  = authorized_networks.value.name
-          value = authorized_networks.value.value
-        }
-      }
-
-      # Private IP configuration (recommended for production)
-      # private_network = "projects/${var.project_id}/global/networks/default"
-      # enable_private_path_for_google_cloud_services = true
+      ipv4_enabled    = false  # Disable public IP for security - use Cloud SQL Proxy or IAP tunneling instead
+      private_network = google_compute_network.main.id
+      enable_private_path_for_google_cloud_services = true
+      require_ssl     = true  # Enforce SSL connections
+      
+      # Authorized networks are not applicable when ipv4_enabled is false
+      # If public access is needed, use Cloud SQL Proxy or IAP tunneling
     }
     
     # SSL enforcement for PostgreSQL
@@ -54,50 +48,29 @@ resource "google_sql_database_instance" "default" {
     }
   }
   deletion_protection = var.db_deletion_protection
-  depends_on          = [google_project_service.sqladmin]
+  depends_on          = [
+    google_project_service.sqladmin,
+    google_service_networking_connection.private_vpc_connection
+  ]
 }
 
 resource "google_sql_database" "default" {
   name     = "${var.environment}-app-db"
   project  = var.project_id
-  instance = google_sql_database_instance.default.name
+  instance = google_sql_database_instance.main.name
 }
 
 resource "google_sql_user" "default" {
   name     = "${var.environment}-app-user"
   project  = var.project_id
-  instance = google_sql_database_instance.default.name
+  instance = google_sql_database_instance.main.name
   password = random_password.db_password.result
-}
-
-output "db_instance_connection_name" {
-  description = "The connection name of the database instance."
-  value       = google_sql_database_instance.default.connection_name
-  sensitive   = true
-}
-
-output "db_instance_ip" {
-  description = "The IP address of the database instance."
-  value       = google_sql_database_instance.default.ip_address
-  sensitive   = true
-}
-
-output "db_instance_name" {
-  description = "The name of the database instance."
-  value       = google_sql_database_instance.default.name
-}
-
-output "db_name" {
-  description = "The name of the database."
-  value       = google_sql_database.default.name
-}
-
-output "db_user" {
-  description = "The name of the database user."
-  value       = google_sql_user.default.name
-}
-
-output "secret_name" {
-  description = "The name of the secret containing the database password."
-  value       = google_secret_manager_secret.db_password_secret.secret_id
+  
+  # This ensures the database is deleted before the user
+  depends_on = [google_sql_database.default]
+  
+  lifecycle {
+    # Create the user before the database
+    create_before_destroy = true
+  }
 }

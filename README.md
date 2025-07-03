@@ -680,11 +680,356 @@ The system is designed for deployment on Google Cloud Platform using:
 - **Cloud Run** for Go services
 - **Cloud Storage + CDN** for React frontend
 - **Cloud SQL** for PostgreSQL
-- **Memorystore** for Redis
+- **Memorystore** for Redis with TLS
 - **Cloud Scheduler** for automated triggers
 - **Secret Manager** for credential storage
 
 All infrastructure is managed via Terraform in the `terraform/` directory.
+
+### Quick Start Deployment
+
+```bash
+# 1. Enable APIs (one-time)
+gcloud services enable compute.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com run.googleapis.com vpcaccess.googleapis.com redis.googleapis.com servicenetworking.googleapis.com --project=<project-id>
+
+# 2. Deploy infrastructure
+cd terraform && terraform init && terraform workspace select staging
+terraform apply -var-file=staging.tfvars
+
+# 3. Configure secrets
+cd ../scripts && cp ../.env.staging.example ../.env.staging
+# Edit ../.env.staging with your values
+./manage-secrets.sh update staging
+
+# 4. Build and deploy
+./build-and-push-images.sh staging
+./migrate-db.sh staging
+
+# 5. Redeploy Cloud Run services
+cd ../terraform && terraform apply -var-file=staging.tfvars -target=google_cloud_run_service.backend_api -target=google_cloud_run_service.automation_engine -target=google_cloud_run_service.notification_service
+```
+
+### Prerequisites
+
+Before deploying, ensure you have:
+
+1. **Google Cloud SDK** installed and configured
+2. **Terraform** v1.5+ installed
+3. **Docker** installed and authenticated to GCR (`gcloud auth configure-docker`)
+4. **Go** 1.23+ installed (for building services)
+5. **Authenticated to GCP**: `gcloud auth login` and `gcloud auth application-default login`
+
+### Initial Deployment
+
+Follow these steps for a fresh deployment to a new environment:
+
+#### 1. Enable Google Cloud APIs
+
+**IMPORTANT**: Enable APIs first to avoid "API not enabled" errors during Terraform apply:
+
+```bash
+# Enable all required APIs
+gcloud services enable \
+  compute.googleapis.com \
+  sqladmin.googleapis.com \
+  secretmanager.googleapis.com \
+  run.googleapis.com \
+  vpcaccess.googleapis.com \
+  redis.googleapis.com \
+  servicenetworking.googleapis.com \
+  --project=the-academy-sync-sdlc-test
+```
+
+#### 2. Infrastructure Setup
+
+```bash
+cd terraform
+
+# Initialize Terraform
+terraform init
+
+# Create workspace for your environment
+terraform workspace new staging  # or "prod" for production
+
+# Select the workspace
+terraform workspace select staging
+
+# Plan infrastructure changes
+terraform plan -var-file=staging.tfvars -out=staging.tfplan
+
+# Apply infrastructure
+terraform apply staging.tfplan
+```
+
+**Note**: The first apply will show Cloud Run deployment failures - this is expected because Docker images don't exist yet.
+
+#### 3. Configure Secrets
+
+Terraform creates secrets with placeholder values. You need to update them with actual values:
+
+```bash
+# First, prepare your environment file
+cp .env.staging.example .env.staging
+
+# Edit with your actual values:
+# - OAuth credentials (Google & Strava)
+# - SMTP credentials
+# - Frontend URL
+vim .env.staging
+
+# Update secrets in Google Secret Manager
+cd scripts
+./manage-secrets.sh update staging  # Use 'update', not 'create'
+```
+
+The script will:
+- Read values from `.env.staging`
+- Generate secure JWT_SECRET and ENCRYPTION_SECRET if needed
+- Construct DATABASE_URL from Terraform outputs
+- Construct REDIS_URL with TLS support
+- Update all secrets in Google Secret Manager
+
+#### 4. Build and Push Docker Images
+
+```bash
+# Build and push all service images
+./build-and-push-images.sh staging
+```
+
+This builds and pushes:
+- `gcr.io/<project-id>/backend-api:staging`
+- `gcr.io/<project-id>/automation-engine:staging`
+- `gcr.io/<project-id>/notification-service:staging`
+
+#### 5. Database Initialization
+
+Run migrations to set up the database schema:
+
+```bash
+# Run database migrations
+./migrate-db.sh staging
+```
+
+#### 6. Deploy Cloud Run Services
+
+Now that images exist, deploy the Cloud Run services:
+
+```bash
+cd ../terraform
+terraform apply -var-file=staging.tfvars \
+  -target=google_cloud_run_service.backend_api \
+  -target=google_cloud_run_service.automation_engine \
+  -target=google_cloud_run_service.notification_service
+```
+
+#### 7. Verify Deployment
+
+```bash
+# Get service URLs
+terraform output backend_api_url
+terraform output automation_engine_url
+terraform output notification_service_url
+
+# Test health endpoints
+curl $(terraform output -raw backend_api_url)/health
+curl $(terraform output -raw automation_engine_url)/health
+curl $(terraform output -raw notification_service_url)/health
+
+# View logs if needed
+gcloud run services logs read staging-backend-api --region=europe-central2 --limit=50
+```
+
+### Quick Deployment (One-Liner)
+
+For experienced users, enable APIs and deploy infrastructure in one command:
+
+```bash
+gcloud services enable compute.googleapis.com sqladmin.googleapis.com secretmanager.googleapis.com run.googleapis.com vpcaccess.googleapis.com redis.googleapis.com servicenetworking.googleapis.com --project=<project-id> && terraform apply -var-file=staging.tfvars
+```
+
+### Update Deployment
+
+For updating an existing deployment with new code changes:
+
+#### 1. Code Updates
+
+```bash
+# Pull latest changes
+git pull origin main
+```
+
+#### 2. Infrastructure Updates (if needed)
+
+Only run if infrastructure changes are required:
+
+```bash
+cd terraform
+terraform workspace select staging
+terraform plan -var-file=staging.tfvars
+terraform apply -var-file=staging.tfvars
+```
+
+#### 3. Database Migrations (if needed)
+
+Only run if there are new migrations:
+
+```bash
+# Check current migration version
+./scripts/migrate-db.sh staging --status
+
+# Apply new migrations
+./scripts/migrate-db.sh staging --verbose
+```
+
+#### 4. Deploy Updated Services
+
+```bash
+# Build and deploy all services
+./scripts/build-and-push-images.sh staging
+```
+
+### Common Issues and Solutions
+
+#### API Not Enabled Errors
+
+If you see "API has not been used in project" errors:
+```bash
+# Enable the specific API
+gcloud services enable <api-name>.googleapis.com --project=<project-id>
+# Wait 2-3 minutes for propagation
+```
+
+#### VPC Peering Deletion Issues
+
+If destroying infrastructure fails with "Failed to delete connection":
+```bash
+# List and manually delete VPC peerings
+gcloud compute networks peerings list --network=<vpc-name> --project=<project-id>
+gcloud compute networks peerings delete <peering-name> --network=<vpc-name> --project=<project-id>
+```
+
+#### Secret Already Exists
+
+Use `update` instead of `create` when running manage-secrets.sh:
+```bash
+./manage-secrets.sh update staging  # NOT 'create'
+```
+
+### Project Configuration for Production
+
+When deploying to production with a different GCP project:
+
+1. Update `terraform/prod.tfvars`:
+   ```hcl
+   project_id = "your-production-project-id"
+   ```
+
+2. Update `scripts/manage-secrets.sh` line 15:
+   ```bash
+   PROJECT_ID="your-production-project-id"
+   ```
+
+3. Switch Terraform workspace:
+   ```bash
+   terraform workspace select prod
+   ```
+
+### Deployment Sequence Summary
+
+The correct order for deployment operations:
+
+1. **Terraform** - Create/update infrastructure
+2. **Secrets** - Configure application secrets
+3. **Migrations** - Update database schema
+4. **Images** - Build and deploy application code
+
+### Environment-Specific Configurations
+
+#### Staging Environment
+
+- Uses smaller Cloud SQL instance (db-f1-micro)
+- Single Cloud Run instance per service
+- Lower memory allocations
+- Basic monitoring
+
+#### Production Environment
+
+- Uses larger Cloud SQL instance (db-n1-standard-1)
+- Multiple Cloud Run instances with autoscaling
+- Higher memory allocations
+- Full monitoring and alerting
+
+### Monitoring Deployments
+
+Monitor deployment status:
+
+```bash
+# Check Cloud Run service status
+gcloud run services list --region=us-central1
+
+# View service logs
+gcloud run services logs read backend-api --region=us-central1 --limit=50
+
+# Check database connectivity
+gcloud sql instances describe academy-sync-db-staging
+
+# Monitor job processing
+gcloud logging read "resource.type=cloud_run_revision AND jsonPayload.job_type=manual_sync" --limit=20
+```
+
+### Rollback Procedures
+
+If deployment issues occur:
+
+#### Service Rollback
+
+```bash
+# List available revisions
+gcloud run revisions list --service=backend-api --region=us-central1
+
+# Rollback to previous revision
+gcloud run services update-traffic backend-api \
+  --to-revisions=backend-api-00001-abc=100 \
+  --region=us-central1
+```
+
+#### Database Rollback
+
+```bash
+# Rollback last migration
+./scripts/migrate-db.sh staging --down 1
+
+# Force to specific version (use with caution)
+./scripts/migrate-db.sh staging --force 3
+```
+
+### Automation Scripts
+
+The deployment process is automated through several scripts in the `scripts/` directory:
+
+- **`build-and-push-images.sh`** - Builds and deploys container images
+- **`manage-secrets.sh`** - Manages Google Secret Manager secrets
+- **`migrate-db.sh`** - Runs database migrations with various options
+- **`run-migrations.sh`** - Used by Docker for containerized migrations
+
+Each script includes:
+- Help documentation (`--help` flag)
+- Dry-run mode for testing
+- Verbose output options
+- Error handling and validation
+
+### CI/CD Integration
+
+For automated deployments, integrate these scripts into your CI/CD pipeline:
+
+```yaml
+# Example GitHub Actions workflow
+steps:
+  - name: Deploy to Staging
+    run: |
+      ./scripts/build-and-push-images.sh staging
+      ./scripts/migrate-db.sh staging --verbose
+```
 
 ## Future Improvements
 

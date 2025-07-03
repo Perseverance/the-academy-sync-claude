@@ -35,6 +35,11 @@ func (m *MockStravaClient) GetActivities(ctx context.Context, after time.Time) (
 	return filtered, nil
 }
 
+func (m *MockStravaClient) GetActivityLaps(ctx context.Context, activityID int64) ([]strava.Lap, error) {
+	// Return empty laps for testing - in real tests, this could be mocked with actual data
+	return []strava.Lap{}, nil
+}
+
 // MockSheetsClient implements a mock Google Sheets client for testing
 type MockSheetsClient struct {
 	readRangeData     [][]interface{}
@@ -127,7 +132,7 @@ func TestFetchAllTrainingPlanEntries_Success(t *testing.T) {
 			t.Errorf("Expected activity type 'Бягане', got '%s'", entry.ActivityType)
 		}
 		if entry.RPE != 5 {
-			t.Errorf("Expected RPE 5, got %d", entry.RPE)
+			t.Errorf("Expected RPE 5, got %.1f", entry.RPE)
 		}
 	}
 
@@ -308,7 +313,7 @@ func TestProcessSingleDay_RestDayWithActivity(t *testing.T) {
 	}
 
 	if result.SpreadsheetUpdate.RPEValue != 2 {
-		t.Errorf("Expected RPE 2 for rest day with activity, got %d", result.SpreadsheetUpdate.RPEValue)
+		t.Errorf("Expected RPE 2 for rest day with activity, got %.1f", result.SpreadsheetUpdate.RPEValue)
 	}
 }
 
@@ -719,7 +724,7 @@ func TestSpreadsheetUpdatePreparation(t *testing.T) {
 	}
 
 	if update.RPEValue != 5 {
-		t.Errorf("Expected RPE 5, got %d", update.RPEValue)
+		t.Errorf("Expected RPE 5, got %.1f", update.RPEValue)
 	}
 
 	// Description should be generated based on RPE and activities
