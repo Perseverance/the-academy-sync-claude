@@ -63,6 +63,7 @@ func NewClient(redisURL string, queueName string, logger *logger.Logger) (*Clien
 		// Always override TLS config to enable InsecureSkipVerify for Google Cloud Memorystore
 		opts.TLSConfig = &tls.Config{
 			InsecureSkipVerify: true, // Required for Google Cloud Memorystore self-signed certificates
+			MinVersion:         tls.VersionTLS12, // Ensure at least TLS 1.2 is used
 		}
 		logger.Info("Configured TLS for Redis connection with InsecureSkipVerify", "url_prefix", redisURL[:20])
 	} else {
