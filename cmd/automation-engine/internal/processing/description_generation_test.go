@@ -1,10 +1,12 @@
 package processing
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/strava"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/transformation"
 )
 
 // Test data helpers
@@ -35,79 +37,68 @@ func createTestProcessedActivity(distance float64, movingTime int, formattedDura
 // Test prepareDescriptionUpdate for different RPE values
 func TestPrepareDescriptionUpdate_SingleActivity(t *testing.T) {
 	service := NewProcessingService(nil, nil, nil, createTestLogger())
+	ctx := context.Background()
 
 	testCases := []struct {
 		name             string
-		rpe              int
+		rpe              float64
 		activity         ProcessedActivity
 		originalDesc     string
 		expectedContains []string
 	}{
 		{
 			name:         "RPE 2 - Rest day with activity",
-			rpe:          2,
+			rpe:          2.0,
 			activity:     createTestProcessedActivity(5000, 1500, "00:25:00"),
 			originalDesc: "Почивка",
 			expectedContains: []string{
-				"Лека разходка",
-				"5.00км",
-				"00:25:00",
-				"5:00",
+				"Почивка", // Original description is returned for RPE 2
 			},
 		},
 		{
-			name:         "RPE 4 - Progressive run",
-			rpe:          4,
+			name:         "RPE 4.5 - Progressive run",
+			rpe:          4.5,
 			activity:     createTestProcessedActivity(10000, 3000, "00:50:00"),
 			originalDesc: "Прогресивно бягане",
 			expectedContains: []string{
-				"Прогресивно бягане",
-				"10.00км",
-				"00:50:00",
+				"Прогресивно бягане", // Original returned (no lap data in test)
 			},
 		},
 		{
 			name:         "RPE 6 - Steady state run",
-			rpe:          6,
+			rpe:          6.0,
 			activity:     createTestProcessedActivity(10000, 3000, "00:50:00"),
 			originalDesc: "Равномерно бягане",
 			expectedContains: []string{
-				"Равномерно бягане",
-				"10.00км",
-				"00:50:00",
-				"5:00 темпо",
+				"Равномерно бягане", // Original returned (no lap data in test)
 			},
 		},
 		{
 			name:         "RPE 7 - Tempo run",
-			rpe:          7,
+			rpe:          7.0,
 			activity:     createTestProcessedActivity(8000, 2280, "00:38:00"),
-			originalDesc: "Темпово бягане",
+			originalDesc: "темпово бягане (8км)",
 			expectedContains: []string{
-				"Темпово бягане",
-				"8.00км",
-				"00:38:00",
-				"4:45",
+				"темпово бягане",
 			},
+			// Note: Without actual lap data from Strava API, the description won't be transformed
 		},
 		{
 			name:         "RPE 8 - Interval workout",
-			rpe:          8,
+			rpe:          8.0,
 			activity:     createTestProcessedActivity(10000, 3600, "01:00:00"),
-			originalDesc: "интервали: 5x1000м @ 4:00/км",
+			originalDesc: "5x1000м @ 4:00/км",
 			expectedContains: []string{
-				"интервали: 5x1000м @ 4:00/км",
-				"изпълнено:",
-				"10.00км",
-				"01:00:00",
+				"5x1000м @ 4:00/км",
 			},
+			// Note: Without actual lap data from Strava API, the description won't be transformed
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			activities := []ProcessedActivity{tc.activity}
-			result := service.prepareDescriptionUpdate(tc.originalDesc, activities, tc.rpe)
+			result := service.prepareDescriptionUpdate(ctx, tc.originalDesc, activities, tc.rpe)
 
 			for _, expected := range tc.expectedContains {
 				if !contains(result, expected) {
@@ -121,32 +112,28 @@ func TestPrepareDescriptionUpdate_SingleActivity(t *testing.T) {
 // Test multiple activities handling
 func TestPrepareDescriptionUpdate_MultipleActivities(t *testing.T) {
 	service := NewProcessingService(nil, nil, nil, createTestLogger())
+	ctx := context.Background()
 
 	activities := []ProcessedActivity{
 		createTestProcessedActivity(5000, 1500, "00:25:00"),
 		createTestProcessedActivity(3000, 900, "00:15:00"),
 	}
 
-	result := service.prepareDescriptionUpdate("Бягане", activities, 5)
+	result := service.prepareDescriptionUpdate(ctx, "Бягане", activities, 5.0)
 
-	expectedContains := []string{
-		"2 бягания",
-		"общо 8.00км",
-		"00:40:00",
+	// For multiple activities, the original description is returned
+	if result != "Бягане" {
+		t.Errorf("Expected original description for multiple activities, got: %s", result)
 	}
 
-	for _, expected := range expectedContains {
-		if !contains(result, expected) {
-			t.Errorf("Expected description to contain '%s', got: %s", expected, result)
-		}
-	}
 }
 
 // Test empty activities
 func TestPrepareDescriptionUpdate_NoActivities(t *testing.T) {
 	service := NewProcessingService(nil, nil, nil, createTestLogger())
+	ctx := context.Background()
 
-	result := service.prepareDescriptionUpdate("Original description", []ProcessedActivity{}, 5)
+	result := service.prepareDescriptionUpdate(ctx, "Original description", []ProcessedActivity{}, 5.0)
 
 	if result != "Original description" {
 		t.Errorf("Expected original description for no activities, got: %s", result)
@@ -178,53 +165,56 @@ func TestCalculatePacePerKm(t *testing.T) {
 	}
 }
 
-// Test progressive run description
-func TestGenerateProgressiveRunDescription(t *testing.T) {
-	service := NewProcessingService(nil, nil, nil, createTestLogger())
-
-	activity := createTestProcessedActivity(10000, 3000, "00:50:00")
-	result := service.generateProgressiveRunDescription(activity)
-
-	expectedContains := []string{
-		"Прогресивно бягане",
-		"10.00км",
-		"00:50:00",
-		"средно",
-		"5:00",
-		"темпо",
+// Test progressive run description transformation
+func TestProgressiveRunDescriptionTransformation(t *testing.T) {
+	// Create mock lap data for testing
+	laps := []strava.Lap{
+		{Distance: 5000, MovingTime: 1600, AverageSpeed: 3.125},
+		{Distance: 5000, MovingTime: 1400, AverageSpeed: 3.571},
 	}
 
-	for _, expected := range expectedContains {
-		if !contains(result, expected) {
-			t.Errorf("Expected progressive description to contain '%s', got: %s", expected, result)
-		}
+	originalDesc := "Прогресивно бягане"
+	result := transformation.UpdateProgressiveRunDescription(originalDesc, laps)
+
+	// The transformation function should add lap details
+	if result == originalDesc {
+		t.Errorf("Expected description to be transformed, but got original: %s", result)
 	}
 }
 
-// Test tempo/interval description with original description
-func TestGenerateTempoIntervalDescription(t *testing.T) {
-	service := NewProcessingService(nil, nil, nil, createTestLogger())
-
-	activity := createTestProcessedActivity(10000, 3600, "01:00:00")
-
-	// Test with interval description (lowercase check)
-	intervalDesc := "интервали: 5x1000м @ 4:00/км с 90с почивка"
-	result := service.generateTempoIntervalDescription(activity, intervalDesc)
-
-	if !contains(result, "интервали: 5x1000м") {
-		t.Errorf("Expected to preserve interval description, got: %s", result)
+// Test tempo run description transformation
+func TestTempoRunDescriptionTransformation(t *testing.T) {
+	// Create mock lap data for tempo run
+	laps := []strava.Lap{
+		{Distance: 8000, MovingTime: 2280, AverageSpeed: 3.509},
 	}
 
-	if !contains(result, "изпълнено:") {
-		t.Errorf("Expected 'изпълнено:' in description, got: %s", result)
+	originalDesc := "темпово бягане (8км @ 4:45/км)"
+	result := transformation.UpdateTempoRunDescription(originalDesc, laps)
+
+	// The transformation function should update with actual lap data
+	if result == originalDesc {
+		t.Errorf("Expected description to be transformed, but got original: %s", result)
+	}
+}
+
+// Test interval workout description transformation
+func TestIntervalWorkoutDescriptionTransformation(t *testing.T) {
+	// Create mock lap data for intervals
+	laps := []strava.Lap{
+		{Distance: 1000, MovingTime: 240, AverageSpeed: 4.167},
+		{Distance: 1000, MovingTime: 242, AverageSpeed: 4.132},
+		{Distance: 1000, MovingTime: 238, AverageSpeed: 4.202},
+		{Distance: 1000, MovingTime: 241, AverageSpeed: 4.149},
+		{Distance: 1000, MovingTime: 239, AverageSpeed: 4.184},
 	}
 
-	// Test without interval description
-	simpleDesc := "Бързо бягане"
-	result2 := service.generateTempoIntervalDescription(activity, simpleDesc)
+	originalDesc := "5x1000м @ 4:00/км"
+	result := transformation.UpdateIntervalWorkoutDescription(originalDesc, laps)
 
-	if !contains(result2, "Темпово бягане") {
-		t.Errorf("Expected 'Темпово бягане' for non-interval description, got: %s", result2)
+	// The transformation function should add execution details
+	if result == originalDesc {
+		t.Errorf("Expected description to be transformed, but got original: %s", result)
 	}
 }
 
