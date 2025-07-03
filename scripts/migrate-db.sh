@@ -44,17 +44,20 @@ usage() {
     echo "  prod    - Run migrations on production database"
     echo ""
     echo "Options:"
-    echo "  --proxy  - Use Cloud SQL Proxy for connection (recommended)"
-    echo "  --verbose - Show detailed migration output"
-    echo "  --down N - Rollback N migrations"
+    echo "  --no-proxy - Disable Cloud SQL Proxy (proxy is now default)"
+    echo "  --verbose  - Show detailed migration output"
+    echo "  --down N   - Rollback N migrations"
     echo "  --force VERSION - Force database to specific version"
-    echo "  --status - Show current migration status"
+    echo "  --status   - Show current migration status"
     echo ""
     echo "Examples:"
-    echo "  $0 staging                  # Run all pending migrations on staging"
-    echo "  $0 prod --proxy            # Run migrations on prod using Cloud SQL Proxy"
-    echo "  $0 staging --status        # Check migration status on staging"
-    echo "  $0 prod --down 1           # Rollback last migration on prod"
+    echo "  $0 staging                  # Run all pending migrations on staging (uses proxy)"
+    echo "  $0 prod --status           # Check migration status on prod (uses proxy)"
+    echo "  $0 staging --down 1        # Rollback last migration on staging"
+    echo ""
+    echo "Note: Cloud SQL Proxy is now the default connection method since"
+    echo "      public IPs are disabled for security. Install cloud-sql-proxy with:"
+    echo "      brew install cloud-sql-proxy"
     exit 1
 }
 
@@ -87,7 +90,7 @@ if [ "$ENVIRONMENT" != "staging" ] && [ "$ENVIRONMENT" != "prod" ]; then
 fi
 
 # Parse additional options
-USE_PROXY=false
+USE_PROXY=true  # Default to proxy since public IPs are disabled
 MIGRATION_COMMAND="up"
 MIGRATION_ARGS=""
 VERBOSE=false
@@ -96,6 +99,11 @@ while [[ $# -gt 0 ]]; do
     case $1 in
         --proxy)
             USE_PROXY=true
+            shift
+            ;;
+        --no-proxy)
+            USE_PROXY=false
+            print_warning "Direct connection mode selected. This requires public IP which is disabled by default."
             shift
             ;;
         --verbose|-v)

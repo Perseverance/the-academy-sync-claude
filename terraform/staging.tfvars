@@ -12,14 +12,5 @@ db_deletion_protection            = false
 
 environment = "staging"
 
-# For staging, we can be more permissive but still avoid 0.0.0.0/0
-authorized_networks = [
-  {
-    name  = "Developer Machine Current"
-    value = "78.128.35.238/32" # Your current IP address
-  },
-  {
-    name  = "Developer Machine Previous"
-    value = "84.21.206.55/32" # Previous IP address
-  }
-]
+# Database access is restricted to private network only for security
+# Use Cloud SQL Proxy or IAP tunneling for administrative access

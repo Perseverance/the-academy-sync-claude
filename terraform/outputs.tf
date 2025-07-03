@@ -17,8 +17,8 @@ output "database_private_ip" {
 }
 
 output "db_instance_ip" {
-  description = "The public IP address of the Cloud SQL instance"
-  value       = google_sql_database_instance.main.public_ip_address
+  description = "The private IP address of the Cloud SQL instance (public IP disabled for security)"
+  value       = google_sql_database_instance.main.private_ip_address
   sensitive   = true
 }
 

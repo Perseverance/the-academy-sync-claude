@@ -32,18 +32,13 @@ resource "google_sql_database_instance" "main" {
       point_in_time_recovery_enabled = var.db_point_in_time_recovery_enabled
     }
     ip_configuration {
-      ipv4_enabled    = true  # Enable public IP for migrations
+      ipv4_enabled    = false  # Disable public IP for security - use Cloud SQL Proxy or IAP tunneling instead
       private_network = google_compute_network.main.id
       enable_private_path_for_google_cloud_services = true
+      require_ssl     = true  # Enforce SSL connections
       
-      # Restrict access to specific IPs
-      dynamic "authorized_networks" {
-        for_each = var.authorized_networks
-        content {
-          name  = authorized_networks.value.name
-          value = authorized_networks.value.value
-        }
-      }
+      # Authorized networks are not applicable when ipv4_enabled is false
+      # If public access is needed, use Cloud SQL Proxy or IAP tunneling
     }
     
     # SSL enforcement for PostgreSQL

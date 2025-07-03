@@ -187,19 +187,28 @@ Before deploying Cloud Run services, you must build and push the container image
 
 3. **Service Account Name Length**: Service account IDs must be between 6-30 characters. The notification-service uses a shortened name `notif-svc` to fit within this limit.
 
-4. **Database Connection Timeouts**: If you get connection timeouts when running migrations or connecting to Cloud SQL, ensure your IP address is in the authorized networks:
+4. **Database Access**: The database is configured with private IP only for enhanced security. To access the database for migrations or administration:
+
+   **Option 1: Cloud SQL Proxy (Recommended)**
    ```sh
-   # Get your current IP
-   curl ifconfig.me
+   # Install Cloud SQL Proxy if not already installed
+   curl -o cloud_sql_proxy https://dl.google.com/cloudsql/cloud_sql_proxy.darwin.amd64
+   chmod +x cloud_sql_proxy
    
-   # Update staging.tfvars or prod.tfvars with your IP
-   authorized_networks = [
-     {
-       name  = "Your Machine"
-       value = "YOUR.IP.ADDRESS.HERE/32"
-     }
-   ]
+   # Connect to the database
+   ./cloud_sql_proxy -instances=PROJECT_ID:REGION:INSTANCE_NAME=tcp:5432
    
-   # Apply the change
-   terraform apply -var-file="staging.tfvars" -target=google_sql_database_instance.main
+   # In another terminal, connect using psql or run migrations
+   psql -h localhost -p 5432 -U DB_USER -d DB_NAME
    ```
+
+   **Option 2: IAP Tunneling**
+   ```sh
+   # Create a tunnel through a Compute Engine instance
+   gcloud compute ssh INSTANCE_NAME --tunnel-through-iap --zone=ZONE -- -L 5432:DB_PRIVATE_IP:5432
+   
+   # Connect to database via the tunnel
+   psql -h localhost -p 5432 -U DB_USER -d DB_NAME
+   ```
+
+   **Note**: The database no longer has a public IP address and requires SSL connections for security. The authorized_networks configuration is no longer applicable.
