@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { AcademyLogo } from "@/components/icons/academy-logo"
 import { useAppState } from "@/context/app-state-provider"
+import { CachedAvatarImg } from "@/components/cached-avatar"
 
 const navItems = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -90,10 +91,12 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
                 <ShadButton variant="ghost" className="flex items-center space-x-2 p-2 rounded-full hover:bg-muted">
-                  <img
-                    src={user.picture || "/placeholder.svg?height=32&width=32&query=avatar"}
-                    alt="User avatar"
+                  <CachedAvatarImg
+                    src={user.picture}
+                    alt={user.name || "User avatar"}
                     className="w-8 h-8 rounded-full border-2 border-primary"
+                    width={32}
+                    height={32}
                   />
                   <span className="text-sm font-medium text-foreground hidden md:inline">{user.name}</span>
                 </ShadButton>
