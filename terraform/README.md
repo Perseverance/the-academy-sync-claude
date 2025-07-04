@@ -212,3 +212,191 @@ Before deploying Cloud Run services, you must build and push the container image
    ```
 
    **Note**: The database no longer has a public IP address and requires SSL connections for security. The authorized_networks configuration is no longer applicable.
+
+## Complete Deployment Guide
+
+This guide covers the full deployment process including infrastructure, backend services, and frontend application.
+
+### Prerequisites
+
+1. **GCP Setup:**
+   - Create GCS bucket for Terraform state (see above)
+   - Enable required APIs
+   - Set up authentication
+
+2. **Local Setup:**
+   - Install `terraform`, `gcloud`, `gsutil`
+   - Install Node.js and npm (for frontend)
+   - Clone the repository
+
+### Step-by-Step Deployment
+
+#### 1. Initialize Terraform
+
+```sh
+cd terraform
+terraform init
+terraform workspace new staging  # or 'prod'
+terraform workspace select staging
+```
+
+#### 2. Deploy Infrastructure
+
+```sh
+# Review the plan
+terraform plan -var-file="staging.tfvars"
+
+# Apply the infrastructure
+terraform apply -var-file="staging.tfvars"
+```
+
+#### 3. Build and Push Container Images
+
+```sh
+# Build and push all services
+./scripts/build-and-push-images.sh staging all
+
+# Or build specific services
+./scripts/build-and-push-images.sh staging backend-api
+```
+
+#### 4. Update Terraform with Image URLs
+
+Edit `staging.tfvars` to include the actual image URLs:
+```hcl
+backend_api_image_url          = "gcr.io/the-academy-sync-sdlc-test/backend-api:staging"
+automation_engine_image_url    = "gcr.io/the-academy-sync-sdlc-test/automation-engine:staging"
+notification_service_image_url = "gcr.io/the-academy-sync-sdlc-test/notification-service:staging"
+```
+
+#### 5. Redeploy Cloud Run Services
+
+```sh
+terraform apply -var-file="staging.tfvars"
+```
+
+#### 6. Configure Secrets
+
+The manage-secrets script will automatically fetch URLs from Terraform:
+```sh
+# Create/update all secrets including FRONTEND_URL
+./scripts/manage-secrets.sh update staging
+
+# View all secrets
+./scripts/manage-secrets.sh view staging
+```
+
+#### 7. Run Database Migrations
+
+```sh
+./scripts/migrate-db.sh staging
+```
+
+#### 8. Configure DNS (if managing DNS zone)
+
+```sh
+# Get nameservers
+terraform output frontend_dns_nameservers
+
+# Update your domain registrar with the nameservers
+# For staging.theacademysync.run, create NS records pointing to these nameservers
+
+# Verify DNS propagation
+dig +short NS staging.theacademysync.run
+```
+
+#### 9. Deploy Frontend
+
+```sh
+# Deploy frontend to GCS bucket
+./scripts/deploy-frontend.sh staging
+
+# The script will:
+# - Build the React application
+# - Get the bucket name from Terraform
+# - Deploy files to GCS with proper cache headers
+```
+
+#### 10. Verify Deployment
+
+```sh
+# Check backend API
+curl https://$(terraform output -raw backend_api_url)/health
+
+# Check frontend (after DNS propagates)
+curl https://staging.theacademysync.run
+
+# Check SSL certificate status
+gcloud compute ssl-certificates describe staging-frontend-ssl-cert --format="get(managed.status)"
+```
+
+### Post-Deployment Tasks
+
+1. **Monitor SSL Certificate:**
+   - Certificates can take up to 60 minutes to provision
+   - Status should show "ACTIVE" when ready
+
+2. **Test Application:**
+   - Verify OAuth login works
+   - Check all API endpoints
+   - Test frontend functionality
+
+3. **Set up Monitoring:**
+   - Configure Cloud Monitoring alerts
+   - Set up uptime checks
+   - Review Cloud Run metrics
+
+### Updating the Application
+
+#### Backend Services Update:
+```sh
+# Build and push new images
+./scripts/build-and-push-images.sh staging backend-api
+
+# Update tfvars with new image URL
+# Then apply changes
+terraform apply -var-file="staging.tfvars"
+```
+
+#### Frontend Update:
+```sh
+# Simply redeploy
+./scripts/deploy-frontend.sh staging
+```
+
+### Troubleshooting
+
+#### Frontend Issues:
+- **404 errors**: Check if index.html exists in bucket
+- **SSL errors**: Verify DNS is properly configured
+- **Slow updates**: CDN cache may need time to expire
+
+#### Backend Issues:
+- **Connection refused**: Check VPC connector configuration
+- **Database errors**: Verify private IP connectivity
+- **Secret errors**: Run `manage-secrets.sh view` to check
+
+## Frontend Infrastructure Details
+
+The frontend infrastructure includes:
+- Google Cloud Storage bucket for static content
+- Global HTTPS Load Balancer with CDN
+- Managed SSL certificates
+- DNS configuration (when enabled)
+
+### Frontend Architecture
+
+- **Multi-Project Setup**: Staging and production use separate GCP projects
+- **Domain Configuration**:
+  - Staging: `staging.theacademysync.run`
+  - Production: `theacademysync.run` (in separate project)
+- **CDN**: Automatic caching with configurable TTLs
+- **SSL**: Google-managed certificates with automatic renewal
+
+### Frontend Outputs
+
+After deployment, these outputs are available:
+- `frontend_bucket_name`: GCS bucket for static files
+- `frontend_load_balancer_ip`: Load balancer IP address
+- `frontend_url`: Full HTTPS URL
+- `frontend_dns_nameservers`: DNS nameservers (if DNS zone is managed)

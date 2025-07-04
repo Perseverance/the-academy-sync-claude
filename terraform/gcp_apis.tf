@@ -53,3 +53,10 @@ resource "google_project_service" "iam" {
   disable_dependent_services = true
   disable_on_destroy         = true
 }
+
+resource "google_project_service" "dns" {
+  project                    = var.project_id
+  service                    = "dns.googleapis.com"
+  disable_dependent_services = true
+  disable_on_destroy         = true
+}

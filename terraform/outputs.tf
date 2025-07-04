@@ -76,3 +76,34 @@ output "vpc_connector_id" {
   description = "The ID of the VPC Access Connector"
   value       = google_vpc_access_connector.main.id
 }
+
+# Frontend outputs
+output "frontend_bucket_name" {
+  description = "The name of the frontend GCS bucket"
+  value       = google_storage_bucket.frontend.name
+}
+
+output "frontend_load_balancer_ip" {
+  description = "The IP address of the frontend load balancer"
+  value       = google_compute_global_address.frontend.address
+}
+
+output "frontend_url" {
+  description = "The URL of the frontend application"
+  value       = "https://${var.domain_name}"
+}
+
+output "frontend_dns_nameservers" {
+  description = "The nameservers for the DNS zone (if managed)"
+  value       = var.enable_dns_zone ? google_dns_managed_zone.frontend[0].name_servers : []
+}
+
+output "backend_api_custom_domain" {
+  description = "The custom domain URL for the backend API"
+  value       = "https://api.${var.domain_name}"
+}
+
+output "backend_api_load_balancer_ip" {
+  description = "The IP address of the backend API load balancer"
+  value       = google_compute_global_address.backend_api.address
+}

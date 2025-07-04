@@ -60,3 +60,7 @@ vpc_connector_max_instances = 10
 
 # Logging
 log_level = "WARNING"
+
+# Frontend configuration
+domain_name     = "theacademysync.run"
+enable_dns_zone = true
