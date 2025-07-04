@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # deploy-frontend.sh - Build and deploy frontend to GCS bucket
-# Usage: ./deploy-frontend.sh [staging|prod]
+# Usage: ./deploy-frontend.sh [staging|prod] [PROJECT_ID]
 
 set -e
 
@@ -13,7 +13,6 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 # Configuration
-PROJECT_ID="the-academy-sync-sdlc-test"
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 PROJECT_ROOT="$( cd "$SCRIPT_DIR/.." && pwd )"
 WEB_DIR="$PROJECT_ROOT/web"
@@ -38,11 +37,14 @@ print_info() {
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 [staging|prod]"
+    echo "Usage: $0 [staging|prod] [PROJECT_ID]"
     echo ""
     echo "Environments:"
     echo "  staging - Deploy to staging environment"
     echo "  prod    - Deploy to production environment"
+    echo ""
+    echo "PROJECT_ID:"
+    echo "  Optional. If not provided, will be fetched from Terraform output"
     echo ""
     echo "This script will:"
     echo "  1. Build the React application"
@@ -63,6 +65,21 @@ ENVIRONMENT=$1
 if [ "$ENVIRONMENT" != "staging" ] && [ "$ENVIRONMENT" != "prod" ]; then
     print_error "Invalid environment: $ENVIRONMENT"
     usage
+fi
+
+# Get PROJECT_ID from argument or terraform
+if [ $# -ge 2 ]; then
+    PROJECT_ID=$2
+    print_info "Using provided PROJECT_ID: $PROJECT_ID"
+else
+    # Try to get from terraform output
+    print_info "Fetching PROJECT_ID from Terraform output..."
+    cd "$TERRAFORM_DIR"
+    PROJECT_ID=$(terraform output -raw project_id 2>/dev/null) || {
+        print_error "Failed to get project_id from Terraform. Please provide PROJECT_ID as second argument."
+        usage
+    }
+    print_success "Using PROJECT_ID from Terraform: $PROJECT_ID"
 fi
 
 # Check if web directory exists
@@ -186,19 +203,25 @@ fi
 # Set proper cache headers for different file types
 print_info "Setting cache headers..."
 
-# HTML files - no cache
-gsutil -m setmeta -h "Cache-Control:no-cache, no-store, must-revalidate" "gs://$BUCKET_NAME/**.html" 2>/dev/null || true
+# HTML files - no cache (use find to properly handle all HTML files recursively)
+print_info "Setting no-cache headers for HTML files..."
+# List all HTML files and set cache headers
+gsutil -m ls -r "gs://$BUCKET_NAME/" | grep '\.html$' | while read -r file; do
+    gsutil setmeta -h "Cache-Control:no-cache, no-store, must-revalidate" "$file" 2>/dev/null || true
+done
 
-# Static assets - long cache
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://$BUCKET_NAME/**.js" 2>/dev/null || true
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://$BUCKET_NAME/**.css" 2>/dev/null || true
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://$BUCKET_NAME/**.png" 2>/dev/null || true
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://$BUCKET_NAME/**.jpg" 2>/dev/null || true
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://$BUCKET_NAME/**.jpeg" 2>/dev/null || true
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://$BUCKET_NAME/**.gif" 2>/dev/null || true
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://$BUCKET_NAME/**.svg" 2>/dev/null || true
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://$BUCKET_NAME/**.woff" 2>/dev/null || true
-gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" "gs://$BUCKET_NAME/**.woff2" 2>/dev/null || true
+# Alternative approach using gsutil with proper wildcards for each directory level
+# This ensures all HTML files at any depth get the correct headers
+gsutil -m setmeta -h "Cache-Control:no-cache, no-store, must-revalidate" "gs://$BUCKET_NAME/*.html" 2>/dev/null || true
+gsutil -m setmeta -h "Cache-Control:no-cache, no-store, must-revalidate" "gs://$BUCKET_NAME/*/*.html" 2>/dev/null || true
+gsutil -m setmeta -h "Cache-Control:no-cache, no-store, must-revalidate" "gs://$BUCKET_NAME/*/*/*.html" 2>/dev/null || true
+
+# Static assets - long cache (using proper wildcards)
+print_info "Setting cache headers for static assets..."
+# Use find and xargs for better handling of all files
+for ext in js css png jpg jpeg gif svg woff woff2; do
+    gsutil -m ls -r "gs://$BUCKET_NAME/" | grep "\.$ext$" | xargs -r gsutil -m setmeta -h "Cache-Control:public, max-age=31536000, immutable" 2>/dev/null || true
+done
 
 # Get the frontend URL
 cd "$TERRAFORM_DIR"

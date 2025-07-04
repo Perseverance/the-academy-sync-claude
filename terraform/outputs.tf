@@ -95,7 +95,7 @@ output "frontend_url" {
 
 output "frontend_dns_nameservers" {
   description = "The nameservers for the DNS zone (if managed)"
-  value       = var.enable_dns_zone ? google_dns_managed_zone.frontend[0].name_servers : []
+  value       = var.enable_dns_zone ? one(google_dns_managed_zone.frontend[*].name_servers) : []
 }
 
 output "backend_api_custom_domain" {
