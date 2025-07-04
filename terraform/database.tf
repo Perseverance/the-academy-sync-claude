@@ -35,13 +35,12 @@ resource "google_sql_database_instance" "main" {
       ipv4_enabled    = false  # Disable public IP for security - use Cloud SQL Proxy or IAP tunneling instead
       private_network = google_compute_network.main.id
       enable_private_path_for_google_cloud_services = true
-      require_ssl     = true  # Enforce SSL connections
       
       # Authorized networks are not applicable when ipv4_enabled is false
       # If public access is needed, use Cloud SQL Proxy or IAP tunneling
     }
     
-    # SSL enforcement for PostgreSQL
+    # Database flags
     database_flags {
       name  = "cloudsql.iam_authentication"
       value = "on"
