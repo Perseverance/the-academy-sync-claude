@@ -239,8 +239,13 @@ construct_base_url() {
     # Select the correct workspace
     terraform workspace select "$ENV" >/dev/null 2>&1
     
-    # Get backend API URL
-    BACKEND_URL=$(terraform output -raw backend_api_url 2>/dev/null || echo "")
+    # Try to get custom domain URL first, fallback to regular URL
+    BACKEND_URL=$(terraform output -raw backend_api_custom_domain 2>/dev/null || echo "")
+    
+    if [ -z "$BACKEND_URL" ]; then
+        # Fallback to regular Cloud Run URL
+        BACKEND_URL=$(terraform output -raw backend_api_url 2>/dev/null || echo "")
+    fi
     
     if [ -z "$BACKEND_URL" ]; then
         print_warning "Could not fetch backend API URL from Terraform. BASE_URL secret will need to be updated manually." >&2
@@ -248,6 +253,29 @@ construct_base_url() {
     fi
     
     echo "$BACKEND_URL"
+}
+
+# Function to construct FRONTEND_URL from Terraform outputs
+construct_frontend_url() {
+    local ENV=$1
+    
+    # Get frontend URL from Terraform
+    print_info "Fetching frontend URL from Terraform..." >&2
+    
+    cd "$PROJECT_ROOT/terraform" || exit 1
+    
+    # Select the correct workspace
+    terraform workspace select "$ENV" >/dev/null 2>&1
+    
+    # Get frontend URL
+    FRONTEND_URL=$(terraform output -raw frontend_url 2>/dev/null || echo "")
+    
+    if [ -z "$FRONTEND_URL" ]; then
+        print_warning "Could not fetch frontend URL from Terraform. FRONTEND_URL secret will need to be updated manually." >&2
+        return
+    fi
+    
+    echo "$FRONTEND_URL"
 }
 
 # Main logic
@@ -329,8 +357,12 @@ case "$COMMAND" in
                     fi
                     ;;
                 FRONTEND_URL)
-                    # Frontend URL is managed separately, not from Cloud Run
-                    manage_secret "frontend-url" "$value" "$COMMAND"
+                    # Skip if placeholder value, we'll construct it from Terraform outputs
+                    if [[ "$value" == *"localhost"* || "$value" == *"yourdomain"* || "$value" == *"staging.theacademysync"* || "$value" == *"theacademysync.run"* ]]; then
+                        print_warning "Skipping placeholder FRONTEND_URL, will construct from Terraform outputs"
+                    else
+                        manage_secret "frontend-url" "$value" "$COMMAND"
+                    fi
                     ;;
             esac
         done < "$ENV_FILE"
@@ -363,6 +395,16 @@ case "$COMMAND" in
             manage_secret "base-url" "$BASE_URL" "$COMMAND"
         else
             print_warning "BASE_URL will need to be created manually after Cloud Run deployment"
+        fi
+        
+        # Handle FRONTEND_URL from Terraform
+        echo "" >&2
+        print_info "Constructing FRONTEND_URL from Terraform..." >&2
+        FRONTEND_URL=$(construct_frontend_url "$ENVIRONMENT")
+        if [ -n "$FRONTEND_URL" ]; then
+            manage_secret "frontend-url" "$FRONTEND_URL" "$COMMAND"
+        else
+            print_warning "FRONTEND_URL will need to be created manually after Terraform deployment"
         fi
         
         echo "" >&2

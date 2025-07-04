@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 
@@ -58,8 +59,22 @@ func (h *AuthHandler) getCookieConfig() (domain string, sameSite http.SameSite, 
 		// SameSite=Lax allows cookies in top-level navigation (OAuth redirects)
 		return ".localhost", http.SameSiteLaxMode, false
 	}
-	// Production: Use secure settings
-	return "", http.SameSiteLaxMode, true
+	// Production: Extract parent domain from frontend URL for cookie sharing
+	// This allows cookies to be shared between frontend and api subdomain
+	if h.frontendURL != "" {
+		// Parse the frontend URL to extract the domain
+		if u, err := url.Parse(h.frontendURL); err == nil {
+			host := u.Hostname()
+			// For staging.theacademysync.run, we want .theacademysync.run
+			// For theacademysync.run, we want .theacademysync.run
+			parts := strings.Split(host, ".")
+			if len(parts) >= 2 {
+				// Take the last two parts for the parent domain
+				domain = "." + strings.Join(parts[len(parts)-2:], ".")
+			}
+		}
+	}
+	return domain, http.SameSiteLaxMode, true
 }
 
 // generateSecureState generates a cryptographically secure random state for OAuth CSRF protection

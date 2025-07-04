@@ -58,3 +58,14 @@ variable "redis_memory_size_gb" {
   type        = number
   default     = 1
 }
+
+variable "domain_name" {
+  description = "The domain name for the frontend (e.g., staging.theacademysync.run or theacademysync.run)"
+  type        = string
+}
+
+variable "enable_dns_zone" {
+  description = "Whether to create a DNS managed zone for the domain"
+  type        = bool
+  default     = false
+}

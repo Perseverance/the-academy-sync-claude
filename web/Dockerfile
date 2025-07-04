@@ -15,7 +15,8 @@ RUN npm install -g pnpm@10.12.1 && pnpm install --no-frozen-lockfile
 # Copy source code
 COPY . .
 
-# Build the application
+# Build the application with standalone output for Docker
+ENV BUILD_STANDALONE=true
 RUN pnpm run build
 
 # Stage 2: Production stage

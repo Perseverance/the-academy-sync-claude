@@ -8,7 +8,8 @@ resource "time_sleep" "wait_for_apis" {
     google_project_service.vpcaccess,
     google_project_service.redis,
     google_project_service.servicenetworking,
-    google_project_service.iam
+    google_project_service.iam,
+    google_project_service.dns
   ]
 
   create_duration = "30s"

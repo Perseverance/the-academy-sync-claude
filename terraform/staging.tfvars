@@ -14,3 +14,7 @@ environment = "staging"
 
 # Database access is restricted to private network only for security
 # Use Cloud SQL Proxy or IAP tunneling for administrative access
+
+# Frontend configuration
+domain_name     = "staging.theacademysync.run"
+enable_dns_zone = true
