@@ -103,6 +103,7 @@ export function DashboardPage() {
               onConnect={actions.connectStrava}
               onDisconnect={actions.disconnectStrava}
               onReauthorize={actions.reauthorizeStrava}
+              isStrava={true}
             />
 
             {/* Spreadsheet Card - Spans 1 column, or more if fewer items */}

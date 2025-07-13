@@ -18,6 +18,7 @@ interface ConnectionCardProps {
   onDisconnect: () => void
   onReauthorize: () => void
   isGoogle?: boolean // Special handling for Google if needed
+  isStrava?: boolean // Special handling for Strava if needed
 }
 
 export function ConnectionCard({
@@ -30,6 +31,7 @@ export function ConnectionCard({
   onDisconnect,
   onReauthorize,
   isGoogle = false,
+  isStrava = false,
 }: ConnectionCardProps) {
   const renderContent = () => {
     switch (status) {
@@ -42,10 +44,24 @@ export function ConnectionCard({
                 Not connected
               </Badge>
             </div>
-            <button onClick={onConnect} className="btn-primary-main w-full">
-              <LinkIcon className="h-4 w-4" />
-              Connect {serviceName}
-            </button>
+            {isStrava ? (
+              <button 
+                onClick={onConnect} 
+                className="w-full flex justify-center items-center hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-md"
+                aria-label="Connect with Strava"
+              >
+                <img 
+                  src="/icons/btn_strava_connect_with_orange.svg" 
+                  alt="Connect with Strava"
+                  className="h-12 w-auto"
+                />
+              </button>
+            ) : (
+              <button onClick={onConnect} className="btn-primary-main w-full">
+                <LinkIcon className="h-4 w-4" />
+                Connect {serviceName}
+              </button>
+            )}
           </>
         )
       case "Connected":
