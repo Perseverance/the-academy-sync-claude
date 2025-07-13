@@ -47,13 +47,13 @@ export function ConnectionCard({
             {isStrava ? (
               <button 
                 onClick={onConnect} 
-                className="w-full flex justify-center items-center hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-md"
+                className="flex justify-start items-center hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-md"
                 aria-label="Connect with Strava"
               >
                 <img 
                   src="/icons/btn_strava_connect_with_orange.svg" 
                   alt="Connect with Strava"
-                  className="h-12 w-auto"
+                  className="h-9 w-auto"
                 />
               </button>
             ) : (
