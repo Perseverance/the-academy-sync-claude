@@ -92,7 +92,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <DropdownMenuTrigger asChild>
                 <ShadButton variant="ghost" className="flex items-center space-x-2 p-2 rounded-full hover:bg-muted">
                   <CachedAvatarImg
-                    src={user.picture}
+                    src={user.profile_picture_url}
                     alt={user.name || "User avatar"}
                     className="w-8 h-8 rounded-full border-2 border-primary"
                     width={32}
