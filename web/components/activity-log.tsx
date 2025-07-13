@@ -23,21 +23,21 @@ function LogItem({ log }: { log: LogEntry }) {
       case "Success":
         return {
           icon: <CheckCircle className="h-4 w-4 text-success" />,
-          badgeVariant: "default",
+          badgeVariant: "default" as const,
           badgeClass: "bg-success/20 text-success border-success/30",
         }
       case "Failure":
-        return { icon: <XCircle className="h-4 w-4 text-destructive" />, badgeVariant: "destructive", badgeClass: "" }
+        return { icon: <XCircle className="h-4 w-4 text-destructive" />, badgeVariant: "destructive" as const, badgeClass: "" }
       case "SuccessWithWarning":
         return {
           icon: <AlertTriangle className="h-4 w-4 text-warning" />,
-          badgeVariant: "outline",
+          badgeVariant: "outline" as const,
           badgeClass: "bg-warning/10 text-warning-foreground border-warning/30",
         }
       default:
         return {
           icon: <AlertTriangle className="h-4 w-4 text-muted-foreground" />,
-          badgeVariant: "secondary",
+          badgeVariant: "secondary" as const,
           badgeClass: "",
         }
     }
