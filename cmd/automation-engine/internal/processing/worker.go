@@ -610,11 +610,8 @@ func (w *Worker) persistProcessingResult(ctx context.Context, userID int, jobTyp
 		}
 	}
 
-	// Determine processing scope based on job type
-	processingScope := "scheduled"
-	if jobType == "manual_sync" {
-		processingScope = "manual"
-	}
+	// Determine processing scope - both manual and scheduled process multiple days
+	processingScope := "date_range"
 
 	// Prepare error message if needed
 	var errorMessage *string
@@ -625,11 +622,20 @@ func (w *Worker) persistProcessingResult(ctx context.Context, userID int, jobTyp
 	// Calculate processing duration
 	processingDurationMs := int(result.ProcessingTime.Milliseconds())
 
+	// Map job type to processing type enum value
+	processingType := "daily" // default
+	switch jobType {
+	case "manual_sync":
+		processingType = "manual"
+	case "scheduled_sync":
+		processingType = "daily"
+	}
+
 	// Create activity log entry with full schema
 	logEntry := &database.ActivityLog{
 		UserID:               userID,
 		ProcessingDate:       processingDateOnly,
-		ProcessingType:       jobType,
+		ProcessingType:       processingType,
 		ProcessingScope:      processingScope,
 		Status:               status,
 		ActivitiesFound:      result.ActivitiesCount,
