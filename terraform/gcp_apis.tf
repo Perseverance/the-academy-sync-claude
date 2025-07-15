@@ -60,3 +60,10 @@ resource "google_project_service" "dns" {
   disable_dependent_services = true
   disable_on_destroy         = true
 }
+
+resource "google_project_service" "cloudscheduler" {
+  project                    = var.project_id
+  service                    = "cloudscheduler.googleapis.com"
+  disable_dependent_services = true
+  disable_on_destroy         = true
+}

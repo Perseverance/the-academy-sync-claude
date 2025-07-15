@@ -313,10 +313,10 @@ func processJob(ctx context.Context, workerID int, job *queue.Job, queueClient *
 	defer cancel()
 
 	// Process based on job type
-	var result *processing.ProcessingResult
+	var result *processing.WorkerProcessingResult
 	switch job.Type {
 	case queue.JobTypeManualSync, queue.JobTypeScheduledSync:
-		result = worker.ProcessUser(jobCtx, job.UserID, string(job.Type))
+		result = worker.ProcessUserWithData(jobCtx, job.UserID, string(job.Type), job.Data)
 	default:
 		log.Error("Unknown job type",
 			"job_id", job.ID,

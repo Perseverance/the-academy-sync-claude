@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 )
@@ -26,20 +25,15 @@ var (
 	ErrSyncAlreadyInProgress = errors.New("sync already in progress for this user")
 )
 
-// UserRepository interface for testability
-type UserRepository interface {
-	GetUserByID(ctx context.Context, userID int) (*database.User, error)
-}
-
 // SyncService handles manual sync operations
 type SyncService struct {
 	userRepo    UserRepository
-	queueClient *queue.Client
+	queueClient QueueClient
 	logger      *logger.Logger
 }
 
 // NewSyncService creates a new sync service
-func NewSyncService(userRepo UserRepository, queueClient *queue.Client, logger *logger.Logger) *SyncService {
+func NewSyncService(userRepo UserRepository, queueClient QueueClient, logger *logger.Logger) *SyncService {
 	if queueClient == nil {
 		panic("queue client is required for sync service")
 	}

@@ -618,3 +618,45 @@ func (r *UserRepository) UpdateTimezone(ctx context.Context, userID int, timezon
 
 	return nil
 }
+
+// GetUsersInProcessingWindow retrieves all users who have automation enabled and whose
+// local time is within the processing window (3:00 AM - 5:00 AM).
+// This method performs timezone calculations in the database to find users
+// whose current local time falls within their configured processing window.
+func (r *UserRepository) GetUsersInProcessingWindow(ctx context.Context) ([]int, error) {
+	// SQL query that calculates local time for each user based on their timezone
+	// and checks if it falls within the 3:00-5:00 AM window
+	query := `
+		SELECT id 
+		FROM users 
+		WHERE automation_enabled = true
+		  AND strava_refresh_token IS NOT NULL
+		  AND LENGTH(strava_refresh_token) > 0
+		  AND spreadsheet_id IS NOT NULL
+		  AND spreadsheet_id != ''
+		  AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE timezone)) >= 3
+		  AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE timezone)) < 5
+		ORDER BY id
+	`
+
+	rows, err := r.db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var userIDs []int
+	for rows.Next() {
+		var userID int
+		if err := rows.Scan(&userID); err != nil {
+			return nil, err
+		}
+		userIDs = append(userIDs, userID)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	return userIDs, nil
+}

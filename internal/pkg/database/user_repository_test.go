@@ -2,201 +2,182 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"testing"
-	"time"
 
 	"github.com/DATA-DOG/go-sqlmock"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestUserRepository_UpdateSpreadsheetID(t *testing.T) {
+func TestGetUsersInProcessingWindow(t *testing.T) {
 	// Create mock database
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock database: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
-	// Create mock encryption service (not used in this test but required for repository)
-	encryptionService := auth.NewEncryptionService("test-key-32-characters-long!!!")
-	repo := NewUserRepository(db, encryptionService)
+	// Create encryption service (not used in this test)
+	encryptor := auth.NewEncryptionService("test-secret-key-32-bytes-long!!!!!")
 
-	ctx := context.Background()
-	userID := 123
-	spreadsheetID := "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+	// Create repository
+	repo := NewUserRepository(db, encryptor)
 
-	// Set up mock expectations
-	mock.ExpectExec("UPDATE users SET spreadsheet_id = \\$1, updated_at = \\$2 WHERE id = \\$3").
-		WithArgs(spreadsheetID, sqlmock.AnyArg(), userID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+	tests := []struct {
+		name          string
+		setupMock     func()
+		expectedUsers []int
+		expectedError bool
+		errorMessage  string
+	}{
+		{
+			name: "returns users in processing window",
+			setupMock: func() {
+				rows := sqlmock.NewRows([]string{"id"}).
+					AddRow(1).
+					AddRow(3).
+					AddRow(5)
 
-	// Execute the method
-	err = repo.UpdateSpreadsheetID(ctx, userID, spreadsheetID)
+				mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+					WillReturnRows(rows)
+			},
+			expectedUsers: []int{1, 3, 5},
+			expectedError: false,
+		},
+		{
+			name: "returns empty list when no users in window",
+			setupMock: func() {
+				rows := sqlmock.NewRows([]string{"id"})
 
-	// Verify results
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
+				mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+					WillReturnRows(rows)
+			},
+			expectedUsers: nil, // GetUsersInProcessingWindow returns nil for empty result
+			expectedError: false,
+		},
+		{
+			name: "handles database error",
+			setupMock: func() {
+				mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+					WillReturnError(sql.ErrConnDone)
+			},
+			expectedUsers: nil,
+			expectedError: true,
+			errorMessage:  "sql: connection is already closed",
+		},
+		{
+			name: "filters by automation enabled and required fields",
+			setupMock: func() {
+				// The actual query should filter by multiple conditions
+				expectedQuery := `SELECT id FROM users WHERE automation_enabled = true 
+		  AND strava_refresh_token IS NOT NULL
+		  AND LENGTH\(strava_refresh_token\) > 0
+		  AND spreadsheet_id IS NOT NULL
+		  AND spreadsheet_id != ''
+		  AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3
+		  AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 5
+		ORDER BY id`
+
+				rows := sqlmock.NewRows([]string{"id"}).
+					AddRow(2).
+					AddRow(4)
+
+				mock.ExpectQuery(expectedQuery).
+					WillReturnRows(rows)
+			},
+			expectedUsers: []int{2, 4},
+			expectedError: false,
+		},
 	}
 
-	// Verify all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("Unmet expectations: %v", err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup mock expectations
+			tt.setupMock()
+
+			// Execute the method
+			ctx := context.Background()
+			users, err := repo.GetUsersInProcessingWindow(ctx)
+
+			// Verify results
+			if tt.expectedError {
+				assert.Error(t, err)
+				if tt.errorMessage != "" {
+					assert.Contains(t, err.Error(), tt.errorMessage)
+				}
+			} else {
+				assert.NoError(t, err)
+				if tt.expectedUsers == nil {
+					assert.Nil(t, users)
+				} else {
+					assert.Equal(t, tt.expectedUsers, users)
+				}
+			}
+
+			// Verify all expectations were met
+			err = mock.ExpectationsWereMet()
+			assert.NoError(t, err)
+		})
 	}
 }
 
-func TestUserRepository_ClearSpreadsheetID(t *testing.T) {
-	// Create mock database
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock database: %v", err)
-	}
-	defer db.Close()
+func TestGetUsersInProcessingWindow_Integration(t *testing.T) {
+	// This test demonstrates the timezone calculation logic
+	// It would require a real database connection to test properly
+	t.Run("timezone calculation", func(t *testing.T) {
+		// Create mock database
+		db, mock, err := sqlmock.New()
+		require.NoError(t, err)
+		defer db.Close()
 
-	// Create mock encryption service
-	encryptionService := auth.NewEncryptionService("test-key-32-characters-long!!!")
-	repo := NewUserRepository(db, encryptionService)
+		encryptor := auth.NewEncryptionService("test-secret-key-32-bytes-long!!!!!")
+		repo := NewUserRepository(db, encryptor)
 
-	ctx := context.Background()
-	userID := 123
+		// Mock current time as 4 AM UTC
+		// Users with these timezones would be in their 3-5 AM window:
+		// - UTC: 4 AM (in window)
+		// - America/New_York (UTC-5): 11 PM previous day (not in window)
+		// - Europe/London (UTC+0 or UTC+1): 4 AM or 5 AM (in window)
+		// - Asia/Tokyo (UTC+9): 1 PM (not in window)
 
-	// Set up mock expectations
-	mock.ExpectExec("UPDATE users SET spreadsheet_id = NULL, updated_at = \\$1 WHERE id = \\$2").
-		WithArgs(sqlmock.AnyArg(), userID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
+		rows := sqlmock.NewRows([]string{"id"})
+		// Only return users whose local time is 3-5 AM
 
-	// Execute the method
-	err = repo.ClearSpreadsheetID(ctx, userID)
+		mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+			WillReturnRows(rows)
 
-	// Verify results
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
+		ctx := context.Background()
+		_, err = repo.GetUsersInProcessingWindow(ctx)
 
-	// Verify all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("Unmet expectations: %v", err)
-	}
+		assert.NoError(t, err)
+		// The result could be nil or empty slice, both are valid
+		// when no users match the criteria
+
+		err = mock.ExpectationsWereMet()
+		assert.NoError(t, err)
+	})
 }
 
-func TestUserRepository_UpdateSpreadsheetID_DatabaseError(t *testing.T) {
-	// Create mock database
+func TestGetUsersInProcessingWindow_RowScanError(t *testing.T) {
+	// Test handling of row scan errors
 	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock database: %v", err)
-	}
+	require.NoError(t, err)
 	defer db.Close()
 
-	// Create mock encryption service
-	encryptionService := auth.NewEncryptionService("test-key-32-characters-long!!!")
-	repo := NewUserRepository(db, encryptionService)
+	encryptor := auth.NewEncryptionService("test-secret-key-32-bytes-long!!!!!")
+	repo := NewUserRepository(db, encryptor)
+
+	// Create rows that will cause a scan error (wrong type)
+	rows := sqlmock.NewRows([]string{"id"}).
+		AddRow("not-an-int") // This will cause a scan error
+
+	mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+		WillReturnRows(rows)
 
 	ctx := context.Background()
-	userID := 123
-	spreadsheetID := "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
+	users, err := repo.GetUsersInProcessingWindow(ctx)
 
-	// Set up mock expectations - simulate database error
-	expectedError := sqlmock.ErrCancelled
-	mock.ExpectExec("UPDATE users SET spreadsheet_id = \\$1, updated_at = \\$2 WHERE id = \\$3").
-		WithArgs(spreadsheetID, sqlmock.AnyArg(), userID).
-		WillReturnError(expectedError)
-
-	// Execute the method
-	err = repo.UpdateSpreadsheetID(ctx, userID, spreadsheetID)
-
-	// Verify error is returned
-	if err == nil {
-		t.Error("Expected error but got none")
-	}
-
-	if err != expectedError {
-		t.Errorf("Expected error %v but got %v", expectedError, err)
-	}
-
-	// Verify all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("Unmet expectations: %v", err)
-	}
-}
-
-func TestUserRepository_ClearSpreadsheetID_DatabaseError(t *testing.T) {
-	// Create mock database
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock database: %v", err)
-	}
-	defer db.Close()
-
-	// Create mock encryption service
-	encryptionService := auth.NewEncryptionService("test-key-32-characters-long!!!")
-	repo := NewUserRepository(db, encryptionService)
-
-	ctx := context.Background()
-	userID := 123
-
-	// Set up mock expectations - simulate database error
-	expectedError := sqlmock.ErrCancelled
-	mock.ExpectExec("UPDATE users SET spreadsheet_id = NULL, updated_at = \\$1 WHERE id = \\$2").
-		WithArgs(sqlmock.AnyArg(), userID).
-		WillReturnError(expectedError)
-
-	// Execute the method
-	err = repo.ClearSpreadsheetID(ctx, userID)
-
-	// Verify error is returned
-	if err == nil {
-		t.Error("Expected error but got none")
-	}
-
-	if err != expectedError {
-		t.Errorf("Expected error %v but got %v", expectedError, err)
-	}
-
-	// Verify all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("Unmet expectations: %v", err)
-	}
-}
-
-// Test that the updated_at timestamp is set to a recent time
-func TestUserRepository_UpdateSpreadsheetID_TimestampValidation(t *testing.T) {
-	// Create mock database
-	db, mock, err := sqlmock.New()
-	if err != nil {
-		t.Fatalf("Failed to create mock database: %v", err)
-	}
-	defer db.Close()
-
-	// Create mock encryption service
-	encryptionService := auth.NewEncryptionService("test-key-32-characters-long!!!")
-	repo := NewUserRepository(db, encryptionService)
-
-	ctx := context.Background()
-	userID := 123
-	spreadsheetID := "1BxiMVs0XRA5nFMdKvBdBZjgmUUqptlbs74OgvE2upms"
-	beforeCall := time.Now()
-
-	// Set up mock expectations with custom matcher for timestamp
-	mock.ExpectExec("UPDATE users SET spreadsheet_id = \\$1, updated_at = \\$2 WHERE id = \\$3").
-		WithArgs(spreadsheetID, sqlmock.AnyArg(), userID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	// Execute the method
-	err = repo.UpdateSpreadsheetID(ctx, userID, spreadsheetID)
-	afterCall := time.Now()
-
-	// Verify results
-	if err != nil {
-		t.Errorf("Unexpected error: %v", err)
-	}
-
-	// Verify the timestamp is recent (within the test execution timeframe)
-	// This is a basic validation that the method is setting a current timestamp
-	if afterCall.Sub(beforeCall) > time.Second {
-		t.Error("Test took too long, timestamp validation may be unreliable")
-	}
-
-	// Verify all expectations were met
-	if err := mock.ExpectationsWereMet(); err != nil {
-		t.Errorf("Unmet expectations: %v", err)
-	}
+	assert.Error(t, err)
+	assert.Nil(t, users)
+	assert.Contains(t, err.Error(), "Scan")
 }

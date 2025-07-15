@@ -159,8 +159,15 @@ func main() {
 		syncService = services.NewSyncService(userRepository, queueClient, log)
 	}
 
+	// Initialize scheduling service (only if Redis is available)
+	var schedulingService *services.SchedulingService
+	if queueClient != nil {
+		schedulingService = services.NewSchedulingService(userRepository, queueClient, log)
+	}
+
 	// Initialize middleware
 	authMW := authMiddleware.NewAuthMiddleware(jwtService, sessionRepository, oauthService, userRepository, log.WithContext("component", "auth_middleware"))
+	placeholderAuth := authMiddleware.NewPlaceholderAuth(log.WithContext("component", "placeholder_auth"))
 
 	// Initialize handlers
 	// Determine if running in development mode
@@ -196,6 +203,15 @@ func main() {
 		syncHandler = handlers.NewSyncHandler(
 			syncService,
 			log.WithContext("component", "sync_handler"),
+		)
+	}
+
+	// Initialize scheduler handler (only if scheduling service is available)
+	var schedulerHandler *handlers.SchedulerHandler
+	if schedulingService != nil {
+		schedulerHandler = handlers.NewSchedulerHandler(
+			schedulingService,
+			log.WithContext("component", "scheduler_handler"),
 		)
 	}
 
@@ -242,6 +258,17 @@ func main() {
 			r.Get("/strava", stravaHandler.StravaAuthURL)       // Get Strava OAuth URL
 			r.Delete("/strava", stravaHandler.DisconnectStrava) // Disconnect Strava account
 		})
+	})
+
+	// Task routes (internal endpoints with placeholder auth)
+	r.Route("/tasks", func(r chi.Router) {
+		// Apply placeholder auth middleware
+		r.Use(placeholderAuth.Authenticate)
+		
+		// Scheduler endpoint (only if scheduler handler is available)
+		if schedulerHandler != nil {
+			r.Post("/invoke-scheduler", schedulerHandler.InvokeScheduler)
+		}
 	})
 
 	// Protected API routes (authentication required)
