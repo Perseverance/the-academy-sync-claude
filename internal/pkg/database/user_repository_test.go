@@ -23,6 +23,9 @@ func TestGetUsersInProcessingWindow(t *testing.T) {
 	// Create repository
 	repo := NewUserRepository(db, encryptor)
 
+	// Define the expected query pattern that matches the actual implementation
+	expectedQuery := `SELECT id\s+FROM users\s+WHERE automation_enabled = true\s+AND strava_refresh_token IS NOT NULL\s+AND LENGTH\(strava_refresh_token\) > 0\s+AND spreadsheet_id IS NOT NULL\s+AND spreadsheet_id != ''\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 5\s+ORDER BY id`
+
 	tests := []struct {
 		name          string
 		setupMock     func()
@@ -38,7 +41,7 @@ func TestGetUsersInProcessingWindow(t *testing.T) {
 					AddRow(3).
 					AddRow(5)
 
-				mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+				mock.ExpectQuery(expectedQuery).
 					WillReturnRows(rows)
 			},
 			expectedUsers: []int{1, 3, 5},
@@ -49,7 +52,7 @@ func TestGetUsersInProcessingWindow(t *testing.T) {
 			setupMock: func() {
 				rows := sqlmock.NewRows([]string{"id"})
 
-				mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+				mock.ExpectQuery(expectedQuery).
 					WillReturnRows(rows)
 			},
 			expectedUsers: nil, // GetUsersInProcessingWindow returns nil for empty result
@@ -58,7 +61,7 @@ func TestGetUsersInProcessingWindow(t *testing.T) {
 		{
 			name: "handles database error",
 			setupMock: func() {
-				mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+				mock.ExpectQuery(expectedQuery).
 					WillReturnError(sql.ErrConnDone)
 			},
 			expectedUsers: nil,
@@ -68,16 +71,6 @@ func TestGetUsersInProcessingWindow(t *testing.T) {
 		{
 			name: "filters by automation enabled and required fields",
 			setupMock: func() {
-				// The actual query should filter by multiple conditions
-				expectedQuery := `SELECT id FROM users WHERE automation_enabled = true 
-		  AND strava_refresh_token IS NOT NULL
-		  AND LENGTH\(strava_refresh_token\) > 0
-		  AND spreadsheet_id IS NOT NULL
-		  AND spreadsheet_id != ''
-		  AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3
-		  AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 5
-		ORDER BY id`
-
 				rows := sqlmock.NewRows([]string{"id"}).
 					AddRow(2).
 					AddRow(4)
@@ -122,6 +115,9 @@ func TestGetUsersInProcessingWindow(t *testing.T) {
 }
 
 func TestGetUsersInProcessingWindow_Integration(t *testing.T) {
+	// Define the expected query pattern that matches the actual implementation
+	expectedQuery := `SELECT id\s+FROM users\s+WHERE automation_enabled = true\s+AND strava_refresh_token IS NOT NULL\s+AND LENGTH\(strava_refresh_token\) > 0\s+AND spreadsheet_id IS NOT NULL\s+AND spreadsheet_id != ''\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 5\s+ORDER BY id`
+
 	// This test demonstrates the timezone calculation logic
 	// It would require a real database connection to test properly
 	t.Run("timezone calculation", func(t *testing.T) {
@@ -133,25 +129,19 @@ func TestGetUsersInProcessingWindow_Integration(t *testing.T) {
 		encryptor := auth.NewEncryptionService("test-secret-key-32-bytes-long!!!!!")
 		repo := NewUserRepository(db, encryptor)
 
-		// Mock current time as 4 AM UTC
-		// Users with these timezones would be in their 3-5 AM window:
-		// - UTC: 4 AM (in window)
-		// - America/New_York (UTC-5): 11 PM previous day (not in window)
-		// - Europe/London (UTC+0 or UTC+1): 4 AM or 5 AM (in window)
-		// - Asia/Tokyo (UTC+9): 1 PM (not in window)
+		// Test that the query correctly filters by timezone
+		// Add test users with different timezones and verify filtering
+		rows := sqlmock.NewRows([]string{"id"}).
+			AddRow(1). // UTC user (4 AM - in window)
+			AddRow(3)  // Europe/London user (4-5 AM - in window)
 
-		rows := sqlmock.NewRows([]string{"id"})
-		// Only return users whose local time is 3-5 AM
-
-		mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+		mock.ExpectQuery(expectedQuery).
 			WillReturnRows(rows)
 
 		ctx := context.Background()
-		_, err = repo.GetUsersInProcessingWindow(ctx)
-
+		users, err := repo.GetUsersInProcessingWindow(ctx)
 		assert.NoError(t, err)
-		// The result could be nil or empty slice, both are valid
-		// when no users match the criteria
+		assert.Equal(t, []int{1, 3}, users)
 
 		err = mock.ExpectationsWereMet()
 		assert.NoError(t, err)
@@ -159,6 +149,9 @@ func TestGetUsersInProcessingWindow_Integration(t *testing.T) {
 }
 
 func TestGetUsersInProcessingWindow_RowScanError(t *testing.T) {
+	// Define the expected query pattern that matches the actual implementation
+	expectedQuery := `SELECT id\s+FROM users\s+WHERE automation_enabled = true\s+AND strava_refresh_token IS NOT NULL\s+AND LENGTH\(strava_refresh_token\) > 0\s+AND spreadsheet_id IS NOT NULL\s+AND spreadsheet_id != ''\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 5\s+ORDER BY id`
+
 	// Test handling of row scan errors
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
@@ -171,7 +164,7 @@ func TestGetUsersInProcessingWindow_RowScanError(t *testing.T) {
 	rows := sqlmock.NewRows([]string{"id"}).
 		AddRow("not-an-int") // This will cause a scan error
 
-	mock.ExpectQuery(`SELECT id FROM users WHERE automation_enabled = true`).
+	mock.ExpectQuery(expectedQuery).
 		WillReturnRows(rows)
 
 	ctx := context.Background()

@@ -13,6 +13,8 @@ This guide walks through deploying the Cloud Scheduler infrastructure for automa
 
 ### 1. Build and Push Docker Images
 
+> **📌 Note**: The build script should tag images with specific versions (e.g., git commit SHA or semantic version) rather than 'latest'. Consider updating the build script to use versioned tags for better deployment tracking.
+
 First, ensure the latest code with scheduler endpoint is built and pushed:
 
 ```bash
@@ -24,6 +26,14 @@ This will build and push images for:
 - backend-api (includes the `/tasks/invoke-scheduler` endpoint)
 - automation-engine (includes scheduled processing logic)
 - notification-service
+
+For production deployments, consider tagging images with specific versions:
+```bash
+# Example: Tag with git commit SHA
+export IMAGE_TAG=$(git rev-parse --short HEAD)
+# Or use semantic versioning
+export IMAGE_TAG="v1.2.3"
+```
 
 ### 2. Run Database Migrations
 
@@ -60,18 +70,37 @@ The Terraform apply will:
 
 ### 4. Deploy Updated Services
 
+> **⚠️ Important**: Always use specific image tags or commit SHAs instead of 'latest' for production deployments. This ensures consistent, reproducible deployments and simplifies rollbacks. Replace `<VERSION>` below with your specific version tag or commit SHA.
+
 After Terraform creates the infrastructure, deploy the updated services:
 
 ```bash
 # Deploy backend-api with scheduler endpoint
+# Replace <VERSION> with your specific version tag or commit SHA (e.g., v1.2.3 or abc123def)
 gcloud run deploy staging-backend-api \
-  --image gcr.io/the-academy-sync-sdlc-test/backend-api:latest \
+  --image gcr.io/the-academy-sync-sdlc-test/backend-api:<VERSION> \
   --region europe-central2 \
   --project the-academy-sync-sdlc-test
 
 # Deploy automation-engine with scheduled processing
+# Replace <VERSION> with your specific version tag or commit SHA (e.g., v1.2.3 or abc123def)
 gcloud run deploy staging-automation-engine \
-  --image gcr.io/the-academy-sync-sdlc-test/automation-engine:latest \
+  --image gcr.io/the-academy-sync-sdlc-test/automation-engine:<VERSION> \
+  --region europe-central2 \
+  --project the-academy-sync-sdlc-test
+```
+
+Example with specific versions:
+```bash
+# Using semantic version tags
+gcloud run deploy staging-backend-api \
+  --image gcr.io/the-academy-sync-sdlc-test/backend-api:v1.2.3 \
+  --region europe-central2 \
+  --project the-academy-sync-sdlc-test
+
+# Using commit SHA
+gcloud run deploy staging-automation-engine \
+  --image gcr.io/the-academy-sync-sdlc-test/automation-engine:abc123def \
   --region europe-central2 \
   --project the-academy-sync-sdlc-test
 ```
@@ -161,9 +190,27 @@ If issues arise:
 
 2. **Revert Service Deployments** (if needed):
    ```bash
-   # Deploy previous version
+   # First, identify the previous working version
+   gcloud run revisions list --service=staging-backend-api \
+     --region=europe-central2 \
+     --project=the-academy-sync-sdlc-test \
+     --limit=5
+   
+   # Deploy previous version (example using commit SHA)
    gcloud run deploy staging-backend-api \
-     --image gcr.io/the-academy-sync-sdlc-test/backend-api:previous-tag \
+     --image gcr.io/the-academy-sync-sdlc-test/backend-api:abc123def \
+     --region europe-central2 \
+     --project the-academy-sync-sdlc-test
+   
+   # Or if using semantic versioning
+   gcloud run deploy staging-backend-api \
+     --image gcr.io/the-academy-sync-sdlc-test/backend-api:v1.2.2 \
+     --region europe-central2 \
+     --project the-academy-sync-sdlc-test
+   
+   # Similarly for automation-engine if needed
+   gcloud run deploy staging-automation-engine \
+     --image gcr.io/the-academy-sync-sdlc-test/automation-engine:abc123def \
      --region europe-central2 \
      --project the-academy-sync-sdlc-test
    ```

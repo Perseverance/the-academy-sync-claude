@@ -156,20 +156,47 @@ func TestSchedulerHandler_HTTPMethods(t *testing.T) {
 		logger:           log,
 	}
 
-	// Test non-POST methods should be rejected by the router
-	methods := []string{http.MethodGet, http.MethodPut, http.MethodDelete, http.MethodPatch}
+	tests := []struct {
+		method         string
+		expectSuccess  bool
+		expectedStatus int
+	}{
+		{http.MethodPost, true, http.StatusAccepted},
+		{http.MethodGet, false, http.StatusMethodNotAllowed},
+		{http.MethodPut, false, http.StatusMethodNotAllowed},
+		{http.MethodDelete, false, http.StatusMethodNotAllowed},
+		{http.MethodPatch, false, http.StatusMethodNotAllowed},
+		{http.MethodHead, false, http.StatusMethodNotAllowed},
+		{http.MethodOptions, false, http.StatusMethodNotAllowed},
+	}
 	
-	for _, method := range methods {
-		t.Run("method_"+method, func(t *testing.T) {
-			req := httptest.NewRequest(method, "/tasks/invoke-scheduler", nil)
+	for _, tt := range tests {
+		t.Run("method_"+tt.method, func(t *testing.T) {
+			req := httptest.NewRequest(tt.method, "/tasks/invoke-scheduler", nil)
 			rr := httptest.NewRecorder()
 			
-			// In a real scenario, the router would reject these methods
-			// Here we're just documenting the expected behavior
-			// The handler should only be called for POST requests
-			_ = handler
-			_ = req
-			_ = rr
+			// Setup mock expectation only for POST
+			if tt.expectSuccess {
+				mockService.On("ProcessScheduledRun", mock.Anything).Return(2, nil).Once()
+			}
+			
+			// Call the handler
+			handler.InvokeScheduler(rr, req)
+			
+			// Check status code
+			assert.Equal(t, tt.expectedStatus, rr.Code, "Expected status %d for method %s", tt.expectedStatus, tt.method)
+			
+			// For non-POST methods, verify error response
+			if !tt.expectSuccess {
+				var response map[string]string
+				err := json.NewDecoder(rr.Body).Decode(&response)
+				assert.NoError(t, err)
+				assert.Equal(t, "Method Not Allowed", response["error"])
+				assert.Equal(t, "Method not allowed", response["message"])
+			}
+			
+			// Verify mock expectations
+			mockService.AssertExpectations(t)
 		})
 	}
 }

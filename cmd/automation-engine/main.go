@@ -151,31 +151,19 @@ func main() {
 	// Initialize activity log repository
 	activityLogRepo := database.NewActivityLogRepository(db, log)
 
-	// Initialize processing worker
-	worker := processing.NewWorker(
-		configService,
-		tokenPersister,
-		activityLogRepo,
-		cfg.StravaClientID,
-		cfg.StravaClientSecret,
-		cfg.GoogleClientID,
-		cfg.GoogleClientSecret,
-		"", // GoogleRedirectURL not needed for server-side token refresh
-		log,
-	)
-
-	log.Info("Automation engine initialized successfully",
-		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "",
-		"max_workers", cfg.MaxWorkers)
+	log.Info("Core services initialized successfully",
+		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "")
 
 	// Initialize Redis queue client if configured
+	var queueClient *queue.Client
 	if cfg.RedisURL != "" {
-		log.Info("Redis configured - starting worker pool for job processing",
+		log.Info("Redis configured - initializing queue client",
 			"redis_url", cfg.RedisURL,
 			"max_workers", cfg.MaxWorkers)
 
 		// Initialize queue client
-		queueClient, err := queue.NewClient(cfg.RedisURL, "jobs_queue", log)
+		var err error
+		queueClient, err = queue.NewClient(cfg.RedisURL, "jobs_queue", log)
 		if err != nil {
 			log.Critical("Failed to initialize Redis queue client", "error", err)
 			os.Exit(1)
@@ -198,7 +186,29 @@ func main() {
 				"error", "MAX_WORKERS must not exceed 1000 to prevent resource exhaustion")
 			os.Exit(1)
 		}
+	}
 
+	// Initialize processing worker with queue client (if available)
+	worker := processing.NewWorker(
+		configService,
+		tokenPersister,
+		activityLogRepo,
+		queueClient, // Pass queue client (nil if Redis not configured)
+		cfg.StravaClientID,
+		cfg.StravaClientSecret,
+		cfg.GoogleClientID,
+		cfg.GoogleClientSecret,
+		"", // GoogleRedirectURL not needed for server-side token refresh
+		log,
+	)
+
+	log.Info("Automation engine initialized successfully",
+		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "",
+		"max_workers", cfg.MaxWorkers,
+		"redis_configured", queueClient != nil)
+
+	// Start processing based on configuration
+	if queueClient != nil {
 		// Start worker pool
 		startWorkerPool(queueClient, worker, cfg.MaxWorkers, log)
 	} else {
@@ -289,24 +299,6 @@ func processJob(ctx context.Context, workerID int, job *queue.Job, queueClient *
 		"user_id", job.UserID,
 		"trace_id", job.TraceID,
 		"age_seconds", time.Since(job.CreatedAt).Seconds())
-
-	// Ensure we release the processing lock when done
-	defer func() {
-		// Use a fresh context with timeout for lock release to ensure it's not affected by cancellation
-		releaseCtx, releaseCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer releaseCancel()
-
-		if err := queueClient.ReleaseUserProcessingLock(releaseCtx, job.UserID); err != nil {
-			log.Error("Failed to release user processing lock",
-				"error", err,
-				"user_id", job.UserID,
-				"job_id", job.ID)
-		} else {
-			log.Debug("Released user processing lock",
-				"user_id", job.UserID,
-				"job_id", job.ID)
-		}
-	}()
 
 	// Create context with timeout for job processing
 	jobCtx, cancel := context.WithTimeout(ctx, 10*time.Minute)

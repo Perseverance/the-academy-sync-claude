@@ -27,6 +27,15 @@ func NewSchedulerHandler(schedulingService SchedulingService, logger *logger.Log
 func (h *SchedulerHandler) InvokeScheduler(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
+	// Validate HTTP method
+	if r.Method != http.MethodPost {
+		h.logger.Warn("Invalid HTTP method for scheduler invocation",
+			"method", r.Method,
+			"expected", http.MethodPost)
+		h.sendJSONError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
 	// Log the request details
 	h.logger.Info("Scheduler invocation received",
 		"method", r.Method,

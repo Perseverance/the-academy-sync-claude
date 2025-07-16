@@ -951,48 +951,45 @@ func TestRunScheduledCycle_EmptyTrainingPlan(t *testing.T) {
 	}
 }
 
-// Test RunScheduledCycle error handling
-func TestRunScheduledCycle_APIError(t *testing.T) {
-	location, _ := time.LoadLocation("Europe/Sofia")
-	now := time.Now().In(location)
-	yesterday := now.AddDate(0, 0, -1)
-	yesterdayStart := time.Date(yesterday.Year(), yesterday.Month(), yesterday.Day(), 0, 0, 0, 0, location)
-	
+// Test RunScheduledCycle with empty caches (no training plan entries)
+func TestRunScheduledCycle_EmptyCaches(t *testing.T) {
 	mockStrava := &MockStravaClient{}
-	mockSheets := &MockSheetsClient{
-		readRangeErr: fmt.Errorf("API quota exceeded"),
-	}
+	mockSheets := &MockSheetsClient{}
 	
 	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 	
-	// Pre-populate training cache with an entry that will trigger processing
+	// Empty caches simulate no training plan entries or activities
 	trainingCache := make(TrainingPlanCache)
-	trainingCache[yesterday.Format("2006-01-02")] = &TrainingPlanEntry{
-		Date:         yesterdayStart,
-		ActivityType: "Бягане",
-		Description:  "Easy run",
-		RPE:          5,
-		IsProcessed:  false,
-		Row:          2,
-	}
-	
-	// Pre-populate activities cache (empty for yesterday, but initialized)
 	activitiesCache := make(StravaActivitiesCache)
-	activitiesCache[yesterday.Format("2006-01-02")] = []strava.Activity{}
 	
-	// The error should occur when trying to fetch training plan entry
-	// Since we've pre-populated the cache, the error won't occur unless we modify the logic
-	// Let's run it and expect success with the pre-populated cache
+	// RunScheduledCycle should complete successfully but process nothing
 	result, err := service.RunScheduledCycle(context.Background(), config, trainingCache, activitiesCache)
 	
-	// With pre-populated cache, it should succeed despite the mock error
+	// Should not error with empty caches
 	if err != nil {
-		t.Errorf("Expected no error with pre-populated cache, got %v", err)
+		t.Errorf("Expected no error with empty caches, got: %v", err)
 	}
 	
 	if result == nil {
-		t.Error("Expected result with pre-populated cache")
+		t.Fatal("Expected result, got nil")
+	}
+	
+	// Verify nothing was processed
+	if result.ProcessedDays != 0 {
+		t.Errorf("Expected 0 processed days with empty caches, got %d", result.ProcessedDays)
+	}
+	
+	if result.ActivitiesCount != 0 {
+		t.Errorf("Expected 0 activities with empty caches, got %d", result.ActivitiesCount)
+	}
+	
+	if result.RowsUpdated != 0 {
+		t.Errorf("Expected 0 rows updated with empty caches, got %d", result.RowsUpdated)
+	}
+	
+	if result.Error != "" {
+		t.Errorf("Expected no error message with empty caches, got: %s", result.Error)
 	}
 }
 
