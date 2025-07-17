@@ -350,7 +350,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	processingService := NewProcessingService(stravaClient, sheetsClient, w.activityLogRepo, w.logger)
 
 	// Step 6: Calculate date range and fetch training plan cache
-	w.logger.Info("📊 Step 6: Fetching training plan data",
+	w.logger.Info("📊 Step 6: Fetching training plan data to identify unprocessed days",
 		"user_id", userID,
 		"job_type", jobType)
 
@@ -390,27 +390,62 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 		return result
 	}
 
-	// Step 7: Fetch all Strava activities once
-	w.logger.Info("🏃 Step 7: Fetching Strava activities",
+	// Step 7: Identify unprocessed days
+	w.logger.Info("🔍 Step 7: Identifying unprocessed days",
 		"user_id", userID,
-		"job_type", jobType)
+		"total_training_plan_entries", len(trainingPlanCache))
 
-	// Fetch all Strava activities for the date range
-	stravaActivitiesCache, err := processingService.FetchAllStravaActivities(ctx, location, startDate, endDate)
-	if err != nil {
-		w.logger.Error("Failed to fetch Strava activities",
-			"error", err,
-			"user_id", userID,
-			"date_range", fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")))
-		result.ProcessingTime = time.Since(startTime)
-		result.Error = fmt.Sprintf("Failed to fetch Strava activities: %v", err)
-		result.ErrorType = "STRAVA_API_ERROR"
-		// Persist Strava API error to activity log
-		w.persistProcessingResult(ctx, userID, jobType, result, location, 0)
-		return result
+	// Get unprocessed workout days (scheduled runs)
+	unprocessedWorkoutDays := processingService.GetUnprocessedWorkoutDays(trainingPlanCache)
+	
+	// Also get ALL unprocessed days to catch rest days with activities
+	allUnprocessedDays := processingService.GetAllUnprocessedDays(trainingPlanCache)
+	
+	w.logger.Info("Identified unprocessed days",
+		"user_id", userID,
+		"unprocessed_workout_days", len(unprocessedWorkoutDays),
+		"all_unprocessed_days", len(allUnprocessedDays),
+		"workout_dates", func() []string {
+			dates := make([]string, len(unprocessedWorkoutDays))
+			for i, date := range unprocessedWorkoutDays {
+				dates[i] = date.Format("2006-01-02")
+			}
+			return dates
+		}())
+
+	// Step 8: Fetch Strava activities
+	w.logger.Info("🏃 Step 8: Fetching Strava activities for unprocessed days",
+		"user_id", userID,
+		"job_type", jobType,
+		"primary_days_to_fetch", len(unprocessedWorkoutDays),
+		"all_unprocessed_days", len(allUnprocessedDays))
+
+	var stravaActivitiesCache StravaActivitiesCache
+	if len(allUnprocessedDays) > 0 {
+		// Fetch Strava activities for the date range covering all unprocessed days
+		// but focus on workout days for optimization
+		stravaActivitiesCache, err = processingService.FetchStravaActivitiesForDates(ctx, location, unprocessedWorkoutDays, allUnprocessedDays)
+		if err != nil {
+			w.logger.Error("Failed to fetch Strava activities",
+				"error", err,
+				"user_id", userID,
+				"unprocessed_workout_days", len(unprocessedWorkoutDays),
+				"all_unprocessed_days", len(allUnprocessedDays))
+			result.ProcessingTime = time.Since(startTime)
+			result.Error = fmt.Sprintf("Failed to fetch Strava activities: %v", err)
+			result.ErrorType = "STRAVA_API_ERROR"
+			// Persist Strava API error to activity log
+			w.persistProcessingResult(ctx, userID, jobType, result, location, 0)
+			return result
+		}
+	} else {
+		// No unprocessed days at all, create empty cache
+		stravaActivitiesCache = make(StravaActivitiesCache)
+		w.logger.Info("No unprocessed days found, skipping Strava API call",
+			"user_id", userID)
 	}
 
-	// Step 8: Process based on job type and trigger type
+	// Step 9: Process based on job type and trigger type
 	// Check if this is a scheduled run by looking at trigger_type in job data
 	var isScheduledRun bool
 	if jobData != nil {
@@ -419,7 +454,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 		}
 	}
 
-	w.logger.Info("📊 Step 8: Processing data based on job type",
+	w.logger.Info("📊 Step 9: Processing data based on job type",
 		"user_id", userID,
 		"job_type", jobType,
 		"is_scheduled_run", isScheduledRun,
@@ -555,9 +590,9 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	}
 	} // End of !isScheduledRun block
 
-	// Step 9: Batch update spreadsheet if we have any updates
+	// Step 10: Batch update spreadsheet if we have any updates
 	if len(spreadsheetUpdates) > 0 {
-		w.logger.Info("📝 Step 9: Writing updates to Google Sheets",
+		w.logger.Info("📝 Step 10: Writing updates to Google Sheets",
 			"user_id", userID,
 			"update_count", len(spreadsheetUpdates))
 
@@ -580,7 +615,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 			"update_count", 0)
 	}
 
-	// Step 10: Handle results
+	// Step 11: Handle results
 	processingDuration := time.Since(startTime)
 
 	if len(processingErrors) > 0 {
@@ -600,9 +635,9 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 		return result
 	}
 
-	// Step 11: Queue notification (if enabled)
+	// Step 12: Queue notification (if enabled)
 	if config.EmailNotificationsEnabled && totalActivities > 0 {
-		w.logger.Debug("📧 Step 11: Queueing notification (TODO: implement)",
+		w.logger.Debug("📧 Step 12: Queueing notification (TODO: implement)",
 			"user_id", userID,
 			"email", config.Email,
 			"activity_count", totalActivities)

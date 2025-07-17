@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"math"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
@@ -220,6 +221,155 @@ func (s *ProcessingService) ProcessLookbackPeriod(ctx context.Context, config *a
 		"errors", errorCount)
 
 	return results, nil
+}
+
+// GetUnprocessedWorkoutDays analyzes the training plan cache and returns dates that need processing
+// A day needs processing if:
+// 1. It has a scheduled workout (Бягане) OR has existing activities
+// 2. It is NOT already processed (no bold text in description)
+func (s *ProcessingService) GetUnprocessedWorkoutDays(trainingCache TrainingPlanCache) []time.Time {
+	var unprocessedDays []time.Time
+	
+	for dateKey, entry := range trainingCache {
+		// Skip if already processed (has bold text)
+		if entry.IsProcessed {
+			continue
+		}
+		
+		// Include if it's a scheduled run day
+		if entry.ActivityType == "Бягане" {
+			unprocessedDays = append(unprocessedDays, entry.Date)
+		}
+	}
+	
+	// Sort dates in ascending order
+	sort.Slice(unprocessedDays, func(i, j int) bool {
+		return unprocessedDays[i].Before(unprocessedDays[j])
+	})
+	
+	return unprocessedDays
+}
+
+// GetAllUnprocessedDays returns all unprocessed days from the training plan cache
+// regardless of activity type. This is used to ensure we can still process
+// rest days if they have activities.
+func (s *ProcessingService) GetAllUnprocessedDays(trainingCache TrainingPlanCache) []time.Time {
+	var unprocessedDays []time.Time
+	
+	for _, entry := range trainingCache {
+		// Skip if already processed (has bold text)
+		if entry.IsProcessed {
+			continue
+		}
+		
+		unprocessedDays = append(unprocessedDays, entry.Date)
+	}
+	
+	// Sort dates in ascending order
+	sort.Slice(unprocessedDays, func(i, j int) bool {
+		return unprocessedDays[i].Before(unprocessedDays[j])
+	})
+	
+	return unprocessedDays
+}
+
+// FetchStravaActivitiesForDates fetches Strava activities only for specific dates
+// It will also populate the cache for any additional unprocessed dates where activities are found
+func (s *ProcessingService) FetchStravaActivitiesForDates(ctx context.Context, location *time.Location, dates []time.Time, allUnprocessedDates []time.Time) (StravaActivitiesCache, error) {
+	if len(dates) == 0 && len(allUnprocessedDates) == 0 {
+		return make(StravaActivitiesCache), nil
+	}
+	
+	// Find the earliest and latest dates from all unprocessed dates
+	var minDate, maxDate time.Time
+	
+	allDates := append(dates, allUnprocessedDates...)
+	if len(allDates) > 0 {
+		minDate = allDates[0]
+		maxDate = allDates[0]
+		for _, date := range allDates {
+			if date.Before(minDate) {
+				minDate = date
+			}
+			if date.After(maxDate) {
+				maxDate = date
+			}
+		}
+	}
+	
+	// Add one day to maxDate to ensure we capture all activities
+	maxDate = maxDate.AddDate(0, 0, 1)
+	
+	s.logger.Info("Fetching Strava activities for date range",
+		"primary_dates", len(dates),
+		"all_unprocessed_dates", len(allUnprocessedDates),
+		"start_date", minDate.Format("2006-01-02"),
+		"end_date", maxDate.Format("2006-01-02"),
+		"timezone", location.String())
+	
+	// Fetch activities from Strava API
+	activities, err := s.stravaClient.GetActivities(ctx, minDate)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch activities: %w", err)
+	}
+	
+	// Build cache
+	cache := make(StravaActivitiesCache)
+	
+	// Pre-populate cache with empty slices for all unprocessed dates
+	dateSet := make(map[string]bool)
+	for _, date := range dates {
+		dateKey := date.Format("2006-01-02")
+		cache[dateKey] = []strava.Activity{}
+		dateSet[dateKey] = true
+	}
+	for _, date := range allUnprocessedDates {
+		dateKey := date.Format("2006-01-02")
+		if !dateSet[dateKey] {
+			cache[dateKey] = []strava.Activity{}
+		}
+	}
+	
+	// Organize activities by their start date - only include runs
+	for _, activity := range activities {
+		// Skip non-running activities
+		if activity.Type != "Run" {
+			s.logger.Warn("Non-run activity found in processing",
+				"activity_id", activity.ID,
+				"activity_type", activity.Type,
+				"activity_name", activity.Name)
+			continue
+		}
+		
+		// Convert activity start time to user's timezone
+		activityStart := activity.StartDate.In(location)
+		dateKey := activityStart.Format("2006-01-02")
+		
+		// Only include if this date is in our cache (unprocessed dates)
+		if existingActivities, exists := cache[dateKey]; exists {
+			cache[dateKey] = append(existingActivities, activity)
+		}
+	}
+	
+	// Log summary
+	totalActivities := 0
+	datesWithActivities := 0
+	for date, activities := range cache {
+		if len(activities) > 0 {
+			totalActivities += len(activities)
+			datesWithActivities++
+			s.logger.Debug("Activities found for date",
+				"date", date,
+				"count", len(activities))
+		}
+	}
+	
+	s.logger.Info("Strava activities fetch completed",
+		"total_activities", totalActivities,
+		"dates_with_activities", datesWithActivities,
+		"cache_size", len(cache))
+	
+	return cache, nil
 }
 
 // RunScheduledCycle orchestrates the full processing cycle for a scheduled automation run.
