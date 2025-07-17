@@ -230,7 +230,7 @@ func (s *ProcessingService) ProcessLookbackPeriod(ctx context.Context, config *a
 func (s *ProcessingService) GetUnprocessedWorkoutDays(trainingCache TrainingPlanCache) []time.Time {
 	var unprocessedDays []time.Time
 	
-	for dateKey, entry := range trainingCache {
+	for _, entry := range trainingCache {
 		// Skip if already processed (has bold text)
 		if entry.IsProcessed {
 			continue
@@ -508,6 +508,7 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 	if planEntry.IsProcessed {
 		result.Processed = false
 		result.SkippedReason = "Day already processed (bold text found)"
+		result.ActivitiesFound = 0 // Don't count activities for already processed days
 		s.logger.Info("Skipping day - already processed",
 			"user_id", config.UserID,
 			"date", dayStart.Format("2006-01-02"),
