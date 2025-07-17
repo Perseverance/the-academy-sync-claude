@@ -263,10 +263,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       // Call the actual sync API
       const response = await syncService.triggerManualSync()
       
-      console.log('Manual sync triggered successfully:', {
-        status: response.status,
-        message: response.message
-      })
+      // Manual sync triggered successfully
       
       // Show success toast notification
       toast({
@@ -291,18 +288,30 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             
             // Check if we found new activity logs
             if (newActivityCount > initialActivityCount) {
-              console.log(`Found ${newActivityCount - initialActivityCount} new activity log(s) after ${pollCount} poll(s)`)
               
               // Calculate total activities from the new logs
               let totalActivitiesProcessed = 0
-              const newLogs = user.recent_activity_logs.slice(initialActivityCount)
+              // Get only the new logs that were added since sync started
+              // The array is in reverse chronological order (newest first)
+              // So we need to get the first N logs where N = newActivityCount - initialActivityCount
+              const numNewLogs = newActivityCount - initialActivityCount
+              const newLogs = user.recent_activity_logs.slice(0, numNewLogs)
+              
               
               for (const log of newLogs) {
-                // Parse activity count from summary text
-                // Examples: "1 activity found", "3 activities found", "No activities found"
-                const activityMatch = log.summary.match(/(\d+) activit(?:y|ies) found/)
-                if (activityMatch) {
-                  totalActivitiesProcessed += parseInt(activityMatch[1], 10)
+                // Parse processed count from summary text
+                // Examples: "1 activity found, 1 processed", "6 activities found, 1 processed"
+                const processedMatch = log.summary.match(/(\d+) processed/)
+                if (processedMatch) {
+                  const processed = parseInt(processedMatch[1], 10)
+                  totalActivitiesProcessed += processed
+                } else {
+                  // Fallback: if no "processed" count, check if activities were found
+                  const activityMatch = log.summary.match(/(\d+) activit(?:y|ies) found/)
+                  if (activityMatch) {
+                    const found = parseInt(activityMatch[1], 10)
+                    totalActivitiesProcessed += found
+                  }
                 }
               }
               
@@ -335,7 +344,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
             pollingTimeoutRef.current = setTimeout(pollForNewActivity, pollInterval)
           } else {
             // Max polls reached or component unmounted
-            console.log(`Stopped polling after ${pollCount} attempts`)
+            // Stopped polling after max attempts
             if (isMountedRef.current) {
               setState((s) => ({ ...s, manualSyncStatus: "Ready" }))
             }

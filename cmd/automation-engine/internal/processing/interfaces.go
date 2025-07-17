@@ -4,6 +4,7 @@ import (
 	"context"
 	"time"
 
+	"google.golang.org/api/sheets/v4"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/google"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/strava"
@@ -22,6 +23,7 @@ type SheetsClient interface {
 	GetSpreadsheetInfo(ctx context.Context, spreadsheetID string) (*google.SpreadsheetInfo, error)
 	WriteActivities(ctx context.Context, spreadsheetID string, activities []strava.Activity) error
 	BatchUpdateTrainingPlan(ctx context.Context, spreadsheetID string, updates []*google.SpreadsheetUpdate) error
+	GetCellFormatting(ctx context.Context, spreadsheetID, rangeSpec string) (map[string]*sheets.CellFormat, error)
 }
 
 // ActivityLogRepository defines the interface for activity log persistence

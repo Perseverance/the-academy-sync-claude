@@ -78,6 +78,8 @@ type DayProcessingResult struct {
 	PlanEntry         *TrainingPlanEntry
 	SpreadsheetUpdate *SpreadsheetUpdate
 	Error             error
+	IsNewlyProcessed  bool // true if this day wasn't bold before
+	HasChanges        bool // true if any values changed
 }
 
 // TrainingPlanCache maps date strings (YYYY-MM-DD) to training plan entries
@@ -408,7 +410,10 @@ func (s *ProcessingService) RunScheduledCycle(ctx context.Context, config *autom
 	// Add previous day result to overall results
 	if previousDayResult != nil {
 		overallResult.DetailedResults = append(overallResult.DetailedResults, previousDayResult)
-		overallResult.ActivitiesCount += previousDayResult.ActivitiesFound
+		// Only count activities for newly processed days
+		if previousDayResult.IsNewlyProcessed {
+			overallResult.ActivitiesCount += previousDayResult.ActivitiesFound
+		}
 		if previousDayResult.SpreadsheetUpdate != nil {
 			overallResult.RowsUpdated++
 		}
@@ -432,7 +437,10 @@ func (s *ProcessingService) RunScheduledCycle(ctx context.Context, config *autom
 	// Add lookback results to overall results
 	for _, dayResult := range lookbackResults {
 		overallResult.DetailedResults = append(overallResult.DetailedResults, dayResult)
-		overallResult.ActivitiesCount += dayResult.ActivitiesFound
+		// Only count activities for newly processed days
+		if dayResult.IsNewlyProcessed {
+			overallResult.ActivitiesCount += dayResult.ActivitiesFound
+		}
 		if dayResult.SpreadsheetUpdate != nil {
 			overallResult.RowsUpdated++
 		}
@@ -504,11 +512,16 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 		"has_distance", planEntry.Distance != nil,
 		"has_time", planEntry.Time != nil)
 
+	// Track whether this day was already processed before
+	wasAlreadyProcessed := planEntry.IsProcessed
+	
 	// Check if already processed (based on bold text)
 	if planEntry.IsProcessed {
 		result.Processed = false
 		result.SkippedReason = "Day already processed (bold text found)"
 		result.ActivitiesFound = 0 // Don't count activities for already processed days
+		result.IsNewlyProcessed = false
+		result.HasChanges = false
 		s.logger.Info("Skipping day - already processed",
 			"user_id", config.UserID,
 			"date", dayStart.Format("2006-01-02"),
@@ -581,6 +594,8 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 		"total_time_minutes", totalTime/60)
 
 	result.Processed = true
+	result.IsNewlyProcessed = !wasAlreadyProcessed
+	result.HasChanges = true // We're making changes since we prepared a spreadsheet update
 	return result, nil
 }
 
@@ -730,7 +745,24 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 		"entries_found", len(cache),
 		"date_range", fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")))
 
-	return cache, nil
+	// Filter cache to only include entries within the requested date range
+	// This ensures we only process the exact date range requested, even though
+	// we fetched extra rows as a buffer for safety
+	filteredCache := make(TrainingPlanCache)
+	for dateKey, entry := range cache {
+		if !entry.Date.Before(startDate) && !entry.Date.After(endDate) {
+			filteredCache[dateKey] = entry
+		}
+	}
+
+	s.logger.Debug("Filtered training plan entries to requested date range",
+		"user_id", config.UserID,
+		"total_fetched", len(cache),
+		"filtered_count", len(filteredCache),
+		"start_date", startDate.Format("2006-01-02"),
+		"end_date", endDate.Format("2006-01-02"))
+
+	return filteredCache, nil
 }
 
 // fetchTrainingPlanEntry retrieves the training plan for a specific day from the cache
@@ -754,18 +786,45 @@ func (s *ProcessingService) fetchTrainingPlanEntry(ctx context.Context, config *
 
 // fetchBoldStatuses retrieves formatting info to determine which rows have bold descriptions
 func (s *ProcessingService) fetchBoldStatuses(ctx context.Context, spreadsheetID, rangeSpec string, startRow, rowCount int) (map[int]bool, error) {
-	// This will make a separate API call to get cell formatting
-	// For now, we'll return an empty map and add this to the SheetsClient interface later
-	// The actual implementation will check the bold status of column J for each row
 	s.logger.Debug("Checking bold statuses for training plan entries",
 		"spreadsheet_id", spreadsheetID,
 		"range", rangeSpec,
 		"start_row", startRow,
 		"row_count", rowCount)
 	
-	// TODO: Implement actual bold status checking via Sheets API
-	// This requires adding a new method to SheetsClient interface
-	return make(map[int]bool), nil
+	// Get cell formatting from the spreadsheet
+	formatting, err := s.sheetsClient.GetCellFormatting(ctx, spreadsheetID, rangeSpec)
+	if err != nil {
+		s.logger.Warn("Failed to get cell formatting, assuming no bold status",
+			"error", err,
+			"spreadsheet_id", spreadsheetID,
+			"range", rangeSpec)
+		return make(map[int]bool), nil
+	}
+	
+	// Build map of row -> is bold for column J (index 9)
+	boldStatuses := make(map[int]bool)
+	descriptionCol := 9 // Column J
+	
+	for rowIdx := 0; rowIdx < rowCount; rowIdx++ {
+		actualRow := startRow + rowIdx
+		key := fmt.Sprintf("%d:%d", actualRow-1, descriptionCol) // 0-indexed for API
+		
+		if cellFormat, exists := formatting[key]; exists {
+			if cellFormat.TextFormat != nil && cellFormat.TextFormat.Bold {
+				boldStatuses[actualRow] = true
+				s.logger.Debug("Found bold text in row",
+					"row", actualRow,
+					"column", "J")
+			}
+		}
+	}
+	
+	s.logger.Debug("Bold status check complete",
+		"total_rows", rowCount,
+		"bold_rows", len(boldStatuses))
+	
+	return boldStatuses, nil
 }
 
 // parseTrainingPlanRow parses a spreadsheet row into a TrainingPlanEntry

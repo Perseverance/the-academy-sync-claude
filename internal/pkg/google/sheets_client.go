@@ -428,6 +428,60 @@ func (c *SheetsClient) GetSpreadsheetInfo(ctx context.Context, spreadsheetID str
 }
 
 // ReadRange reads values from a specified range in the spreadsheet
+// GetCellFormatting retrieves cell formatting information for a specified range
+// Returns a map of "row:col" -> formatting info
+func (c *SheetsClient) GetCellFormatting(ctx context.Context, spreadsheetID, rangeSpec string) (map[string]*sheets.CellFormat, error) {
+	c.logger.Debug("Getting cell formatting from Google Spreadsheet",
+		"user_id", c.userID,
+		"spreadsheet_id", spreadsheetID,
+		"range", rangeSpec)
+
+	// Ensure we have a valid token and service
+	if err := c.ensureValidToken(ctx); err != nil {
+		return nil, err
+	}
+
+	startTime := time.Now()
+	
+	// Use includeGridData to get formatting information
+	resp, err := c.sheetsService.Spreadsheets.Get(spreadsheetID).
+		Ranges(rangeSpec).
+		IncludeGridData(true).
+		Context(ctx).
+		Do()
+	
+	if err != nil {
+		return nil, c.handleSheetsAPIError(err, "get formatting", spreadsheetID)
+	}
+
+	c.logger.Debug("Successfully retrieved cell formatting",
+		"user_id", c.userID,
+		"spreadsheet_id", spreadsheetID,
+		"range", rangeSpec,
+		"duration_ms", time.Since(startTime).Milliseconds())
+
+	// Parse formatting data
+	formatting := make(map[string]*sheets.CellFormat)
+	
+	for _, sheet := range resp.Sheets {
+		for _, gridData := range sheet.Data {
+			startRow := int(gridData.StartRow)
+			startCol := int(gridData.StartColumn)
+			
+			for rowIdx, rowData := range gridData.RowData {
+				for colIdx, cellData := range rowData.Values {
+					if cellData.UserEnteredFormat != nil {
+						key := fmt.Sprintf("%d:%d", startRow+rowIdx, startCol+colIdx)
+						formatting[key] = cellData.UserEnteredFormat
+					}
+				}
+			}
+		}
+	}
+
+	return formatting, nil
+}
+
 // NOTE: In future, we should optimize the reading range to only read a small slice of data
 // based on the actual date range being processed
 func (c *SheetsClient) ReadRange(ctx context.Context, spreadsheetID, rangeSpec string) ([][]interface{}, error) {

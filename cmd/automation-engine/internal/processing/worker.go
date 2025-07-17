@@ -71,13 +71,14 @@ func NewWorker(
 
 // WorkerProcessingResult represents the outcome of processing a user's automation job
 type WorkerProcessingResult struct {
-	UserID          int           `json:"user_id"`
-	Success         bool          `json:"success"`
-	ActivitiesCount int           `json:"activities_count"`
-	ProcessingTime  time.Duration `json:"processing_time"`
-	Error           string        `json:"error,omitempty"`
-	ErrorType       string        `json:"error_type,omitempty"`
-	RequiresReauth  bool          `json:"requires_reauth"`
+	UserID                int           `json:"user_id"`
+	Success               bool          `json:"success"`
+	ActivitiesCount       int           `json:"activities_count"`      // Newly processed activities
+	TotalActivitiesFound  int           `json:"total_activities_found"` // Total activities found
+	ProcessingTime        time.Duration `json:"processing_time"`
+	Error                 string        `json:"error,omitempty"`
+	ErrorType             string        `json:"error_type,omitempty"`
+	RequiresReauth        bool          `json:"requires_reauth"`
 }
 
 // ProcessUser processes automation for a single user
@@ -461,7 +462,8 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 		"training_plan_entries", len(trainingPlanCache),
 		"strava_activity_days", len(stravaActivitiesCache))
 
-	var totalActivities int
+	var totalActivities int        // Newly processed activities
+	var totalActivitiesFound int   // Total activities found (including already processed)
 	var processingErrors []error
 	var spreadsheetUpdates []*google.SpreadsheetUpdate
 
@@ -493,8 +495,10 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 			return result
 		}
 
-		// Convert detailed results to spreadsheet updates
+		// Convert detailed results to spreadsheet updates and track total activities
 		for _, dayResult := range scheduledResult.DetailedResults {
+			// Track total activities found
+			totalActivitiesFound += dayResult.ActivitiesFound
 			if dayResult.Processed && dayResult.SpreadsheetUpdate != nil {
 				update := &google.SpreadsheetUpdate{
 					Row:              dayResult.SpreadsheetUpdate.Row,
@@ -520,7 +524,12 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 		} else if todayResult.Error != nil {
 			processingErrors = append(processingErrors, fmt.Errorf("today processing error: %w", todayResult.Error))
 		} else {
-			totalActivities += todayResult.ActivitiesFound
+			// Track total activities found
+			totalActivitiesFound += todayResult.ActivitiesFound
+			// Only count activities for newly processed days
+			if todayResult.IsNewlyProcessed {
+				totalActivities += todayResult.ActivitiesFound
+			}
 			if todayResult.Processed && todayResult.SpreadsheetUpdate != nil {
 				// Convert to google.SpreadsheetUpdate
 				update := &google.SpreadsheetUpdate{
@@ -550,7 +559,12 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	} else if prevDayResult.Error != nil {
 		processingErrors = append(processingErrors, fmt.Errorf("previous day processing error: %w", prevDayResult.Error))
 	} else {
-		totalActivities += prevDayResult.ActivitiesFound
+		// Track total activities found
+		totalActivitiesFound += prevDayResult.ActivitiesFound
+		// Only count activities for newly processed days
+		if prevDayResult.IsNewlyProcessed {
+			totalActivities += prevDayResult.ActivitiesFound
+		}
 		if prevDayResult.Processed && prevDayResult.SpreadsheetUpdate != nil {
 			// Convert to google.SpreadsheetUpdate
 			update := &google.SpreadsheetUpdate{
@@ -572,7 +586,12 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	} else {
 		for _, lr := range lookbackResults {
 			if lr.Error == nil && lr.Processed {
-				totalActivities += lr.ActivitiesFound
+				// Track total activities found
+				totalActivitiesFound += lr.ActivitiesFound
+				// Only count activities for newly processed days
+				if lr.IsNewlyProcessed {
+					totalActivities += lr.ActivitiesFound
+				}
 				if lr.SpreadsheetUpdate != nil {
 					// Convert to google.SpreadsheetUpdate
 					update := &google.SpreadsheetUpdate{
@@ -630,6 +649,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 		result.Error = fmt.Sprintf("Processing failed with %d errors", len(processingErrors))
 		result.ErrorType = "PROCESSING_ERROR"
 		result.ActivitiesCount = totalActivities
+		result.TotalActivitiesFound = totalActivitiesFound
 		// Persist processing errors to activity log
 		w.persistProcessingResult(ctx, userID, jobType, result, location, len(spreadsheetUpdates))
 		return result
@@ -647,6 +667,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	// Complete processing successfully
 	result.Success = true
 	result.ActivitiesCount = totalActivities
+	result.TotalActivitiesFound = totalActivitiesFound
 	result.ProcessingTime = processingDuration
 
 	w.logger.Info("🎉 Successfully completed automation processing for user",
@@ -654,6 +675,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 		"job_type", jobType,
 		"processing_summary", map[string]interface{}{
 			"activity_count":         totalActivities,
+			"total_activities_found": totalActivitiesFound,
 			"processing_duration_ms": processingDuration.Milliseconds(),
 			"email":                  config.Email,
 			"spreadsheet_id":         config.SpreadsheetID,
@@ -784,8 +806,8 @@ func (w *Worker) persistProcessingResult(ctx context.Context, userID int, jobTyp
 		ProcessingType:       processingType,
 		ProcessingScope:      processingScope,
 		Status:               status,
-		ActivitiesFound:      result.ActivitiesCount,
-		ActivitiesProcessed:  result.ActivitiesCount, // For now, assuming all found were processed
+		ActivitiesFound:      result.TotalActivitiesFound,  // Total activities found
+		ActivitiesProcessed:  result.ActivitiesCount,        // Only newly processed activities
 		SpreadsheetUpdated:   rowsUpdated > 0,
 		ErrorMessage:         errorMessage,
 		ProcessingStartedAt:  processingDate.Add(-result.ProcessingTime),

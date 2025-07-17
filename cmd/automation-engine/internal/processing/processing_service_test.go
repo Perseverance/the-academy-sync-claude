@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/api/sheets/v4"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/automation"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/google"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
@@ -81,6 +82,11 @@ func (m *MockSheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsh
 	m.batchUpdateCalls++
 	m.lastBatchUpdates = updates
 	return nil
+}
+
+func (m *MockSheetsClient) GetCellFormatting(ctx context.Context, spreadsheetID, rangeSpec string) (map[string]*sheets.CellFormat, error) {
+	// Return empty formatting by default (no bold text)
+	return make(map[string]*sheets.CellFormat), nil
 }
 
 // Helper function to create test logger
