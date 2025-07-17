@@ -77,23 +77,8 @@ func TestSchedulerHandler_InvokeScheduler(t *testing.T) {
 			expectError: true,
 		},
 		{
-			name:        "invalid json body",
-			requestBody: "{invalid json",
-			setupMock: func(mockService *MockSchedulingService) {
-				// The handler doesn't parse JSON, so it will still call the service
-				mockService.On("ProcessScheduledRun", mock.Anything).Return(3, nil)
-			},
-			expectedStatus: http.StatusAccepted,
-			expectedResponse: map[string]interface{}{
-				"status": "accepted",
-				"message": "Scheduled processing initiated",
-				"jobs_enqueued": float64(3),
-			},
-			expectError: false,
-		},
-		{
-			name:        "empty body",
-			requestBody: "",
+			name:        "request body ignored",
+			requestBody: "any content here is ignored",
 			setupMock: func(mockService *MockSchedulingService) {
 				mockService.On("ProcessScheduledRun", mock.Anything).Return(3, nil)
 			},
@@ -122,7 +107,6 @@ func TestSchedulerHandler_InvokeScheduler(t *testing.T) {
 			// Create request
 			req := httptest.NewRequest(http.MethodPost, "/tasks/invoke-scheduler", 
 				bytes.NewBufferString(tt.requestBody))
-			req.Header.Set("Content-Type", "application/json")
 
 			// Create response recorder
 			rr := httptest.NewRecorder()
@@ -220,7 +204,6 @@ func TestSchedulerHandler_ConcurrentRequests(t *testing.T) {
 		go func() {
 			req := httptest.NewRequest(http.MethodPost, "/tasks/invoke-scheduler", 
 				bytes.NewBufferString("{}"))
-			req.Header.Set("Content-Type", "application/json")
 			rr := httptest.NewRecorder()
 			
 			handler.InvokeScheduler(rr, req)

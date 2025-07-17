@@ -139,6 +139,14 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) error {
 		return fmt.Errorf("failed to enqueue sync job: %w", err)
 	}
 
+	// Release the lock after successful enqueue so automation-engine can acquire it
+	if releaseErr := s.queueClient.ReleaseUserProcessingLock(ctx, userID); releaseErr != nil {
+		s.logger.Error("Failed to release processing lock after successful enqueue",
+			"error", releaseErr,
+			"user_id", userID)
+		// Don't fail the request since job was already enqueued
+	}
+
 	s.logger.Info("Manual sync job enqueued successfully",
 		"user_id", userID,
 		"job_id", job.ID,
