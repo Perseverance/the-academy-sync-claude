@@ -13,6 +13,12 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/strava"
 )
 
+// QueueClient interface for distributed locking operations
+type QueueClient interface {
+	AcquireUserProcessingLock(ctx context.Context, userID int, ttl time.Duration) (bool, error)
+	ReleaseUserProcessingLock(ctx context.Context, userID int) error
+}
+
 // Worker handles processing automation jobs for individual users
 // This implements the core processing logic that coordinates user configuration retrieval
 // and API client operations as specified in US022, US023, and US024
@@ -28,6 +34,7 @@ type Worker struct {
 	configService     *automation.ConfigService
 	tokenPersister    auth.TokenPersister
 	activityLogRepo   ActivityLogRepository
+	queueClient       QueueClient // Add queue client for distributed locking
 	logger            *logger.Logger
 
 	// OAuth credentials for API clients
@@ -43,6 +50,7 @@ func NewWorker(
 	configService *automation.ConfigService,
 	tokenPersister auth.TokenPersister,
 	activityLogRepo ActivityLogRepository,
+	queueClient QueueClient,
 	stravaClientID, stravaClientSecret string,
 	googleClientID, googleClientSecret, googleRedirectURL string,
 	logger *logger.Logger,
@@ -51,6 +59,7 @@ func NewWorker(
 		configService:      configService,
 		tokenPersister:     tokenPersister,
 		activityLogRepo:    activityLogRepo,
+		queueClient:        queueClient,
 		stravaClientID:     stravaClientID,
 		stravaClientSecret: stravaClientSecret,
 		googleClientID:     googleClientID,
@@ -60,8 +69,8 @@ func NewWorker(
 	}
 }
 
-// ProcessingResult represents the outcome of processing a user's automation job
-type ProcessingResult struct {
+// WorkerProcessingResult represents the outcome of processing a user's automation job
+type WorkerProcessingResult struct {
 	UserID          int           `json:"user_id"`
 	Success         bool          `json:"success"`
 	ActivitiesCount int           `json:"activities_count"`
@@ -77,8 +86,55 @@ type ProcessingResult struct {
 // 2. Create API clients with token management (US023, US024)
 // 3. Process data based on job type (manual or scheduled sync)
 // 4. Handle errors gracefully with proper logging
-func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *ProcessingResult {
+func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *WorkerProcessingResult {
+	return w.ProcessUserWithData(ctx, userID, jobType, nil)
+}
+
+// ProcessUserWithData processes automation for a single user with optional job data
+// This method allows passing additional job data that may contain trigger_type for scheduled runs
+func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType string, jobData map[string]interface{}) *WorkerProcessingResult {
 	startTime := time.Now()
+
+	// Acquire distributed lock for user processing
+	if w.queueClient != nil {
+		// Use a 10-minute TTL for the lock to match the job processing timeout
+		lockAcquired, err := w.queueClient.AcquireUserProcessingLock(ctx, userID, 10*time.Minute)
+		if err != nil {
+			w.logger.Error("Failed to acquire user processing lock",
+				"error", err,
+				"user_id", userID,
+				"job_type", jobType)
+			return &WorkerProcessingResult{
+				UserID:         userID,
+				Success:        false,
+				ProcessingTime: time.Since(startTime),
+				Error:          fmt.Sprintf("Failed to acquire processing lock: %v", err),
+				ErrorType:      "LOCK_ERROR",
+			}
+		}
+
+		if !lockAcquired {
+			w.logger.Info("User is already being processed, skipping",
+				"user_id", userID,
+				"job_type", jobType)
+			return &WorkerProcessingResult{
+				UserID:         userID,
+				Success:        false,
+				ProcessingTime: time.Since(startTime),
+				Error:          "User is already being processed",
+				ErrorType:      "ALREADY_PROCESSING",
+			}
+		}
+
+		// Ensure lock is released when processing completes
+		defer func() {
+			if err := w.queueClient.ReleaseUserProcessingLock(ctx, userID); err != nil {
+				w.logger.Error("Failed to release user processing lock",
+					"error", err,
+					"user_id", userID)
+			}
+		}()
+	}
 
 	w.logger.Info("🚀 Starting automation processing for user",
 		"user_id", userID,
@@ -96,7 +152,7 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 			"has_google_client_secret": w.googleClientSecret != "",
 		})
 
-	result := &ProcessingResult{
+	result := &WorkerProcessingResult{
 		UserID:         userID,
 		Success:        false,
 		ProcessingTime: 0,
@@ -354,10 +410,19 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 		return result
 	}
 
-	// Step 8: Process based on job type
+	// Step 8: Process based on job type and trigger type
+	// Check if this is a scheduled run by looking at trigger_type in job data
+	var isScheduledRun bool
+	if jobData != nil {
+		if triggerType, ok := jobData["trigger_type"].(string); ok && triggerType == "scheduled" {
+			isScheduledRun = true
+		}
+	}
+
 	w.logger.Info("📊 Step 8: Processing data based on job type",
 		"user_id", userID,
 		"job_type", jobType,
+		"is_scheduled_run", isScheduledRun,
 		"training_plan_entries", len(trainingPlanCache),
 		"strava_activity_days", len(stravaActivitiesCache))
 
@@ -365,8 +430,50 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 	var processingErrors []error
 	var spreadsheetUpdates []*google.SpreadsheetUpdate
 
-	// For manual sync, also process today's data
-	if jobType == "manual_sync" {
+	// Handle scheduled runs using RunScheduledCycle
+	if isScheduledRun {
+		w.logger.Debug("Processing scheduled run - will process yesterday and 7-day lookback",
+			"user_id", userID,
+			"timezone", config.Timezone)
+
+		// Use RunScheduledCycle for scheduled runs (US035)
+		scheduledResult, err := processingService.RunScheduledCycle(ctx, config, trainingPlanCache, stravaActivitiesCache)
+		if err != nil {
+			result.ProcessingTime = time.Since(startTime)
+			result.Error = fmt.Sprintf("Scheduled cycle processing failed: %v", err)
+			result.ErrorType = "PROCESSING_ERROR"
+			// Persist error to activity log
+			w.persistProcessingResult(ctx, userID, jobType, result, location, 0)
+			return result
+		}
+
+		// Update result from scheduled cycle
+		totalActivities = scheduledResult.ActivitiesCount
+		if scheduledResult.Error != "" {
+			result.ProcessingTime = time.Since(startTime)
+			result.Error = scheduledResult.Error
+			result.ErrorType = "PROCESSING_ERROR"
+			// Persist error to activity log
+			w.persistProcessingResult(ctx, userID, jobType, result, location, scheduledResult.RowsUpdated)
+			return result
+		}
+
+		// Convert detailed results to spreadsheet updates
+		for _, dayResult := range scheduledResult.DetailedResults {
+			if dayResult.Processed && dayResult.SpreadsheetUpdate != nil {
+				update := &google.SpreadsheetUpdate{
+					Row:              dayResult.SpreadsheetUpdate.Row,
+					DistanceValue:    dayResult.SpreadsheetUpdate.DistanceValue,
+					TimeValue:        dayResult.SpreadsheetUpdate.TimeValue,
+					RPEValue:         dayResult.SpreadsheetUpdate.RPEValue,
+					DescriptionValue: dayResult.SpreadsheetUpdate.DescriptionValue,
+					DescriptionBold:  dayResult.SpreadsheetUpdate.DescriptionBold,
+				}
+				spreadsheetUpdates = append(spreadsheetUpdates, update)
+			}
+		}
+	} else if jobType == "manual_sync" {
+		// For manual sync, also process today's data
 		w.logger.Debug("Processing manual sync - will process today, yesterday, and 7-day lookback",
 			"user_id", userID,
 			"timezone", config.Timezone)
@@ -398,8 +505,11 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 			"timezone", config.Timezone)
 	}
 
-	// Process previous day (US025) - common for both sync types
-	prevDayResult, err := processingService.ProcessPreviousDay(ctx, config, trainingPlanCache, stravaActivitiesCache)
+	// Only process previous day and lookback for non-scheduled runs
+	// (scheduled runs already processed these in RunScheduledCycle)
+	if !isScheduledRun {
+		// Process previous day (US025) - for manual and regular scheduled sync
+		prevDayResult, err := processingService.ProcessPreviousDay(ctx, config, trainingPlanCache, stravaActivitiesCache)
 	if err != nil {
 		processingErrors = append(processingErrors, fmt.Errorf("previous day processing failed: %w", err))
 	} else if prevDayResult.Error != nil {
@@ -443,6 +553,7 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 			}
 		}
 	}
+	} // End of !isScheduledRun block
 
 	// Step 9: Batch update spreadsheet if we have any updates
 	if len(spreadsheetUpdates) > 0 {
@@ -522,12 +633,12 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *P
 
 // ProcessUsers processes automation for multiple users
 // This method handles batch processing with individual error isolation
-func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int, jobType string) []*ProcessingResult {
+func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int, jobType string) []*WorkerProcessingResult {
 	w.logger.Info("Starting batch automation processing",
 		"user_count", len(userIDs),
 		"job_type", jobType)
 
-	results := make([]*ProcessingResult, len(userIDs))
+	results := make([]*WorkerProcessingResult, len(userIDs))
 
 	for i, userID := range userIDs {
 		w.logger.Debug("Processing user in batch",
@@ -581,7 +692,7 @@ func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int, jobType string
 }
 
 // persistProcessingResult saves the processing outcome to the activity log
-func (w *Worker) persistProcessingResult(ctx context.Context, userID int, jobType string, result *ProcessingResult, location *time.Location, rowsUpdated int) {
+func (w *Worker) persistProcessingResult(ctx context.Context, userID int, jobType string, result *WorkerProcessingResult, location *time.Location, rowsUpdated int) {
 
 	// Skip if no activity log repository configured
 	if w.activityLogRepo == nil {

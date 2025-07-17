@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 )
@@ -26,20 +25,15 @@ var (
 	ErrSyncAlreadyInProgress = errors.New("sync already in progress for this user")
 )
 
-// UserRepository interface for testability
-type UserRepository interface {
-	GetUserByID(ctx context.Context, userID int) (*database.User, error)
-}
-
 // SyncService handles manual sync operations
 type SyncService struct {
 	userRepo    UserRepository
-	queueClient *queue.Client
+	queueClient QueueClient
 	logger      *logger.Logger
 }
 
 // NewSyncService creates a new sync service
-func NewSyncService(userRepo UserRepository, queueClient *queue.Client, logger *logger.Logger) *SyncService {
+func NewSyncService(userRepo UserRepository, queueClient QueueClient, logger *logger.Logger) *SyncService {
 	if queueClient == nil {
 		panic("queue client is required for sync service")
 	}
@@ -143,6 +137,14 @@ func (s *SyncService) TriggerManualSync(ctx context.Context, userID int) error {
 			"error", err,
 			"user_id", userID)
 		return fmt.Errorf("failed to enqueue sync job: %w", err)
+	}
+
+	// Release the lock after successful enqueue so automation-engine can acquire it
+	if releaseErr := s.queueClient.ReleaseUserProcessingLock(ctx, userID); releaseErr != nil {
+		s.logger.Error("Failed to release processing lock after successful enqueue",
+			"error", releaseErr,
+			"user_id", userID)
+		// Don't fail the request since job was already enqueued
 	}
 
 	s.logger.Info("Manual sync job enqueued successfully",

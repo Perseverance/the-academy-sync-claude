@@ -55,6 +55,10 @@ func (m *mockUserRepository) UpdateSpreadsheetID(ctx context.Context, userID int
 	return nil
 }
 
+func (m *mockUserRepository) GetUsersInProcessingWindow(ctx context.Context) ([]int, error) {
+	return nil, nil
+}
+
 func setupSyncServiceTest(t *testing.T) (*miniredis.Miniredis, *queue.Client, *SyncService, *mockUserRepository) {
 	// Setup Redis
 	mr, err := miniredis.Run()

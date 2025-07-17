@@ -85,6 +85,16 @@ type TrainingPlanCache map[string]*TrainingPlanEntry
 // StravaActivitiesCache maps date strings (YYYY-MM-DD) to activities for that day
 type StravaActivitiesCache map[string][]strava.Activity
 
+// ProcessingResult represents the overall outcome of a processing cycle
+type ProcessingResult struct {
+	ProcessingTime  time.Duration
+	ActivitiesCount int
+	RowsUpdated     int
+	ProcessedDays   int
+	Error           string
+	DetailedResults []*DayProcessingResult
+}
+
 // ProcessPreviousDay processes the immediately preceding calendar day for a user (US025)
 // This function determines "yesterday" based on the user's timezone and processes all activities for that day
 func (s *ProcessingService) ProcessPreviousDay(ctx context.Context, config *automation.ProcessingConfig, trainingCache TrainingPlanCache, activitiesCache StravaActivitiesCache) (*DayProcessingResult, error) {
@@ -210,6 +220,87 @@ func (s *ProcessingService) ProcessLookbackPeriod(ctx context.Context, config *a
 		"errors", errorCount)
 
 	return results, nil
+}
+
+// RunScheduledCycle orchestrates the full processing cycle for a scheduled automation run.
+// This implements US035: Engine Orchestrates Full Processing Cycle for a Single User (Automated Run).
+// It executes the following sequence:
+// 1. Process the previous day (yesterday)
+// 2. Process the 7-day lookback period
+// Note: It does NOT process "today so far" - that's only for manual runs
+func (s *ProcessingService) RunScheduledCycle(ctx context.Context, config *automation.ProcessingConfig, trainingCache TrainingPlanCache, activitiesCache StravaActivitiesCache) (*ProcessingResult, error) {
+	s.logger.Info("Starting scheduled cycle processing", "user_id", config.UserID)
+
+	// Initialize the overall result
+	overallResult := &ProcessingResult{
+		ProcessingTime:   time.Duration(0),
+		ActivitiesCount:  0,
+		RowsUpdated:      0,
+		ProcessedDays:    0,
+		Error:            "",
+		DetailedResults:  make([]*DayProcessingResult, 0),
+	}
+
+	startTime := time.Now()
+
+	// Step 1: Process the previous day
+	s.logger.Info("Processing previous day for scheduled run", "user_id", config.UserID)
+	previousDayResult, err := s.ProcessPreviousDay(ctx, config, trainingCache, activitiesCache)
+	if err != nil {
+		s.logger.Error("Failed to process previous day in scheduled cycle",
+			"user_id", config.UserID,
+			"error", err)
+		overallResult.Error = fmt.Sprintf("Failed to process previous day: %v", err)
+		overallResult.ProcessingTime = time.Since(startTime)
+		return overallResult, err
+	}
+
+	// Add previous day result to overall results
+	if previousDayResult != nil {
+		overallResult.DetailedResults = append(overallResult.DetailedResults, previousDayResult)
+		overallResult.ActivitiesCount += previousDayResult.ActivitiesFound
+		if previousDayResult.SpreadsheetUpdate != nil {
+			overallResult.RowsUpdated++
+		}
+		if previousDayResult.Processed {
+			overallResult.ProcessedDays++
+		}
+	}
+
+	// Step 2: Process the 7-day lookback period
+	s.logger.Info("Processing 7-day lookback period for scheduled run", "user_id", config.UserID)
+	lookbackResults, err := s.ProcessLookbackPeriod(ctx, config, trainingCache, activitiesCache)
+	if err != nil {
+		s.logger.Error("Failed to process lookback period in scheduled cycle",
+			"user_id", config.UserID,
+			"error", err)
+		overallResult.Error = fmt.Sprintf("Failed to process lookback period: %v", err)
+		overallResult.ProcessingTime = time.Since(startTime)
+		return overallResult, err
+	}
+
+	// Add lookback results to overall results
+	for _, dayResult := range lookbackResults {
+		overallResult.DetailedResults = append(overallResult.DetailedResults, dayResult)
+		overallResult.ActivitiesCount += dayResult.ActivitiesFound
+		if dayResult.SpreadsheetUpdate != nil {
+			overallResult.RowsUpdated++
+		}
+		if dayResult.Processed {
+			overallResult.ProcessedDays++
+		}
+	}
+
+	// Calculate total processing time
+	overallResult.ProcessingTime = time.Since(startTime)
+
+	s.logger.Info("Completed scheduled cycle processing",
+		"user_id", config.UserID,
+		"total_activities", overallResult.ActivitiesCount,
+		"total_rows_updated", overallResult.RowsUpdated,
+		"processing_time", overallResult.ProcessingTime.String())
+
+	return overallResult, nil
 }
 
 // processSingleDay contains the core logic for processing one calendar day
