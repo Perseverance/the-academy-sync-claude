@@ -103,6 +103,13 @@ func createTestConfig(userID int, timezone string) *automation.ProcessingConfig 
 	}
 }
 
+// Helper to parse dates in a specific timezone
+func parseTestDate(dateStr string, timezone string) time.Time {
+	location, _ := time.LoadLocation(timezone)
+	date, _ := time.ParseInLocation("2006-01-02", dateStr, location)
+	return date
+}
+
 // Test fetchAllTrainingPlanEntries with successful data
 func TestFetchAllTrainingPlanEntries_Success(t *testing.T) {
 	mockStrava := &MockStravaClient{}
@@ -117,8 +124,8 @@ func TestFetchAllTrainingPlanEntries_Success(t *testing.T) {
 	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
-	startDate, _ := time.Parse("2006-01-02", "2025-05-01")
-	endDate, _ := time.Parse("2006-01-02", "2025-05-03")
+	startDate := parseTestDate("2025-05-01", "Europe/Sofia")
+	endDate := parseTestDate("2025-05-03", "Europe/Sofia")
 
 	cache, err := service.FetchAllTrainingPlanEntries(context.Background(), config, startDate, endDate)
 
@@ -159,8 +166,8 @@ func TestFetchAllTrainingPlanEntries_SmartRangeCalculation(t *testing.T) {
 	config := createTestConfig(1, "Europe/Sofia")
 
 	// Test mid-year dates (June 22-25)
-	startDate, _ := time.Parse("2006-01-02", "2025-06-22")
-	endDate, _ := time.Parse("2006-01-02", "2025-06-25")
+	startDate := parseTestDate("2025-06-22", "Europe/Sofia")
+	endDate := parseTestDate("2025-06-25", "Europe/Sofia")
 
 	_, _ = service.FetchAllTrainingPlanEntries(context.Background(), config, startDate, endDate)
 
@@ -187,7 +194,8 @@ func TestParseTrainingPlanRow_StandardDateFormat(t *testing.T) {
 
 	for _, tc := range testCases {
 		row := []interface{}{tc.dateStr, "", "", "Бягане", "10", "01:00:00", "", "", "5", "Test"}
-		entry := service.parseTrainingPlanRow(row, 2)
+		location, _ := time.LoadLocation("UTC")
+		entry := service.parseTrainingPlanRow(row, 2, location)
 
 		if entry.Date.Format("2006-01-02") != tc.expectedDate {
 			t.Errorf("For date string '%s', expected %s, got %s",
@@ -202,7 +210,8 @@ func TestParseTrainingPlanRow_InvalidDate(t *testing.T) {
 
 	// Invalid date format
 	row := []interface{}{"32.13.2025", "", "", "Бягане", "10", "01:00:00", "", "", "5", "Test"}
-	entry := service.parseTrainingPlanRow(row, 2)
+	location, _ := time.LoadLocation("UTC")
+	entry := service.parseTrainingPlanRow(row, 2, location)
 
 	if !entry.Date.IsZero() {
 		t.Error("Expected zero date for invalid date string")
@@ -219,7 +228,7 @@ func TestProcessSingleDay_NoTrainingPlan(t *testing.T) {
 	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
-	date, _ := time.Parse("2006-01-02", "2025-05-01")
+	date := parseTestDate("2025-05-01", "Europe/Sofia")
 	cache := make(TrainingPlanCache) // Empty cache
 
 	activitiesCache := make(StravaActivitiesCache)
@@ -246,7 +255,7 @@ func TestProcessSingleDay_AlreadyProcessed(t *testing.T) {
 	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
-	date, _ := time.Parse("2006-01-02", "2025-05-01")
+	date := parseTestDate("2025-05-01", "Europe/Sofia")
 	cache := TrainingPlanCache{
 		"2025-05-01": &TrainingPlanEntry{
 			Date:         date,
@@ -274,7 +283,7 @@ func TestProcessSingleDay_AlreadyProcessed(t *testing.T) {
 
 // Test rest day with activity (RPE = 2 special case)
 func TestProcessSingleDay_RestDayWithActivity(t *testing.T) {
-	date, _ := time.Parse("2006-01-02", "2025-05-01")
+	date := parseTestDate("2025-05-01", "Europe/Sofia")
 	dateKey := date.Format("2006-01-02")
 
 	mockStrava := &MockStravaClient{
@@ -325,7 +334,7 @@ func TestProcessSingleDay_RestDayWithActivity(t *testing.T) {
 
 // Test scheduled run with no activity
 func TestProcessSingleDay_ScheduledRunNoActivity(t *testing.T) {
-	date, _ := time.Parse("2006-01-02", "2025-05-01")
+	date := parseTestDate("2025-05-01", "Europe/Sofia")
 	dateKey := date.Format("2006-01-02")
 
 	mockStrava := &MockStravaClient{
@@ -387,8 +396,8 @@ func TestProcessing_SingleAPICall(t *testing.T) {
 	config := createTestConfig(1, "Europe/Sofia")
 
 	// Test processing multiple days with cache
-	startDate, _ := time.Parse("2006-01-02", "2025-05-01")
-	endDate, _ := time.Parse("2006-01-02", "2025-05-03")
+	startDate := parseTestDate("2025-05-01", "Europe/Sofia")
+	endDate := parseTestDate("2025-05-03", "Europe/Sofia")
 
 	// Fetch cache once
 	cache, err := service.FetchAllTrainingPlanEntries(context.Background(), config, startDate, endDate)
@@ -425,8 +434,8 @@ func TestFetchAllTrainingPlanEntries_EmptySpreadsheet(t *testing.T) {
 	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
-	startDate, _ := time.Parse("2006-01-02", "2025-05-01")
-	endDate, _ := time.Parse("2006-01-02", "2025-05-03")
+	startDate := parseTestDate("2025-05-01", "Europe/Sofia")
+	endDate := parseTestDate("2025-05-03", "Europe/Sofia")
 
 	cache, err := service.FetchAllTrainingPlanEntries(context.Background(), config, startDate, endDate)
 
@@ -561,8 +570,8 @@ func TestFetchAllTrainingPlanEntries_YearBoundary(t *testing.T) {
 	config := createTestConfig(1, "Europe/Sofia")
 
 	// Test crossing year boundary
-	startDate, _ := time.Parse("2006-01-02", "2024-12-30")
-	endDate, _ := time.Parse("2006-01-02", "2025-01-01")
+	startDate := parseTestDate("2024-12-30", "Europe/Sofia")
+	endDate := parseTestDate("2025-01-01", "Europe/Sofia")
 
 	cache, err := service.FetchAllTrainingPlanEntries(context.Background(), config, startDate, endDate)
 
@@ -650,8 +659,8 @@ func TestFetchAllTrainingPlanEntries_APIError(t *testing.T) {
 	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
 	config := createTestConfig(1, "Europe/Sofia")
 
-	startDate, _ := time.Parse("2006-01-02", "2025-05-01")
-	endDate, _ := time.Parse("2006-01-02", "2025-05-03")
+	startDate := parseTestDate("2025-05-01", "Europe/Sofia")
+	endDate := parseTestDate("2025-05-03", "Europe/Sofia")
 
 	_, err := service.FetchAllTrainingPlanEntries(context.Background(), config, startDate, endDate)
 
@@ -666,7 +675,7 @@ func TestFetchAllTrainingPlanEntries_APIError(t *testing.T) {
 
 // Test that spreadsheet updates are properly prepared
 func TestSpreadsheetUpdatePreparation(t *testing.T) {
-	date, _ := time.Parse("2006-01-02", "2025-05-01")
+	date := parseTestDate("2025-05-01", "Europe/Sofia")
 	dateKey := date.Format("2006-01-02")
 
 	mockStrava := &MockStravaClient{
