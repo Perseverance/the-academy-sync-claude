@@ -13,6 +13,7 @@ func TestLoadFromEnv(t *testing.T) {
 		"APP_ENV", "PORT", "POSTGRES_DB", "POSTGRES_USER", "POSTGRES_PASSWORD",
 		"POSTGRES_HOST", "POSTGRES_PORT", "REDIS_HOST", "REDIS_PORT",
 		"GOOGLE_CLIENT_ID", "GOOGLE_CLIENT_SECRET", "JWT_SECRET",
+		"SENDGRID_API_KEY", "FROM_EMAIL",
 	}
 
 	for _, key := range testEnvVars {
@@ -44,6 +45,8 @@ func TestLoadFromEnv(t *testing.T) {
 		"GOOGLE_CLIENT_ID":     "test_google_id",
 		"GOOGLE_CLIENT_SECRET": "test_google_secret",
 		"JWT_SECRET":           "test_jwt_secret",
+		"SENDGRID_API_KEY":     "test_sendgrid_key",
+		"FROM_EMAIL":           "test@example.com",
 	}
 
 	for key, value := range testValues {
@@ -71,6 +74,14 @@ func TestLoadFromEnv(t *testing.T) {
 
 	if config.GoogleClientID != "test_google_id" {
 		t.Errorf("Expected GoogleClientID to be 'test_google_id', got '%s'", config.GoogleClientID)
+	}
+
+	if config.SendGridAPIKey != "test_sendgrid_key" {
+		t.Errorf("Expected SendGridAPIKey to be 'test_sendgrid_key', got '%s'", config.SendGridAPIKey)
+	}
+
+	if config.FromEmail != "test@example.com" {
+		t.Errorf("Expected FromEmail to be 'test@example.com', got '%s'", config.FromEmail)
 	}
 
 	// Verify database URL construction
@@ -335,6 +346,81 @@ func TestGetEnv(t *testing.T) {
 	result = getEnv("TEST_VAR", "default")
 	if result != "default" {
 		t.Errorf("Expected 'default', got '%s'", result)
+	}
+}
+
+func TestSendGridConfiguration(t *testing.T) {
+	// Save original environment
+	originalEnv := make(map[string]string)
+	testEnvVars := []string{"SENDGRID_API_KEY", "FROM_EMAIL", "APP_ENV"}
+
+	for _, key := range testEnvVars {
+		originalEnv[key] = os.Getenv(key)
+		os.Unsetenv(key)
+	}
+
+	// Clean up after test
+	defer func() {
+		for _, key := range testEnvVars {
+			if originalValue, exists := originalEnv[key]; exists {
+				os.Setenv(key, originalValue)
+			} else {
+				os.Unsetenv(key)
+			}
+		}
+	}()
+
+	tests := []struct {
+		name           string
+		sendgridKey    string
+		fromEmail      string
+		expectKey      string
+		expectEmail    string
+	}{
+		{
+			name:        "with SendGrid configuration",
+			sendgridKey: "SG.test-api-key",
+			fromEmail:   "noreply@example.com",
+			expectKey:   "SG.test-api-key",
+			expectEmail: "noreply@example.com",
+		},
+		{
+			name:        "without SendGrid configuration",
+			sendgridKey: "",
+			fromEmail:   "",
+			expectKey:   "",
+			expectEmail: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Clear environment variables first
+			os.Unsetenv("SENDGRID_API_KEY")
+			os.Unsetenv("FROM_EMAIL")
+			
+			// Set test environment
+			os.Setenv("APP_ENV", "local")
+			if tt.sendgridKey != "" {
+				os.Setenv("SENDGRID_API_KEY", tt.sendgridKey)
+			}
+			if tt.fromEmail != "" {
+				os.Setenv("FROM_EMAIL", tt.fromEmail)
+			}
+
+			config, err := loadFromEnv()
+			if err != nil {
+				t.Fatalf("loadFromEnv() failed: %v", err)
+			}
+
+			if config.SendGridAPIKey != tt.expectKey {
+				t.Errorf("Expected SendGridAPIKey to be '%s', got '%s'", tt.expectKey, config.SendGridAPIKey)
+			}
+
+			if config.FromEmail != tt.expectEmail {
+				t.Errorf("Expected FromEmail to be '%s', got '%s'", tt.expectEmail, config.FromEmail)
+			}
+		})
 	}
 }
 

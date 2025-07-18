@@ -120,21 +120,9 @@ resource "google_secret_manager_secret" "frontend_url" {
   depends_on = [google_project_service.secretmanager]
 }
 
-# SMTP Username
-resource "google_secret_manager_secret" "smtp_username" {
-  secret_id = "smtp-username"
-  project   = var.project_id
-  
-  replication {
-    auto {}
-  }
-  
-  depends_on = [google_project_service.secretmanager]
-}
-
-# SMTP Password
-resource "google_secret_manager_secret" "smtp_password" {
-  secret_id = "smtp-password"
+# SendGrid API Key
+resource "google_secret_manager_secret" "sendgrid_api_key" {
+  secret_id = "sendgrid-api-key"
   project   = var.project_id
   
   replication {
@@ -273,18 +261,9 @@ resource "google_secret_manager_secret_version" "frontend_url" {
   }
 }
 
-resource "google_secret_manager_secret_version" "smtp_username" {
-  secret      = google_secret_manager_secret.smtp_username.id
-  secret_data = "placeholder"
-  
-  lifecycle {
-    ignore_changes = [secret_data]
-  }
-}
-
-resource "google_secret_manager_secret_version" "smtp_password" {
-  secret      = google_secret_manager_secret.smtp_password.id
-  secret_data = "placeholder"
+resource "google_secret_manager_secret_version" "sendgrid_api_key" {
+  secret      = google_secret_manager_secret.sendgrid_api_key.id
+  secret_data = var.sendgrid_api_key
   
   lifecycle {
     ignore_changes = [secret_data]

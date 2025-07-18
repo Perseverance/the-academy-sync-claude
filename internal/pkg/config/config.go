@@ -49,12 +49,9 @@ type Config struct {
 	// Encryption configuration
 	EncryptionSecret string `json:"encryption_secret"`
 
-	// SMTP configuration
-	SMTPHost     string `json:"smtp_host"`
-	SMTPPort     string `json:"smtp_port"`
-	SMTPUsername string `json:"smtp_username"`
-	SMTPPassword string `json:"smtp_password"`
-	FromEmail    string `json:"from_email"`
+	// SendGrid configuration
+	SendGridAPIKey string `json:"sendgrid_api_key"`
+	FromEmail      string `json:"from_email"`
 
 	// GCP configuration
 	GCPProjectID string `json:"gcp_project_id"`
@@ -132,12 +129,9 @@ func loadFromEnv() (*Config, error) {
 		// Encryption
 		EncryptionSecret: getEnv("ENCRYPTION_SECRET", ""),
 
-		// SMTP
-		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
-		SMTPPort:     getEnv("SMTP_PORT", "587"),
-		SMTPUsername: getEnv("SMTP_USERNAME", ""),
-		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
-		FromEmail:    getEnv("FROM_EMAIL", ""),
+		// SendGrid
+		SendGridAPIKey: getEnv("SENDGRID_API_KEY", ""),
+		FromEmail:      getEnv("FROM_EMAIL", ""),
 
 		// GCP
 		GCPProjectID: getEnv("GCP_PROJECT_ID", ""),
@@ -211,8 +205,7 @@ func loadFromSecretManager() (*Config, error) {
 		"strava-client-secret": new(string),
 		"jwt-secret":           new(string),
 		"encryption-secret":    new(string),
-		"smtp-username":        new(string),
-		"smtp-password":        new(string),
+		"sendgrid-api-key":     new(string),
 		"from-email":           new(string),
 		"database-password":    new(string),
 	}
@@ -248,13 +241,10 @@ func loadFromSecretManager() (*Config, error) {
 		StravaClientSecret: getValueOrEnv(secrets["strava-client-secret"], "STRAVA_CLIENT_SECRET", ""),
 		JWTSecret:          getValueOrEnv(secrets["jwt-secret"], "JWT_SECRET", ""),
 		EncryptionSecret:   getValueOrEnv(secrets["encryption-secret"], "ENCRYPTION_SECRET", ""),
-		SMTPUsername:       getValueOrEnv(secrets["smtp-username"], "SMTP_USERNAME", ""),
-		SMTPPassword:       getValueOrEnv(secrets["smtp-password"], "SMTP_PASSWORD", ""),
+		SendGridAPIKey:     getValueOrEnv(secrets["sendgrid-api-key"], "SENDGRID_API_KEY", ""),
 		FromEmail:          getValueOrEnv(secrets["from-email"], "FROM_EMAIL", ""),
 
-		// These typically come from environment in GCP
-		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
-		SMTPPort:     getEnv("SMTP_PORT", "587"),
+		// GCP configuration
 		GCPProjectID: projectID,
 
 		// Database components (for URL construction if needed)
@@ -360,12 +350,9 @@ func loadFromEnvForProduction() (*Config, error) {
 		// Encryption
 		EncryptionSecret: getEnv("ENCRYPTION_SECRET", ""),
 
-		// SMTP
-		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
-		SMTPPort:     getEnv("SMTP_PORT", "587"),
-		SMTPUsername: getEnv("SMTP_USERNAME", ""),
-		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
-		FromEmail:    getEnv("FROM_EMAIL", ""),
+		// SendGrid
+		SendGridAPIKey: getEnv("SENDGRID_API_KEY", ""),
+		FromEmail:      getEnv("FROM_EMAIL", ""),
 
 		// GCP
 		GCPProjectID: getEnv("GCP_PROJECT_ID", ""),

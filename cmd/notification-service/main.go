@@ -13,6 +13,7 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/sendgrid"
 )
 
 // performStartupHealthChecks validates critical dependencies and fails fast if any are unavailable
@@ -56,9 +57,9 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 	//     // Redis health check logic here
 	// }
 
-	// TODO: Add SMTP health check when email functionality is implemented
-	// if cfg.SMTPHost != "" {
-	//     // SMTP connectivity check logic here
+	// TODO: Add SendGrid health check when email functionality is implemented
+	// if cfg.SendGridAPIKey != "" {
+	//     // SendGrid connectivity check logic here
 	// }
 
 	log.Info("Dependency health checks completed")
@@ -83,7 +84,8 @@ func main() {
 	log.Info("Configuration status",
 		"database_configured", cfg.DatabaseURL != "",
 		"redis_configured", cfg.RedisURL != "",
-		"smtp_configured", cfg.SMTPHost != "" && cfg.SMTPUsername != "")
+		"sendgrid_configured", cfg.SendGridAPIKey != "",
+		"from_email", cfg.FromEmail)
 
 	// Dependency Health Check - US046 Fail Fast Mechanism
 	// Validate critical dependencies before starting processing loop
@@ -93,11 +95,36 @@ func main() {
 		os.Exit(2) // Exit code 2 indicates dependency failure
 	}
 
+	// Initialize SendGrid client if configured
+	var sendgridClient *sendgrid.Client
+	if cfg.SendGridAPIKey != "" && cfg.FromEmail != "" {
+		sendgridClient = sendgrid.NewClient(cfg.SendGridAPIKey, cfg.FromEmail)
+		log.Info("SendGrid client initialized",
+			"from_email", cfg.FromEmail)
+	} else {
+		log.Warn("SendGrid not configured - email functionality will be disabled")
+	}
+
 	// Start HTTP server for health checks (required by Cloud Run)
 	go startHealthServer(log)
 
+	// TODO: Implement notification queue processing
+	// This is where we'll use sendgridClient to send emails
 	for {
-		log.Debug("Processing notification queue", "environment", cfg.Environment)
+		log.Debug("Processing notification queue", 
+			"environment", cfg.Environment,
+			"sendgrid_enabled", sendgridClient != nil)
+		
+		// Example usage (to be implemented):
+		// if sendgridClient != nil {
+		//     notifications := fetchPendingNotifications()
+		//     for _, notification := range notifications {
+		//         err := sendgridClient.SendEmail(notification.ToEmail, notification.ToName, notification.Subject, notification.PlainText, notification.HTML)
+		//         if err != nil {
+		//             log.Error("Failed to send email", "error", err)
+		//         }
+		//     }
+		// }
 		time.Sleep(30 * time.Second)
 	}
 }

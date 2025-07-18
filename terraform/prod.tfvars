@@ -64,3 +64,6 @@ log_level = "WARNING"
 # Frontend configuration
 domain_name     = "theacademysync.run"
 enable_dns_zone = true
+
+# SendGrid configuration
+sendgrid_api_key = "placeholder"
