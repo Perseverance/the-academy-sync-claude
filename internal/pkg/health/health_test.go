@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -91,7 +92,7 @@ func TestCheckSendGrid(t *testing.T) {
 			}
 
 			if tt.errorContains != "" && result.Error != nil {
-				if !contains(result.Error.Error(), tt.errorContains) {
+				if !strings.Contains(result.Error.Error(), tt.errorContains) {
 					t.Errorf("Expected error to contain '%s', got '%s'", tt.errorContains, result.Error.Error())
 				}
 			}
@@ -114,6 +115,9 @@ func TestCheckSendGridTimeout(t *testing.T) {
 	}))
 	defer server.Close()
 
+	// Override SendGrid API URL to use test server
+	checker.sendGridAPIURL = server.URL
+
 	// Create context with short timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 	defer cancel()
@@ -127,9 +131,10 @@ func TestCheckSendGridTimeout(t *testing.T) {
 	if result.Error == nil {
 		t.Error("Expected error for timeout")
 	}
+
+	// Verify the error is a timeout error
+	if result.Error != nil && !strings.Contains(result.Error.Error(), "context deadline exceeded") {
+		t.Errorf("Expected timeout error, got: %v", result.Error)
+	}
 }
 
-// Helper function
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || contains(s[1:], substr) || (len(s) > len(substr) && s[:len(substr)] == substr))
-}
