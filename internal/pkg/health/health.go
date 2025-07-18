@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net/http"
 	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
@@ -11,7 +12,8 @@ import (
 
 // HealthChecker provides functionality to check the health of various dependencies
 type HealthChecker struct {
-	log *logger.Logger
+	log            *logger.Logger
+	sendGridAPIURL string // Allow overriding for testing
 }
 
 // HealthCheckResult represents the result of a health check operation
@@ -24,7 +26,10 @@ type HealthCheckResult struct {
 
 // NewHealthChecker creates a new health checker instance
 func NewHealthChecker(log *logger.Logger) *HealthChecker {
-	return &HealthChecker{log: log}
+	return &HealthChecker{
+		log:            log,
+		sendGridAPIURL: "https://api.sendgrid.com",
+	}
 }
 
 // CheckDatabase performs a health check on the database connection
@@ -109,4 +114,75 @@ func (r *HealthCheckResult) String() string {
 		return fmt.Sprintf("Service '%s' is healthy (latency: %v)", r.Service, r.Latency)
 	}
 	return fmt.Sprintf("Service '%s' is unhealthy: %v (latency: %v)", r.Service, r.Error, r.Latency)
+}
+
+// CheckSendGrid performs a health check on the SendGrid API connectivity
+// It validates the API key by making a simple authenticated request to the SendGrid API
+func (h *HealthChecker) CheckSendGrid(ctx context.Context, apiKey string) *HealthCheckResult {
+	start := time.Now()
+	result := &HealthCheckResult{
+		Service: "sendgrid",
+		Status:  "healthy",
+	}
+
+	// Create timeout context for the health check
+	checkCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+
+	// Create HTTP client
+	client := &http.Client{
+		Timeout: 10 * time.Second,
+	}
+
+	// Create request to SendGrid API - using the authenticated user endpoint
+	// This is a simple GET request that requires authentication but doesn't send any emails
+	req, err := http.NewRequestWithContext(checkCtx, "GET", h.sendGridAPIURL+"/v3/user/profile", nil)
+	if err != nil {
+		result.Status = "unhealthy"
+		result.Error = fmt.Errorf("failed to create request: %w", err)
+		result.Latency = time.Since(start)
+		h.log.Error("SendGrid health check failed - request creation",
+			"error", err.Error(),
+			"latency_ms", result.Latency.Milliseconds())
+		return result
+	}
+
+	// Set authorization header
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	// Make the request
+	resp, err := client.Do(req)
+	if err != nil {
+		result.Status = "unhealthy"
+		result.Error = fmt.Errorf("failed to connect to SendGrid: %w", err)
+		result.Latency = time.Since(start)
+		h.log.Error("SendGrid health check failed - connection error",
+			"error", err.Error(),
+			"latency_ms", result.Latency.Milliseconds())
+		return result
+	}
+	defer resp.Body.Close()
+
+	// Check response status
+	if resp.StatusCode == http.StatusUnauthorized {
+		result.Status = "unhealthy"
+		result.Error = fmt.Errorf("invalid SendGrid API key")
+		h.log.Error("SendGrid health check failed - authentication error",
+			"status_code", resp.StatusCode,
+			"latency_ms", time.Since(start).Milliseconds())
+	} else if resp.StatusCode >= 400 {
+		result.Status = "unhealthy"
+		result.Error = fmt.Errorf("SendGrid API returned error status: %d", resp.StatusCode)
+		h.log.Error("SendGrid health check failed - API error",
+			"status_code", resp.StatusCode,
+			"latency_ms", time.Since(start).Milliseconds())
+	} else {
+		h.log.Debug("SendGrid health check passed",
+			"status_code", resp.StatusCode,
+			"latency_ms", time.Since(start).Milliseconds())
+	}
+
+	result.Latency = time.Since(start)
+	return result
 }

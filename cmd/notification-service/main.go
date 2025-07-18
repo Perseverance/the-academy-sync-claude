@@ -57,10 +57,30 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 	//     // Redis health check logic here
 	// }
 
-	// TODO: Add SendGrid health check when email functionality is implemented
-	// if cfg.SendGridAPIKey != "" {
-	//     // SendGrid connectivity check logic here
-	// }
+	// SendGrid health check
+	if cfg.SendGridAPIKey != "" {
+		err := retry.WithExponentialBackoff(ctx, retry.CriticalConfig(), log, "sendgrid_health_check", func() error {
+			result := healthChecker.CheckSendGrid(ctx, cfg.SendGridAPIKey)
+			if !result.IsHealthy() {
+				return fmt.Errorf("SendGrid health check failed: %w", result.Error)
+			}
+			return nil
+		})
+
+		if err != nil {
+			if cfg.FailFastEnabled {
+				log.Critical("SendGrid dependency check failed with fail-fast enabled",
+					"error", err.Error())
+				return fmt.Errorf("SendGrid dependency check failed: %w", err)
+			} else {
+				log.Warn("SendGrid dependency check failed - notification service will run with limited functionality",
+					"error", err.Error())
+				// Continue operation with reduced functionality when fail-fast is disabled
+			}
+		} else {
+			log.Info("SendGrid health check passed - email functionality is available")
+		}
+	}
 
 	log.Info("Dependency health checks completed")
 	return nil

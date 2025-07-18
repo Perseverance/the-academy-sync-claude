@@ -23,9 +23,6 @@ export const metadata: Metadata = {
   title: "Strava Log Automator - Configuration",
   description: "Configure your automated Strava running log to Google Sheets.",
   generator: "v0.dev",
-  icons: {
-    icon: "data:image/svg+xml;base64,PHN2ZyB4bWxucz0naHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmcnIHZpZXdCb3g9JzAgMCAxMDAgMTAwJz48cGF0aCBkPSdNNTAgNUw1IDk1SDIwTDM1IDY1SDY1TDgwIDk1SDk1TDUwIDVaTTQwIDUwTDUwIDI1TDYwIDUwSDQwWicgZmlsbD0nIzJhNWIzZScvPjwvc3ZnPg==",
-  },
 }
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

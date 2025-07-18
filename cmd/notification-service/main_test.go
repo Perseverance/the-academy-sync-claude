@@ -2,6 +2,7 @@ package main
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,6 +44,33 @@ func TestPerformStartupHealthChecks(t *testing.T) {
 			},
 			expectError: false, // Should continue with warning
 		},
+		{
+			name: "invalid SendGrid API key with fail-fast enabled",
+			config: &config.Config{
+				SendGridAPIKey:  "invalid-key",
+				FailFastEnabled: true,
+			},
+			expectError:   true,
+			errorContains: "SendGrid dependency check failed",
+		},
+		{
+			name: "invalid SendGrid API key with fail-fast disabled",
+			config: &config.Config{
+				SendGridAPIKey:  "invalid-key",
+				FailFastEnabled: false,
+			},
+			expectError: false, // Should continue with warning
+		},
+		{
+			name: "all services configured with invalid credentials and fail-fast enabled",
+			config: &config.Config{
+				DatabaseURL:     "invalid-db-url",
+				SendGridAPIKey:  "invalid-key",
+				FailFastEnabled: true,
+			},
+			expectError:   true,
+			errorContains: "dependency check failed", // Could be either database or SendGrid
+		},
 	}
 
 	for _, tt := range tests {
@@ -58,7 +86,7 @@ func TestPerformStartupHealthChecks(t *testing.T) {
 			}
 
 			if tt.expectError && tt.errorContains != "" && err != nil {
-				if !contains(err.Error(), tt.errorContains) {
+				if !strings.Contains(err.Error(), tt.errorContains) {
 					t.Errorf("Expected error to contain '%s', got '%s'", tt.errorContains, err.Error())
 				}
 			}
@@ -199,7 +227,3 @@ func TestHealthServerStartup(t *testing.T) {
 	// - GET /health returns 200 OK
 }
 
-// Helper function
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && s[:len(substr)] == substr || len(s) > len(substr) && contains(s[1:], substr)
-}
