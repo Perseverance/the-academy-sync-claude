@@ -331,11 +331,8 @@ case "$COMMAND" in
                     fi
                     manage_secret "encryption-secret" "$value" "$COMMAND"
                     ;;
-                SMTP_USERNAME)
-                    manage_secret "smtp-username" "$value" "$COMMAND"
-                    ;;
-                SMTP_PASSWORD)
-                    manage_secret "smtp-password" "$value" "$COMMAND"
+                SENDGRID_API_KEY)
+                    manage_secret "sendgrid-api-key" "$value" "$COMMAND"
                     ;;
                 FROM_EMAIL)
                     manage_secret "from-email" "$value" "$COMMAND"

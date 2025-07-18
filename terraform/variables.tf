@@ -69,3 +69,9 @@ variable "enable_dns_zone" {
   type        = bool
   default     = false
 }
+
+variable "sendgrid_api_key" {
+  description = "SendGrid API key for sending emails"
+  type        = string
+  sensitive   = true
+}

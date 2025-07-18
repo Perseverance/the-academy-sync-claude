@@ -391,30 +391,10 @@ resource "google_cloud_run_service" "notification_service" {
         }
 
         env {
-          name = "SMTP_HOST"
-          value = "smtp.sendgrid.net"
-        }
-
-        env {
-          name = "SMTP_PORT"
-          value = "587"
-        }
-
-        env {
-          name = "SMTP_USERNAME"
+          name = "SENDGRID_API_KEY"
           value_from {
             secret_key_ref {
-              name = "smtp-username"
-              key  = "latest"
-            }
-          }
-        }
-
-        env {
-          name = "SMTP_PASSWORD"
-          value_from {
-            secret_key_ref {
-              name = "smtp-password"
+              name = "sendgrid-api-key"
               key  = "latest"
             }
           }
@@ -474,11 +454,11 @@ resource "google_cloud_run_service" "notification_service" {
     google_secret_manager_secret_version.database_url,
     google_secret_manager_secret_version.redis_url,
     google_secret_manager_secret_version.encryption_secret,
-    google_secret_manager_secret_version.smtp_username,
-    google_secret_manager_secret_version.smtp_password,
+    google_secret_manager_secret_version.sendgrid_api_key,
     google_secret_manager_secret_version.from_email,
     google_project_service.run,
-    google_vpc_access_connector.main
+    google_vpc_access_connector.main,
+    google_secret_manager_secret_iam_member.notification_service_secrets
   ]
 }
 
@@ -567,8 +547,7 @@ resource "google_secret_manager_secret_iam_member" "notification_service_secrets
     "encryption-secret",
     "jwt-secret",
     "base-url",
-    "smtp-username",
-    "smtp-password",
+    "sendgrid-api-key",
     "from-email",
   ])
   

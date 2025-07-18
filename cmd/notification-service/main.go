@@ -13,6 +13,7 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/sendgrid"
 )
 
 // performStartupHealthChecks validates critical dependencies and fails fast if any are unavailable
@@ -56,10 +57,30 @@ func performStartupHealthChecks(cfg *config.Config, log *logger.Logger) error {
 	//     // Redis health check logic here
 	// }
 
-	// TODO: Add SMTP health check when email functionality is implemented
-	// if cfg.SMTPHost != "" {
-	//     // SMTP connectivity check logic here
-	// }
+	// SendGrid health check
+	if cfg.SendGridAPIKey != "" {
+		err := retry.WithExponentialBackoff(ctx, retry.CriticalConfig(), log, "sendgrid_health_check", func() error {
+			result := healthChecker.CheckSendGrid(ctx, cfg.SendGridAPIKey)
+			if !result.IsHealthy() {
+				return fmt.Errorf("SendGrid health check failed: %w", result.Error)
+			}
+			return nil
+		})
+
+		if err != nil {
+			if cfg.FailFastEnabled {
+				log.Critical("SendGrid dependency check failed with fail-fast enabled",
+					"error", err.Error())
+				return fmt.Errorf("SendGrid dependency check failed: %w", err)
+			} else {
+				log.Warn("SendGrid dependency check failed - notification service will run with limited functionality",
+					"error", err.Error())
+				// Continue operation with reduced functionality when fail-fast is disabled
+			}
+		} else {
+			log.Info("SendGrid health check passed - email functionality is available")
+		}
+	}
 
 	log.Info("Dependency health checks completed")
 	return nil
@@ -83,7 +104,8 @@ func main() {
 	log.Info("Configuration status",
 		"database_configured", cfg.DatabaseURL != "",
 		"redis_configured", cfg.RedisURL != "",
-		"smtp_configured", cfg.SMTPHost != "" && cfg.SMTPUsername != "")
+		"sendgrid_configured", cfg.SendGridAPIKey != "",
+		"from_email", cfg.FromEmail)
 
 	// Dependency Health Check - US046 Fail Fast Mechanism
 	// Validate critical dependencies before starting processing loop
@@ -93,11 +115,36 @@ func main() {
 		os.Exit(2) // Exit code 2 indicates dependency failure
 	}
 
+	// Initialize SendGrid client if configured
+	var sendgridClient *sendgrid.Client
+	if cfg.SendGridAPIKey != "" && cfg.FromEmail != "" {
+		sendgridClient = sendgrid.NewClient(cfg.SendGridAPIKey, cfg.FromEmail)
+		log.Info("SendGrid client initialized",
+			"from_email", cfg.FromEmail)
+	} else {
+		log.Warn("SendGrid not configured - email functionality will be disabled")
+	}
+
 	// Start HTTP server for health checks (required by Cloud Run)
 	go startHealthServer(log)
 
+	// TODO: Implement notification queue processing
+	// This is where we'll use sendgridClient to send emails
 	for {
-		log.Debug("Processing notification queue", "environment", cfg.Environment)
+		log.Debug("Processing notification queue", 
+			"environment", cfg.Environment,
+			"sendgrid_enabled", sendgridClient != nil)
+		
+		// Example usage (to be implemented):
+		// if sendgridClient != nil {
+		//     notifications := fetchPendingNotifications()
+		//     for _, notification := range notifications {
+		//         err := sendgridClient.SendEmail(notification.ToEmail, notification.ToName, notification.Subject, notification.PlainText, notification.HTML)
+		//         if err != nil {
+		//             log.Error("Failed to send email", "error", err)
+		//         }
+		//     }
+		// }
 		time.Sleep(30 * time.Second)
 	}
 }
