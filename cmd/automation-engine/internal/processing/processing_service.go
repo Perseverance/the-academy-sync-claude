@@ -681,6 +681,15 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 		"start_date", startDate.Format("2006-01-02"),
 		"end_date", endDate.Format("2006-01-02"),
 		"spreadsheet_id", config.SpreadsheetID)
+	
+	// Load user's timezone for date parsing
+	location, err := time.LoadLocation(config.Timezone)
+	if err != nil {
+		s.logger.Error("Invalid timezone",
+			"timezone", config.Timezone,
+			"error", err)
+		return nil, fmt.Errorf("invalid timezone %s: %w", config.Timezone, err)
+	}
 
 	// Calculate the range more intelligently based on the year
 	// Since this is a yearly plan, we can estimate the row range
@@ -767,7 +776,7 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 			continue
 		}
 
-		entry := s.parseTrainingPlanRow(row, actualRow)
+		entry := s.parseTrainingPlanRow(row, actualRow, location)
 		if entry != nil && !entry.Date.IsZero() {
 			// Set IsProcessed based on bold status of description column (J)
 			entry.IsProcessed = boldStatuses[actualRow]
@@ -908,7 +917,7 @@ func (s *ProcessingService) fetchBoldStatuses(ctx context.Context, spreadsheetID
 }
 
 // parseTrainingPlanRow parses a spreadsheet row into a TrainingPlanEntry
-func (s *ProcessingService) parseTrainingPlanRow(row []interface{}, rowNumber int) *TrainingPlanEntry {
+func (s *ProcessingService) parseTrainingPlanRow(row []interface{}, rowNumber int, location *time.Location) *TrainingPlanEntry {
 	entry := &TrainingPlanEntry{
 		Row: rowNumber,
 	}
@@ -944,7 +953,8 @@ func (s *ProcessingService) parseTrainingPlanRow(row []interface{}, rowNumber in
 	// Parse date (Column A - index 0)
 	// Date format is always non-zero-padded: "1.5.2025", "22.6.2025", etc.
 	if dateStr := getString(0); dateStr != "" {
-		parsedDate, err := time.Parse("2.1.2006", dateStr)
+		// Parse in the user's timezone to match the date range filtering
+		parsedDate, err := time.ParseInLocation("2.1.2006", dateStr, location)
 		if err != nil {
 			s.logger.Warn("Failed to parse date from training plan",
 				"date_string", dateStr,
@@ -956,7 +966,8 @@ func (s *ProcessingService) parseTrainingPlanRow(row []interface{}, rowNumber in
 				"date_string", dateStr,
 				"parsed_date", parsedDate.Format("2006-01-02"),
 				"row", rowNumber,
-				"is_july_18", parsedDate.Format("2006-01-02") == "2025-07-18")
+				"is_july_18", parsedDate.Format("2006-01-02") == "2025-07-18",
+				"timezone", location.String())
 			entry.Date = parsedDate
 		}
 	}
