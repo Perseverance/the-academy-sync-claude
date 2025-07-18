@@ -148,7 +148,7 @@ resource "google_cloud_run_service" "backend_api" {
         "autoscaling.knative.dev/maxScale"      = "100"
         "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.main.connection_name
         "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.main.id
-        "run.googleapis.com/vpc-access-egress"     = "all-traffic"
+        "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
         "run.googleapis.com/deletion-protection" = "true"
       }
     }
@@ -307,7 +307,7 @@ resource "google_cloud_run_service" "automation_engine" {
         "autoscaling.knative.dev/maxScale"      = "10"
         "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.main.connection_name
         "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.main.id
-        "run.googleapis.com/vpc-access-egress"     = "all-traffic"
+        "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
         "run.googleapis.com/deletion-protection" = "true"
       }
     }
@@ -459,7 +459,7 @@ resource "google_cloud_run_service" "notification_service" {
         "autoscaling.knative.dev/maxScale"      = "5"
         "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.main.connection_name
         "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.main.id
-        "run.googleapis.com/vpc-access-egress"     = "all-traffic"
+        "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
         "run.googleapis.com/deletion-protection" = "true"
       }
     }
