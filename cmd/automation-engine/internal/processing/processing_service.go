@@ -709,6 +709,26 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 		return nil, fmt.Errorf("failed to read training plan: %w", err)
 	}
 
+	// Debug logging for fetched rows
+	s.logger.Debug("Raw rows fetched from spreadsheet",
+		"user_id", config.UserID,
+		"rows_count", len(rows),
+		"range", rangeSpec,
+		"start_row", startRow,
+		"end_row", endRow,
+		"first_row_data", func() string {
+			if len(rows) > 0 && len(rows[0]) > 0 {
+				return fmt.Sprintf("%v", rows[0][0])
+			}
+			return "no data"
+		}(),
+		"last_row_data", func() string {
+			if len(rows) > 0 && len(rows[len(rows)-1]) > 0 {
+				return fmt.Sprintf("%v", rows[len(rows)-1][0])
+			}
+			return "no data"
+		}())
+
 	// We also need to fetch cell formatting to check for bold text
 	// This requires a separate API call to get formatting info
 	boldStatuses, err := s.fetchBoldStatuses(ctx, config.SpreadsheetID, rangeSpec, startRow, len(rows))
@@ -724,11 +744,29 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 	cache := make(TrainingPlanCache)
 
 	for rowIndex, row := range rows {
+		actualRow := startRow + rowIndex
+		
+		// Log the raw row data
+		s.logger.Debug("Processing spreadsheet row",
+			"row_index", rowIndex,
+			"actual_row", actualRow,
+			"expected_row_for_july_18", 200,
+			"row_data", func() string {
+				if len(row) > 0 {
+					return fmt.Sprintf("Date: %v, Type: %v", row[0], func() string {
+						if len(row) > 3 {
+							return fmt.Sprintf("%v", row[3])
+						}
+						return "N/A"
+					}())
+				}
+				return "empty row"
+			}())
+		
 		if len(row) == 0 {
 			continue
 		}
 
-		actualRow := startRow + rowIndex
 		entry := s.parseTrainingPlanRow(row, actualRow)
 		if entry != nil && !entry.Date.IsZero() {
 			// Set IsProcessed based on bold status of description column (J)
@@ -737,6 +775,12 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 			// Store in cache with normalized date key (YYYY-MM-DD)
 			dateKey := entry.Date.Format("2006-01-02")
 			cache[dateKey] = entry
+			
+			s.logger.Debug("Added entry to cache",
+				"date_key", dateKey,
+				"row", actualRow,
+				"is_processed", entry.IsProcessed,
+				"is_july_18", dateKey == "2025-07-18")
 		}
 	}
 
@@ -745,12 +789,36 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 		"entries_found", len(cache),
 		"date_range", fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")))
 
+	// Log cache before filtering
+	s.logger.Debug("Cache before filtering",
+		"total_entries", len(cache),
+		"date_range", fmt.Sprintf("%s to %s", startDate.Format("2006-01-02"), endDate.Format("2006-01-02")),
+		"cache_dates", func() []string {
+			dates := make([]string, 0, len(cache))
+			for dateKey := range cache {
+				dates = append(dates, dateKey)
+			}
+			sort.Strings(dates)
+			return dates
+		}())
+
 	// Filter cache to only include entries within the requested date range
 	// This ensures we only process the exact date range requested, even though
 	// we fetched extra rows as a buffer for safety
 	filteredCache := make(TrainingPlanCache)
 	for dateKey, entry := range cache {
-		if !entry.Date.Before(startDate) && !entry.Date.After(endDate) {
+		includeEntry := !entry.Date.Before(startDate) && !entry.Date.After(endDate)
+		s.logger.Debug("Filtering cache entry",
+			"date_key", dateKey,
+			"entry_date", entry.Date.Format("2006-01-02"),
+			"start_date", startDate.Format("2006-01-02"),
+			"end_date", endDate.Format("2006-01-02"),
+			"before_start", entry.Date.Before(startDate),
+			"after_end", entry.Date.After(endDate),
+			"included", includeEntry,
+			"row", entry.Row)
+		
+		if includeEntry {
 			filteredCache[dateKey] = entry
 		}
 	}
@@ -761,6 +829,18 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 		"filtered_count", len(filteredCache),
 		"start_date", startDate.Format("2006-01-02"),
 		"end_date", endDate.Format("2006-01-02"))
+	
+	// Log final cache state
+	s.logger.Debug("Final filtered cache details",
+		"filtered_dates", func() []string {
+			dates := make([]string, 0, len(filteredCache))
+			for dateKey := range filteredCache {
+				dates = append(dates, dateKey)
+			}
+			sort.Strings(dates)
+			return dates
+		}(),
+		"has_july_18", filteredCache["2025-07-18"] != nil)
 
 	return filteredCache, nil
 }
@@ -869,8 +949,14 @@ func (s *ProcessingService) parseTrainingPlanRow(row []interface{}, rowNumber in
 			s.logger.Warn("Failed to parse date from training plan",
 				"date_string", dateStr,
 				"row", rowNumber,
-				"error", err)
+				"error", err,
+				"expected_format", "2.1.2006")
 		} else {
+			s.logger.Debug("Successfully parsed date",
+				"date_string", dateStr,
+				"parsed_date", parsedDate.Format("2006-01-02"),
+				"row", rowNumber,
+				"is_july_18", parsedDate.Format("2006-01-02") == "2025-07-18")
 			entry.Date = parsedDate
 		}
 	}
