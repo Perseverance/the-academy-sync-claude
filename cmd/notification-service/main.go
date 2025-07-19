@@ -143,7 +143,11 @@ func main() {
 		defer queueClient.Close()
 
 		// Create notification service
-		notificationService := internal.NewNotificationService(sendgridClient, log)
+		notificationService, err := internal.NewNotificationService(sendgridClient, log, cfg.BaseURL, cfg.FrontendURL)
+		if err != nil {
+			log.Critical("Failed to initialize notification service", "error", err)
+			os.Exit(1)
+		}
 
 		// Create and start worker
 		worker := internal.NewWorker(queueClient, notificationService, log)

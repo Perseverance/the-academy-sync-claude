@@ -1,27 +1,67 @@
 package internal
 
 import (
+	"bytes"
 	"context"
+	"embed"
 	"fmt"
+	"html/template"
 	"strings"
 	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/sendgrid"
+	"github.com/vanng822/go-premailer/premailer"
 )
+
+// ProcessedDay represents a single day's processing result for the email template
+type ProcessedDay struct {
+	StatusIcon     string
+	ProcessedDate  string
+	SummaryMessage string
+}
+
+// TemplateData represents the data structure for the HTML email template
+type TemplateData struct {
+	RunDate        string
+	ProcessedDays  []ProcessedDay
+	DashboardURL   string
+	SpreadsheetURL string
+}
 
 // NotificationService handles the core business logic for processing notifications
 type NotificationService struct {
 	sendgridClient *sendgrid.Client
 	logger         *logger.Logger
+	emailTemplate  *template.Template
+	baseURL        string
+	frontendURL    string
 }
 
+//go:embed templates/summary.html
+var emailTemplates embed.FS
+
 // NewNotificationService creates a new notification service
-func NewNotificationService(sendgridClient *sendgrid.Client, logger *logger.Logger) *NotificationService {
+func NewNotificationService(sendgridClient *sendgrid.Client, logger *logger.Logger, baseURL string, frontendURL string) (*NotificationService, error) {
+	// Load the email template
+	tmplContent, err := emailTemplates.ReadFile("templates/summary.html")
+	if err != nil {
+		return nil, fmt.Errorf("failed to read email template: %w", err)
+	}
+
+	// Parse the template
+	tmpl, err := template.New("email").Parse(string(tmplContent))
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse email template: %w", err)
+	}
+
 	return &NotificationService{
 		sendgridClient: sendgridClient,
 		logger:         logger.WithContext("component", "notification_service"),
-	}
+		emailTemplate:  tmpl,
+		baseURL:        baseURL,
+		frontendURL:    frontendURL,
+	}, nil
 }
 
 // ProcessNotification processes a notification job
@@ -52,9 +92,14 @@ func (s *NotificationService) ProcessNotification(ctx context.Context, notificat
 	subject := fmt.Sprintf("Daily Sync Summary - %s", runDate.Format("Jan 2, 2006"))
 	plainTextBody := s.ConstructEmailBody(notification, runDate)
 	
-	// For now, we're sending plain text only
-	// HTML body will be implemented when we integrate the template
-	htmlBody := ""
+	// Render HTML body
+	htmlBody, err := s.RenderHTMLEmail(notification, runDate)
+	if err != nil {
+		s.logger.Warn("Failed to render HTML email, falling back to plain text",
+			"error", err,
+			"user_id", notification.UserID)
+		htmlBody = "" // Fall back to plain text only
+	}
 
 	// Send email via SendGrid
 	if s.sendgridClient != nil {
@@ -143,6 +188,67 @@ func (s *NotificationService) ConstructEmailBody(notification *NotificationJob, 
 	builder.WriteString("The Academy Sync - Automated Training Log\n")
 
 	return builder.String()
+}
+
+// RenderHTMLEmail renders the HTML email body using the template
+func (s *NotificationService) RenderHTMLEmail(notification *NotificationJob, runDate time.Time) (string, error) {
+	// Prepare template data
+	// Build the Google Sheets URL from the spreadsheet ID
+	spreadsheetURL := ""
+	if notification.SpreadsheetID != "" {
+		spreadsheetURL = fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s", notification.SpreadsheetID)
+	}
+	
+	templateData := TemplateData{
+		RunDate:        runDate.Format("January 2, 2006"),
+		ProcessedDays:  make([]ProcessedDay, 0, len(notification.Logs)),
+		DashboardURL:   s.frontendURL,  // Points to the frontend
+		SpreadsheetURL: spreadsheetURL,
+	}
+
+	// Convert logs to template format
+	for _, log := range notification.Logs {
+		// Parse and format date
+		logDate, err := time.Parse("2006-01-02", log.Date)
+		if err != nil {
+			s.logger.Warn("Failed to parse log date for HTML template",
+				"error", err,
+				"date", log.Date)
+			// Use original date string if parsing fails
+			templateData.ProcessedDays = append(templateData.ProcessedDays, ProcessedDay{
+				StatusIcon:     s.getStatusEmoji(log.Status),
+				ProcessedDate:  log.Date,
+				SummaryMessage: log.SummaryMessage,
+			})
+		} else {
+			// Format date nicely
+			formattedDate := logDate.Format("Mon, Jan 2")
+			templateData.ProcessedDays = append(templateData.ProcessedDays, ProcessedDay{
+				StatusIcon:     s.getStatusEmoji(log.Status),
+				ProcessedDate:  formattedDate,
+				SummaryMessage: log.SummaryMessage,
+			})
+		}
+	}
+
+	// Render the template
+	var buf bytes.Buffer
+	if err := s.emailTemplate.Execute(&buf, templateData); err != nil {
+		return "", fmt.Errorf("failed to execute email template: %w", err)
+	}
+
+	// Apply CSS inlining for email client compatibility
+	prem, err := premailer.NewPremailerFromString(buf.String(), premailer.NewOptions())
+	if err != nil {
+		return "", fmt.Errorf("failed to create premailer: %w", err)
+	}
+
+	htmlResult, err := prem.Transform()
+	if err != nil {
+		return "", fmt.Errorf("failed to inline CSS: %w", err)
+	}
+
+	return htmlResult, nil
 }
 
 // getStatusEmoji returns the appropriate emoji for a status

@@ -19,8 +19,9 @@ func TestPrepareNotificationData(t *testing.T) {
 	location, _ := time.LoadLocation("Europe/Sofia")
 
 	config := &automation.ProcessingConfig{
-		UserID: 123,
-		Email:  "test@example.com",
+		UserID:        123,
+		Email:         "test@example.com",
+		SpreadsheetID: "test-spreadsheet-id",
 	}
 
 	t.Run("filter out successful rest days", func(t *testing.T) {
@@ -75,6 +76,7 @@ func TestPrepareNotificationData(t *testing.T) {
 		assert.Equal(t, 123, result["user_id"])
 		assert.Equal(t, "test@example.com", result["user_email"])
 		assert.Equal(t, "test@example.com", result["user_name"]) // Using email as name temporarily
+		assert.Equal(t, "test-spreadsheet-id", result["spreadsheet_id"])
 
 		logs := result["logs"].([]map[string]interface{})
 		assert.Len(t, logs, 2, "Should exclude rest days")

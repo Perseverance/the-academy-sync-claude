@@ -12,11 +12,12 @@ import (
 
 // NotificationJob represents the structure of a notification job
 type NotificationJob struct {
-	UserID    int             `json:"user_id"`
-	UserEmail string          `json:"user_email"`
-	UserName  string          `json:"user_name"`
-	RunDate   string          `json:"run_date"`
-	Logs      []ProcessingLog `json:"logs"`
+	UserID        int             `json:"user_id"`
+	UserEmail     string          `json:"user_email"`
+	UserName      string          `json:"user_name"`
+	RunDate       string          `json:"run_date"`
+	Logs          []ProcessingLog `json:"logs"`
+	SpreadsheetID string          `json:"spreadsheet_id"`
 }
 
 // ProcessingLog represents a single day's processing result

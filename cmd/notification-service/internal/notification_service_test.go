@@ -24,7 +24,8 @@ func (m *MockSendGridClient) SendEmail(to, toName, subject, plainTextContent, ht
 // Test ShouldSendEmail with various scenarios
 func TestShouldSendEmail(t *testing.T) {
 	logger := logger.New("test")
-	service := NewNotificationService(nil, logger)
+	service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
+	assert.NoError(t, err)
 
 	t.Run("all uneventful rest days", func(t *testing.T) {
 		logs := []ProcessingLog{
@@ -138,7 +139,8 @@ func TestShouldSendEmail(t *testing.T) {
 // Test ConstructEmailBody formatting
 func TestConstructEmailBody(t *testing.T) {
 	logger := logger.New("test")
-	service := NewNotificationService(nil, logger)
+	service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
+	assert.NoError(t, err)
 
 	runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
 
@@ -255,7 +257,8 @@ func TestConstructEmailBody(t *testing.T) {
 // Test getStatusEmoji
 func TestGetStatusEmoji(t *testing.T) {
 	logger := logger.New("test")
-	service := NewNotificationService(nil, logger)
+	service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
+	assert.NoError(t, err)
 
 	tests := []struct {
 		status   string
@@ -285,7 +288,8 @@ func TestProcessNotification(t *testing.T) {
 		logger := logger.New("test")
 		
 		// For now, we'll test with nil client
-		service := NewNotificationService(nil, logger)
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
+		assert.NoError(t, err)
 
 		notification := &NotificationJob{
 			UserID:    123,
@@ -303,13 +307,14 @@ func TestProcessNotification(t *testing.T) {
 		}
 
 		// With nil client, should log warning but not error
-		err := service.ProcessNotification(ctx, notification)
+		err = service.ProcessNotification(ctx, notification)
 		assert.NoError(t, err)
 	})
 
 	t.Run("skip uneventful rest days", func(t *testing.T) {
 		logger := logger.New("test")
-		service := NewNotificationService(nil, logger)
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
+		assert.NoError(t, err)
 
 		notification := &NotificationJob{
 			UserID:    123,
@@ -325,13 +330,14 @@ func TestProcessNotification(t *testing.T) {
 			},
 		}
 
-		err := service.ProcessNotification(ctx, notification)
+		err = service.ProcessNotification(ctx, notification)
 		assert.NoError(t, err, "Should not error when skipping notification")
 	})
 
 	t.Run("invalid run date", func(t *testing.T) {
 		logger := logger.New("test")
-		service := NewNotificationService(nil, logger)
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
+		assert.NoError(t, err)
 
 		notification := &NotificationJob{
 			UserID:    123,
@@ -348,7 +354,7 @@ func TestProcessNotification(t *testing.T) {
 		}
 
 		// Should handle gracefully and use current time
-		err := service.ProcessNotification(ctx, notification)
+		err = service.ProcessNotification(ctx, notification)
 		assert.NoError(t, err)
 	})
 }
@@ -364,7 +370,8 @@ func TestProcessNotificationWithSendGrid(t *testing.T) {
 	
 	sendgridClient := sendgrid.NewClient(apiKey, fromEmail)
 	logger := logger.New("test")
-	service := NewNotificationService(sendgridClient, logger)
+	service, err := NewNotificationService(sendgridClient, logger, "http://localhost:8080", "http://localhost:3000")
+	assert.NoError(t, err)
 
 	notification := &NotificationJob{
 		UserID:    123,
@@ -380,7 +387,7 @@ func TestProcessNotificationWithSendGrid(t *testing.T) {
 		},
 	}
 
-	err := service.ProcessNotification(context.Background(), notification)
+	err = service.ProcessNotification(context.Background(), notification)
 	// Would fail with invalid API key
 	assert.Error(t, err)
 }
