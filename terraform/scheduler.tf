@@ -26,7 +26,7 @@ resource "google_cloud_scheduler_job" "automation_scheduler" {
 
   # Run every hour at the top of the hour
   schedule = "0 * * * *"
-  
+
   # Use UTC timezone as specified in the requirements
   time_zone = "Etc/UTC"
 
@@ -35,14 +35,14 @@ resource "google_cloud_scheduler_job" "automation_scheduler" {
     # TODO: Update this URL after the backend API is deployed with the scheduler endpoint
     # The URL should point to the /tasks/invoke-scheduler endpoint
     uri = "${google_cloud_run_service.backend_api.status[0].url}/tasks/invoke-scheduler"
-    
+
     http_method = "POST"
-    
+
     # Headers
     headers = {
       "Content-Type" = "application/json"
     }
-    
+
     # Empty body for the POST request
     body = base64encode("{}")
 
@@ -51,16 +51,16 @@ resource "google_cloud_scheduler_job" "automation_scheduler" {
     # TODO (TECH-011): Replace with proper OIDC validation in production
     oidc_token {
       service_account_email = google_service_account.scheduler.email
-      audience              = "${google_cloud_run_service.backend_api.status[0].url}"
+      audience              = google_cloud_run_service.backend_api.status[0].url
     }
   }
 
   # Retry configuration
   retry_config {
-    retry_count = 3
+    retry_count          = 3
     min_backoff_duration = "5s"
     max_backoff_duration = "60s"
-    max_doublings = 2
+    max_doublings        = 2
   }
 
   # Ensure the Cloud Scheduler API is enabled before creating the job
