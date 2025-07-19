@@ -26,7 +26,7 @@ type TemplateData struct {
 	RunDate        string
 	ProcessedDays  []ProcessedDay
 	DashboardURL   string
-	UnsubscribeURL string
+	SpreadsheetURL string
 }
 
 // NotificationService handles the core business logic for processing notifications
@@ -35,13 +35,14 @@ type NotificationService struct {
 	logger         *logger.Logger
 	emailTemplate  *template.Template
 	baseURL        string
+	frontendURL    string
 }
 
 //go:embed templates/summary.html
 var emailTemplates embed.FS
 
 // NewNotificationService creates a new notification service
-func NewNotificationService(sendgridClient *sendgrid.Client, logger *logger.Logger, baseURL string) (*NotificationService, error) {
+func NewNotificationService(sendgridClient *sendgrid.Client, logger *logger.Logger, baseURL string, frontendURL string) (*NotificationService, error) {
 	// Load the email template
 	tmplContent, err := emailTemplates.ReadFile("templates/summary.html")
 	if err != nil {
@@ -59,6 +60,7 @@ func NewNotificationService(sendgridClient *sendgrid.Client, logger *logger.Logg
 		logger:         logger.WithContext("component", "notification_service"),
 		emailTemplate:  tmpl,
 		baseURL:        baseURL,
+		frontendURL:    frontendURL,
 	}, nil
 }
 
@@ -191,11 +193,14 @@ func (s *NotificationService) ConstructEmailBody(notification *NotificationJob, 
 // RenderHTMLEmail renders the HTML email body using the template
 func (s *NotificationService) RenderHTMLEmail(notification *NotificationJob, runDate time.Time) (string, error) {
 	// Prepare template data
+	// TODO: Update spreadsheet URL when Google Sheets integration is implemented
+	spreadsheetURL := "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID"
+	
 	templateData := TemplateData{
 		RunDate:        runDate.Format("January 2, 2006"),
 		ProcessedDays:  make([]ProcessedDay, 0, len(notification.Logs)),
-		DashboardURL:   fmt.Sprintf("%s/dashboard", s.baseURL),
-		UnsubscribeURL: fmt.Sprintf("%s/settings", s.baseURL),
+		DashboardURL:   s.frontendURL,  // Points to the frontend
+		SpreadsheetURL: spreadsheetURL,
 	}
 
 	// Convert logs to template format

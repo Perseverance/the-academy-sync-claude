@@ -143,7 +143,7 @@ func main() {
 		defer queueClient.Close()
 
 		// Create notification service
-		notificationService, err := internal.NewNotificationService(sendgridClient, log, cfg.BaseURL)
+		notificationService, err := internal.NewNotificationService(sendgridClient, log, cfg.BaseURL, cfg.FrontendURL)
 		if err != nil {
 			log.Critical("Failed to initialize notification service", "error", err)
 			os.Exit(1)

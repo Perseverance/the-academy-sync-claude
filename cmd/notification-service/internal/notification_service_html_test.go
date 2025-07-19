@@ -14,7 +14,7 @@ func TestRenderHTMLEmail(t *testing.T) {
 	logger := logger.New("test")
 	
 	t.Run("successful HTML rendering", func(t *testing.T) {
-		service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 		assert.NoError(t, err)
 
 		runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
@@ -74,9 +74,9 @@ func TestRenderHTMLEmail(t *testing.T) {
 
 		// Check for footer links
 		assert.Contains(t, html, "View Dashboard")
-		assert.Contains(t, html, "Manage Notifications")
-		assert.Contains(t, html, "http://localhost:8080/dashboard")
-		assert.Contains(t, html, "http://localhost:8080/settings")
+		assert.Contains(t, html, "View Spreadsheet")
+		assert.Contains(t, html, "http://localhost:3000") // Frontend URL
+		assert.Contains(t, html, "https://docs.google.com/spreadsheets") // Spreadsheet URL
 
 		// Check that CSS is inlined
 		assert.Contains(t, html, "style=")
@@ -84,7 +84,7 @@ func TestRenderHTMLEmail(t *testing.T) {
 	})
 
 	t.Run("empty logs", func(t *testing.T) {
-		service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 		assert.NoError(t, err)
 
 		runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
@@ -111,7 +111,7 @@ func TestRenderHTMLEmail(t *testing.T) {
 	})
 
 	t.Run("invalid date format in logs", func(t *testing.T) {
-		service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 		assert.NoError(t, err)
 
 		runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
@@ -139,7 +139,7 @@ func TestRenderHTMLEmail(t *testing.T) {
 	})
 
 	t.Run("HTML escaping", func(t *testing.T) {
-		service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 		assert.NoError(t, err)
 
 		runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
@@ -166,7 +166,7 @@ func TestRenderHTMLEmail(t *testing.T) {
 	})
 
 	t.Run("table-based layout", func(t *testing.T) {
-		service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 		assert.NoError(t, err)
 
 		runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
@@ -197,7 +197,7 @@ func TestRenderHTMLEmail(t *testing.T) {
 	})
 
 	t.Run("color scheme matches style guide", func(t *testing.T) {
-		service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 		assert.NoError(t, err)
 
 		runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
@@ -237,8 +237,8 @@ func TestTemplateDataStructure(t *testing.T) {
 				SummaryMessage: "1 activity logged",
 			},
 		},
-		DashboardURL:   "http://localhost:8080/dashboard",
-		UnsubscribeURL: "http://localhost:8080/settings",
+		DashboardURL:   "http://localhost:3000",
+		SpreadsheetURL: "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID",
 	}
 
 	// Verify all fields are present
@@ -248,5 +248,5 @@ func TestTemplateDataStructure(t *testing.T) {
 	assert.NotEmpty(t, data.ProcessedDays[0].ProcessedDate)
 	assert.NotEmpty(t, data.ProcessedDays[0].SummaryMessage)
 	assert.NotEmpty(t, data.DashboardURL)
-	assert.NotEmpty(t, data.UnsubscribeURL)
+	assert.NotEmpty(t, data.SpreadsheetURL)
 }

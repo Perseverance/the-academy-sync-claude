@@ -24,7 +24,7 @@ func (m *MockSendGridClient) SendEmail(to, toName, subject, plainTextContent, ht
 // Test ShouldSendEmail with various scenarios
 func TestShouldSendEmail(t *testing.T) {
 	logger := logger.New("test")
-	service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+	service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 	assert.NoError(t, err)
 
 	t.Run("all uneventful rest days", func(t *testing.T) {
@@ -139,7 +139,7 @@ func TestShouldSendEmail(t *testing.T) {
 // Test ConstructEmailBody formatting
 func TestConstructEmailBody(t *testing.T) {
 	logger := logger.New("test")
-	service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+	service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 	assert.NoError(t, err)
 
 	runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
@@ -257,7 +257,7 @@ func TestConstructEmailBody(t *testing.T) {
 // Test getStatusEmoji
 func TestGetStatusEmoji(t *testing.T) {
 	logger := logger.New("test")
-	service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+	service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 	assert.NoError(t, err)
 
 	tests := []struct {
@@ -288,7 +288,7 @@ func TestProcessNotification(t *testing.T) {
 		logger := logger.New("test")
 		
 		// For now, we'll test with nil client
-		service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 		assert.NoError(t, err)
 
 		notification := &NotificationJob{
@@ -313,7 +313,7 @@ func TestProcessNotification(t *testing.T) {
 
 	t.Run("skip uneventful rest days", func(t *testing.T) {
 		logger := logger.New("test")
-		service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 		assert.NoError(t, err)
 
 		notification := &NotificationJob{
@@ -336,7 +336,7 @@ func TestProcessNotification(t *testing.T) {
 
 	t.Run("invalid run date", func(t *testing.T) {
 		logger := logger.New("test")
-		service, err := NewNotificationService(nil, logger, "http://localhost:8080")
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
 		assert.NoError(t, err)
 
 		notification := &NotificationJob{
@@ -370,7 +370,7 @@ func TestProcessNotificationWithSendGrid(t *testing.T) {
 	
 	sendgridClient := sendgrid.NewClient(apiKey, fromEmail)
 	logger := logger.New("test")
-	service, err := NewNotificationService(sendgridClient, logger, "http://localhost:8080")
+	service, err := NewNotificationService(sendgridClient, logger, "http://localhost:8080", "http://localhost:3000")
 	assert.NoError(t, err)
 
 	notification := &NotificationJob{

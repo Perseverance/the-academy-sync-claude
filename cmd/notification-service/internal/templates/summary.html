@@ -4,8 +4,8 @@ This template expects a struct with the following fields:
 type TemplateData struct {
     RunDate        string   // Formatted date string (e.g., "January 2, 2025")
     ProcessedDays  []ProcessedDay
-    DashboardURL   string   // URL to the web dashboard
-    UnsubscribeURL string   // URL to manage notification preferences
+    DashboardURL   string   // URL to the frontend application
+    SpreadsheetURL string   // URL to the Google Sheets spreadsheet
 }
 
 type ProcessedDay struct {
@@ -239,7 +239,7 @@ type ProcessedDay struct {
                             </p>
                             <p class="footer-links">
                                 <a href="{{.DashboardURL}}">View Dashboard</a> | 
-                                <a href="{{.UnsubscribeURL}}">Manage Notifications</a>
+                                <a href="{{.SpreadsheetURL}}">View Spreadsheet</a>
                             </p>
                         </td>
                     </tr>
