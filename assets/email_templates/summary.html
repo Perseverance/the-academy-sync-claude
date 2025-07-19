@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Daily Sync Summary - The Academy Sync</title>
+    <style>
+        /* Inline CSS for maximum email client compatibility */
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f4f4f4;
+        }
+        
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background-color: #ffffff;
+        }
+        
+        .header {
+            background-color: #2a5b3e;
+            color: #ffffff;
+            padding: 30px 20px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+            font-weight: 600;
+        }
+        
+        .header p {
+            margin: 10px 0 0 0;
+            font-size: 16px;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px 20px;
+        }
+        
+        .summary-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        
+        .summary-table th {
+            background-color: #f8f9fa;
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #dee2e6;
+        }
+        
+        .summary-table td {
+            padding: 12px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .status-icon {
+            font-size: 20px;
+            width: 30px;
+        }
+        
+        .date-cell {
+            white-space: nowrap;
+            font-weight: 500;
+        }
+        
+        .message-cell {
+            color: #495057;
+        }
+        
+        .footer {
+            background-color: #f8f9fa;
+            padding: 20px;
+            text-align: center;
+            font-size: 14px;
+            color: #6c757d;
+        }
+        
+        .footer a {
+            color: #2a5b3e;
+            text-decoration: none;
+        }
+        
+        /* Responsive adjustments */
+        @media only screen and (max-width: 600px) {
+            .container {
+                width: 100% !important;
+            }
+            
+            .header h1 {
+                font-size: 20px !important;
+            }
+            
+            .summary-table {
+                font-size: 14px;
+            }
+            
+            .summary-table th,
+            .summary-table td {
+                padding: 8px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1>Daily Sync Summary</h1>
+            <p>{{.RunDate}}</p>
+        </div>
+        
+        <!-- Content -->
+        <div class="content">
+            <p style="font-size: 16px; color: #495057; margin-bottom: 20px;">
+                Here's a summary of your training log synchronization:
+            </p>
+            
+            <!-- Summary Table -->
+            <table class="summary-table">
+                <thead>
+                    <tr>
+                        <th style="width: 40px;">Status</th>
+                        <th style="width: 120px;">Date</th>
+                        <th>Summary</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .ProcessedDays}}
+                    <tr>
+                        <td class="status-icon">{{.StatusIcon}}</td>
+                        <td class="date-cell">{{.ProcessedDate}}</td>
+                        <td class="message-cell">{{.SummaryMessage}}</td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        
+        <!-- Footer -->
+        <div class="footer">
+            <p style="margin: 0;">
+                <strong>The Academy Sync</strong><br>
+                Automated Training Log Synchronization
+            </p>
+            <p style="margin: 10px 0 0 0;">
+                <a href="{{.DashboardURL}}">View Dashboard</a> | 
+                <a href="{{.UnsubscribeURL}}">Manage Notifications</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

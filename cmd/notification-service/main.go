@@ -9,9 +9,11 @@ import (
 
 	_ "github.com/lib/pq"
 
+	"github.com/Perseverance/the-academy-sync-claude/cmd/notification-service/internal"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/config"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/health"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/retry"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/sendgrid"
 )
@@ -128,24 +130,39 @@ func main() {
 	// Start HTTP server for health checks (required by Cloud Run)
 	go startHealthServer(log)
 
-	// TODO: Implement notification queue processing
-	// This is where we'll use sendgridClient to send emails
-	for {
-		log.Debug("Processing notification queue", 
-			"environment", cfg.Environment,
-			"sendgrid_enabled", sendgridClient != nil)
+	// Initialize Redis queue client if configured
+	if cfg.RedisURL != "" {
+		log.Info("Initializing Redis queue client",
+			"redis_url", cfg.RedisURL)
+
+		queueClient, err := queue.NewClient(cfg.RedisURL, "notification_queue", log)
+		if err != nil {
+			log.Critical("Failed to initialize Redis queue client", "error", err)
+			os.Exit(1)
+		}
+		defer queueClient.Close()
+
+		// Create notification service
+		notificationService := internal.NewNotificationService(sendgridClient, log)
+
+		// Create and start worker
+		worker := internal.NewWorker(queueClient, notificationService, log)
 		
-		// Example usage (to be implemented):
-		// if sendgridClient != nil {
-		//     notifications := fetchPendingNotifications()
-		//     for _, notification := range notifications {
-		//         err := sendgridClient.SendEmail(notification.ToEmail, notification.ToName, notification.Subject, notification.PlainText, notification.HTML)
-		//         if err != nil {
-		//             log.Error("Failed to send email", "error", err)
-		//         }
-		//     }
-		// }
-		time.Sleep(30 * time.Second)
+		// Start processing in a goroutine
+		ctx := context.Background()
+		go func() {
+			log.Info("Starting notification worker")
+			worker.ProcessJobs(ctx)
+		}()
+
+		log.Info("Notification service is running and processing queue")
+		
+		// Keep the main goroutine alive
+		select {}
+	} else {
+		log.Warn("Redis not configured - notification service running in standby mode")
+		// Keep the service alive for health checks
+		select {}
 	}
 }
 

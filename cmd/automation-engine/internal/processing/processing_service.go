@@ -56,6 +56,33 @@ type ProcessedActivity struct {
 	}
 }
 
+// SkipReason represents why a day's processing was skipped
+type SkipReason int
+
+const (
+	SkipReasonNone SkipReason = iota
+	SkipReasonNoTrainingPlan      // "No training plan entry for this day"
+	SkipReasonAlreadyProcessed    // "Day already processed (bold text found)"
+	SkipReasonNoActivities        // "No activities and no scheduled run"
+	SkipReasonRestDayNoActivity  // "Rest day, no activity"
+)
+
+// String implements the Stringer interface for human-readable messages
+func (r SkipReason) String() string {
+	switch r {
+	case SkipReasonNoTrainingPlan:
+		return "No training plan entry for this day"
+	case SkipReasonAlreadyProcessed:
+		return "Day already processed (bold text found)"
+	case SkipReasonNoActivities:
+		return "No activities and no scheduled run"
+	case SkipReasonRestDayNoActivity:
+		return "Rest day, no activity"
+	default:
+		return ""
+	}
+}
+
 // SpreadsheetUpdate represents the changes to be made to a spreadsheet row
 type SpreadsheetUpdate struct {
 	Row              int
@@ -70,7 +97,7 @@ type SpreadsheetUpdate struct {
 type DayProcessingResult struct {
 	Date              time.Time
 	Processed         bool
-	SkippedReason     string
+	SkippedReason     SkipReason
 	ActivitiesFound   int
 	TotalDistance     float64 // in meters
 	TotalTime         int     // in seconds
@@ -96,6 +123,15 @@ type ProcessingResult struct {
 	ProcessedDays   int
 	Error           string
 	DetailedResults []*DayProcessingResult
+}
+
+// ScheduledCycleResult represents the result of processing a scheduled cycle
+type ScheduledCycleResult struct {
+	StartTime       time.Time
+	EndTime         time.Time
+	DaysProcessed   int
+	DetailedResults []*DayProcessingResult
+	Error           error
 }
 
 // ProcessPreviousDay processes the immediately preceding calendar day for a user (US025)
@@ -490,7 +526,7 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 
 	if planEntry == nil {
 		result.Processed = false
-		result.SkippedReason = "No training plan entry for this day"
+		result.SkippedReason = SkipReasonNoTrainingPlan
 		s.logger.Debug("No training plan entry found for day, skipping",
 			"user_id", config.UserID,
 			"date", dayStart.Format("2006-01-02"))
@@ -518,7 +554,7 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 	// Check if already processed (based on bold text)
 	if planEntry.IsProcessed {
 		result.Processed = false
-		result.SkippedReason = "Day already processed (bold text found)"
+		result.SkippedReason = SkipReasonAlreadyProcessed
 		result.ActivitiesFound = 0 // Don't count activities for already processed days
 		result.IsNewlyProcessed = false
 		result.HasChanges = false
@@ -554,7 +590,7 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 
 	if !shouldProcess {
 		result.Processed = false
-		result.SkippedReason = "No activities and no scheduled run"
+		result.SkippedReason = SkipReasonNoActivities
 		s.logger.Debug("No activities found and no scheduled run, skipping",
 			"user_id", config.UserID,
 			"date", dayStart.Format("2006-01-02"))

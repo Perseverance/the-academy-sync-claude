@@ -16,11 +16,11 @@ resource "google_compute_region_network_endpoint_group" "backend_api_neg" {
 
 # Backend service
 resource "google_compute_backend_service" "backend_api" {
-  name                  = "${var.environment}-backend-api-backend"
-  protocol              = "HTTPS"
-  timeout_sec           = 30
-  project               = var.project_id
-  
+  name        = "${var.environment}-backend-api-backend"
+  protocol    = "HTTPS"
+  timeout_sec = 30
+  project     = var.project_id
+
   # No port_name for serverless NEGs
   load_balancing_scheme = "EXTERNAL"
 

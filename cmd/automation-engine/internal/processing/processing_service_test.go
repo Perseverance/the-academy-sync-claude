@@ -242,8 +242,8 @@ func TestProcessSingleDay_NoTrainingPlan(t *testing.T) {
 		t.Error("Expected not processed")
 	}
 
-	if result.SkippedReason != "No training plan entry for this day" {
-		t.Errorf("Expected skip reason for no plan, got: %s", result.SkippedReason)
+	if result.SkippedReason != SkipReasonNoTrainingPlan {
+		t.Errorf("Expected skip reason for no plan, got: %s", result.SkippedReason.String())
 	}
 }
 
@@ -276,8 +276,8 @@ func TestProcessSingleDay_AlreadyProcessed(t *testing.T) {
 		t.Error("Expected not processed")
 	}
 
-	if result.SkippedReason != "Day already processed (bold text found)" {
-		t.Errorf("Expected skip reason for processed, got: %s", result.SkippedReason)
+	if result.SkippedReason != SkipReasonAlreadyProcessed {
+		t.Errorf("Expected skip reason for processed, got: %s", result.SkippedReason.String())
 	}
 }
 

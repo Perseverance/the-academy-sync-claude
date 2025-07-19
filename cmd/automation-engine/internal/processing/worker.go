@@ -10,13 +10,15 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/database"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/google"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
+	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/queue"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/strava"
 )
 
-// QueueClient interface for distributed locking operations
+// QueueClient interface for distributed locking and job queueing operations
 type QueueClient interface {
 	AcquireUserProcessingLock(ctx context.Context, userID int, ttl time.Duration) (bool, error)
 	ReleaseUserProcessingLock(ctx context.Context, userID int) error
+	EnqueueJob(ctx context.Context, jobType queue.JobType, userID int, data map[string]interface{}) (*queue.Job, error)
 }
 
 // Worker handles processing automation jobs for individual users
@@ -34,7 +36,8 @@ type Worker struct {
 	configService     *automation.ConfigService
 	tokenPersister    auth.TokenPersister
 	activityLogRepo   ActivityLogRepository
-	queueClient       QueueClient // Add queue client for distributed locking
+	jobsQueueClient          QueueClient // Queue client for jobs and distributed locking
+	notificationQueueClient  QueueClient // Queue client for notifications
 	logger            *logger.Logger
 
 	// OAuth credentials for API clients
@@ -50,22 +53,24 @@ func NewWorker(
 	configService *automation.ConfigService,
 	tokenPersister auth.TokenPersister,
 	activityLogRepo ActivityLogRepository,
-	queueClient QueueClient,
+	jobsQueueClient QueueClient,
+	notificationQueueClient QueueClient,
 	stravaClientID, stravaClientSecret string,
 	googleClientID, googleClientSecret, googleRedirectURL string,
 	logger *logger.Logger,
 ) *Worker {
 	return &Worker{
-		configService:      configService,
-		tokenPersister:     tokenPersister,
-		activityLogRepo:    activityLogRepo,
-		queueClient:        queueClient,
-		stravaClientID:     stravaClientID,
-		stravaClientSecret: stravaClientSecret,
-		googleClientID:     googleClientID,
-		googleClientSecret: googleClientSecret,
-		googleRedirectURL:  googleRedirectURL,
-		logger:             logger.WithContext("component", "automation_worker"),
+		configService:           configService,
+		tokenPersister:          tokenPersister,
+		activityLogRepo:         activityLogRepo,
+		jobsQueueClient:         jobsQueueClient,
+		notificationQueueClient: notificationQueueClient,
+		stravaClientID:          stravaClientID,
+		stravaClientSecret:      stravaClientSecret,
+		googleClientID:          googleClientID,
+		googleClientSecret:      googleClientSecret,
+		googleRedirectURL:       googleRedirectURL,
+		logger:                  logger.WithContext("component", "automation_worker"),
 	}
 }
 
@@ -97,9 +102,9 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	startTime := time.Now()
 
 	// Acquire distributed lock for user processing
-	if w.queueClient != nil {
+	if w.jobsQueueClient != nil {
 		// Use a 10-minute TTL for the lock to match the job processing timeout
-		lockAcquired, err := w.queueClient.AcquireUserProcessingLock(ctx, userID, 10*time.Minute)
+		lockAcquired, err := w.jobsQueueClient.AcquireUserProcessingLock(ctx, userID, 10*time.Minute)
 		if err != nil {
 			w.logger.Error("Failed to acquire user processing lock",
 				"error", err,
@@ -129,7 +134,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 
 		// Ensure lock is released when processing completes
 		defer func() {
-			if err := w.queueClient.ReleaseUserProcessingLock(ctx, userID); err != nil {
+			if err := w.jobsQueueClient.ReleaseUserProcessingLock(ctx, userID); err != nil {
 				w.logger.Error("Failed to release user processing lock",
 					"error", err,
 					"user_id", userID)
@@ -466,6 +471,10 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	var totalActivitiesFound int   // Total activities found (including already processed)
 	var processingErrors []error
 	var spreadsheetUpdates []*google.SpreadsheetUpdate
+	var scheduledResult *ProcessingResult      // For scheduled runs
+	var todayResult *DayProcessingResult       // For manual runs - today
+	var prevDayResult *DayProcessingResult     // For manual runs - yesterday  
+	var lookbackResults []*DayProcessingResult // For manual runs - lookback
 
 	// Handle scheduled runs using RunScheduledCycle
 	if isScheduledRun {
@@ -474,7 +483,8 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 			"timezone", config.Timezone)
 
 		// Use RunScheduledCycle for scheduled runs (US035)
-		scheduledResult, err := processingService.RunScheduledCycle(ctx, config, trainingPlanCache, stravaActivitiesCache)
+		var err error
+		scheduledResult, err = processingService.RunScheduledCycle(ctx, config, trainingPlanCache, stravaActivitiesCache)
 		if err != nil {
 			result.ProcessingTime = time.Since(startTime)
 			result.Error = fmt.Sprintf("Scheduled cycle processing failed: %v", err)
@@ -518,7 +528,8 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 			"timezone", config.Timezone)
 
 		// Process today's data (US028)
-		todayResult, err := processingService.ProcessTodaySoFar(ctx, config, trainingPlanCache, stravaActivitiesCache)
+		var err error
+		todayResult, err = processingService.ProcessTodaySoFar(ctx, config, trainingPlanCache, stravaActivitiesCache)
 		if err != nil {
 			processingErrors = append(processingErrors, fmt.Errorf("today processing failed: %w", err))
 		} else if todayResult.Error != nil {
@@ -553,7 +564,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	// (scheduled runs already processed these in RunScheduledCycle)
 	if !isScheduledRun {
 		// Process previous day (US025) - for manual and regular scheduled sync
-		prevDayResult, err := processingService.ProcessPreviousDay(ctx, config, trainingPlanCache, stravaActivitiesCache)
+		prevDayResult, err = processingService.ProcessPreviousDay(ctx, config, trainingPlanCache, stravaActivitiesCache)
 	if err != nil {
 		processingErrors = append(processingErrors, fmt.Errorf("previous day processing failed: %w", err))
 	} else if prevDayResult.Error != nil {
@@ -580,7 +591,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	}
 
 	// Process 7-day lookback (US026 & US027) - common for both sync types
-	lookbackResults, err := processingService.ProcessLookbackPeriod(ctx, config, trainingPlanCache, stravaActivitiesCache)
+	lookbackResults, err = processingService.ProcessLookbackPeriod(ctx, config, trainingPlanCache, stravaActivitiesCache)
 	if err != nil {
 		processingErrors = append(processingErrors, fmt.Errorf("lookback processing failed: %w", err))
 	} else {
@@ -656,12 +667,40 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 	}
 
 	// Step 12: Queue notification (if enabled)
-	if config.EmailNotificationsEnabled && totalActivities > 0 {
-		w.logger.Debug("📧 Step 12: Queueing notification (TODO: implement)",
+	if config.EmailNotificationsEnabled {
+		w.logger.Debug("📧 Step 12: Queueing notification",
 			"user_id", userID,
 			"email", config.Email,
 			"activity_count", totalActivities)
-		// TODO: Implement notification queueing when notification service is ready
+		
+		// Collect all processing results
+		var allResults []*DayProcessingResult
+		if isScheduledRun && scheduledResult != nil {
+			// For scheduled runs, use the detailed results from RunScheduledCycle
+			allResults = scheduledResult.DetailedResults
+		} else {
+			// For manual runs, collect individual results
+			if todayResult != nil {
+				allResults = append(allResults, todayResult)
+			}
+			if prevDayResult != nil {
+				allResults = append(allResults, prevDayResult)
+			}
+			allResults = append(allResults, lookbackResults...)
+		}
+		
+		// Prepare notification job data
+		notificationData := w.prepareNotificationData(config, allResults, location)
+		
+		// Enqueue notification if there's data to send
+		if notificationData != nil {
+			if err := w.enqueueNotificationJob(ctx, userID, notificationData); err != nil {
+				w.logger.Error("Failed to enqueue notification job",
+					"error", err,
+					"user_id", userID)
+				// Don't fail the whole process for notification failures
+			}
+		}
 	}
 
 	// Complete processing successfully
@@ -834,4 +873,169 @@ func (w *Worker) persistProcessingResult(ctx context.Context, userID int, jobTyp
 			"activities_processed", result.ActivitiesCount,
 			"rows_updated", rowsUpdated)
 	}
+}
+
+// prepareNotificationData prepares the notification job data from processing results
+func (w *Worker) prepareNotificationData(config *automation.ProcessingConfig, dayResults []*DayProcessingResult, location *time.Location) map[string]interface{} {
+	if len(dayResults) == 0 {
+		return nil
+	}
+
+	// Create processing logs from day results - only include newly processed days
+	var logs []map[string]interface{}
+	hasNewlyProcessedDays := false
+	
+	for _, dayResult := range dayResults {
+		if dayResult == nil {
+			continue
+		}
+
+		// Skip days that were already processed (marked as bold in spreadsheet)
+		if dayResult.SkippedReason == SkipReasonAlreadyProcessed {
+			continue
+		}
+
+		// Track if we have any newly processed days
+		if dayResult.Processed || dayResult.Error != nil {
+			hasNewlyProcessedDays = true
+		}
+
+		// Determine status
+		status := "success"
+		if dayResult.Error != nil {
+			status = "failed"
+		} else if !dayResult.Processed {
+			if dayResult.SkippedReason != SkipReasonNone {
+				// Check if it's a rest day with no activity
+				if dayResult.SkippedReason == SkipReasonRestDayNoActivity {
+					status = "success" // Rest days are successful
+				} else {
+					status = "skipped"
+				}
+			}
+		}
+
+		// Create summary message
+		summaryMessage := w.createSummaryMessage(dayResult)
+
+		// Add to logs
+		log := map[string]interface{}{
+			"date":             dayResult.Date.Format("2006-01-02"),
+			"status":           status,
+			"summary_message":  summaryMessage,
+			"activities_found": dayResult.ActivitiesFound,
+		}
+
+		if dayResult.Error != nil {
+			log["error"] = dayResult.Error.Error()
+		}
+
+		logs = append(logs, log)
+	}
+
+	// Don't send notification if no newly processed days
+	if !hasNewlyProcessedDays || len(logs) == 0 {
+		w.logger.Debug("No newly processed days, skipping notification",
+			"user_id", config.UserID)
+		return nil
+	}
+
+	// Don't send notification if all logs are uneventful rest days (US038)
+	allUneventfulRestDays := true
+	for _, log := range logs {
+		if msg, ok := log["summary_message"].(string); ok {
+			if msg != SkipReasonRestDayNoActivity.String() {
+				allUneventfulRestDays = false
+				break
+			}
+		}
+	}
+
+	if allUneventfulRestDays {
+		w.logger.Debug("All days are uneventful rest days, skipping notification",
+			"user_id", config.UserID)
+		return nil
+	}
+
+	// Determine run date (today in user's timezone)
+	runDate := time.Now()
+	if location != nil {
+		runDate = runDate.In(location)
+	}
+
+	// Create notification job data
+	notificationData := map[string]interface{}{
+		"user_id":    config.UserID,
+		"user_email": config.Email,
+		"user_name":  config.Email, // TODO: Get user's full name from database
+		"run_date":   runDate.Format(time.RFC3339),
+		"logs":       logs,
+	}
+
+	return notificationData
+}
+
+// createSummaryMessage creates a summary message for a day's processing result
+func (w *Worker) createSummaryMessage(dayResult *DayProcessingResult) string {
+	if dayResult.Error != nil {
+		return fmt.Sprintf("Failed to process: %v", dayResult.Error)
+	}
+
+	if !dayResult.Processed {
+		if dayResult.SkippedReason != SkipReasonNone {
+			return dayResult.SkippedReason.String()
+		}
+		return "No scheduled training for this day"
+	}
+
+	// Check if this was a rest day
+	if dayResult.PlanEntry != nil && dayResult.PlanEntry.RPE == 1 && dayResult.ActivitiesFound == 0 {
+		// This is a special case - we need to set the skip reason for consistency
+		dayResult.SkippedReason = SkipReasonRestDayNoActivity
+		return dayResult.SkippedReason.String()
+	}
+
+	// Create activity summary
+	if dayResult.ActivitiesFound == 0 {
+		return "No activities found"
+	} else if dayResult.ActivitiesFound == 1 {
+		// Format: "1 activity logged (X.Xkm in HH:MM:SS)"
+		distance := dayResult.TotalDistance / 1000.0 // Convert to km
+		duration := time.Duration(dayResult.TotalTime) * time.Second
+		return fmt.Sprintf("1 activity logged (%.1fkm in %s)", distance, formatDuration(duration))
+	} else {
+		// Format: "X activities logged (total: X.Xkm in HH:MM:SS)"
+		distance := dayResult.TotalDistance / 1000.0 // Convert to km
+		duration := time.Duration(dayResult.TotalTime) * time.Second
+		return fmt.Sprintf("%d activities logged (total: %.1fkm in %s)", 
+			dayResult.ActivitiesFound, distance, formatDuration(duration))
+	}
+}
+
+// formatDuration formats a duration as HH:MM:SS
+func formatDuration(d time.Duration) string {
+	hours := int(d.Hours())
+	minutes := int(d.Minutes()) % 60
+	seconds := int(d.Seconds()) % 60
+	return fmt.Sprintf("%02d:%02d:%02d", hours, minutes, seconds)
+}
+
+// enqueueNotificationJob enqueues a notification job to the notification queue
+func (w *Worker) enqueueNotificationJob(ctx context.Context, userID int, jobData map[string]interface{}) error {
+	if w.notificationQueueClient == nil {
+		return fmt.Errorf("notification queue client not configured")
+	}
+
+	// Enqueue to notification queue
+	job, err := w.notificationQueueClient.EnqueueJob(ctx, queue.JobType("notification"), userID, jobData)
+	if err != nil {
+		return fmt.Errorf("failed to enqueue notification job: %w", err)
+	}
+
+	w.logger.Info("Successfully enqueued notification job",
+		"user_id", userID,
+		"job_id", job.ID,
+		"email", jobData["user_email"])
+
+	return nil
 }
