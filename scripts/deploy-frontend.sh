@@ -137,11 +137,22 @@ export NEXT_PUBLIC_STRAVA_CLIENT_ID="$STRAVA_CLIENT_ID"
 # Ensure we're building for static export (not standalone)
 unset BUILD_STANDALONE
 
-if npm run build; then
-    print_success "React application built successfully"
+# Use custom build script that handles API routes
+if [ -f "build-static.sh" ]; then
+    print_info "Using custom build script for static export..."
+    if ./build-static.sh; then
+        print_success "React application built successfully"
+    else
+        print_error "Failed to build React application"
+        exit 1
+    fi
 else
-    print_error "Failed to build React application"
-    exit 1
+    if npm run build; then
+        print_success "React application built successfully"
+    else
+        print_error "Failed to build React application"
+        exit 1
+    fi
 fi
 
 # Get the output directory - Next.js with output: 'export' creates 'out' directory
