@@ -193,8 +193,11 @@ func (s *NotificationService) ConstructEmailBody(notification *NotificationJob, 
 // RenderHTMLEmail renders the HTML email body using the template
 func (s *NotificationService) RenderHTMLEmail(notification *NotificationJob, runDate time.Time) (string, error) {
 	// Prepare template data
-	// TODO: Update spreadsheet URL when Google Sheets integration is implemented
-	spreadsheetURL := "https://docs.google.com/spreadsheets/d/YOUR_SPREADSHEET_ID"
+	// Build the Google Sheets URL from the spreadsheet ID
+	spreadsheetURL := ""
+	if notification.SpreadsheetID != "" {
+		spreadsheetURL = fmt.Sprintf("https://docs.google.com/spreadsheets/d/%s", notification.SpreadsheetID)
+	}
 	
 	templateData := TemplateData{
 		RunDate:        runDate.Format("January 2, 2006"),

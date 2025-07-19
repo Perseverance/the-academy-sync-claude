@@ -19,10 +19,11 @@ func TestRenderHTMLEmail(t *testing.T) {
 
 		runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
 		notification := &NotificationJob{
-			UserID:    123,
-			UserEmail: "test@example.com",
-			UserName:  "Test User",
-			RunDate:   runDate.Format(time.RFC3339),
+			UserID:        123,
+			UserEmail:     "test@example.com",
+			UserName:      "Test User",
+			RunDate:       runDate.Format(time.RFC3339),
+			SpreadsheetID: "1234567890abcdefgh",
 			Logs: []ProcessingLog{
 				{
 					Date:           "2024-01-15",
@@ -76,7 +77,7 @@ func TestRenderHTMLEmail(t *testing.T) {
 		assert.Contains(t, html, "View Dashboard")
 		assert.Contains(t, html, "View Spreadsheet")
 		assert.Contains(t, html, "http://localhost:3000") // Frontend URL
-		assert.Contains(t, html, "https://docs.google.com/spreadsheets") // Spreadsheet URL
+		assert.Contains(t, html, "https://docs.google.com/spreadsheets/d/1234567890abcdefgh") // Spreadsheet URL with ID
 
 		// Check that CSS is inlined
 		assert.Contains(t, html, "style=")
@@ -89,11 +90,12 @@ func TestRenderHTMLEmail(t *testing.T) {
 
 		runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
 		notification := &NotificationJob{
-			UserID:    123,
-			UserEmail: "test@example.com",
-			UserName:  "Test User",
-			RunDate:   runDate.Format(time.RFC3339),
-			Logs:      []ProcessingLog{},
+			UserID:        123,
+			UserEmail:     "test@example.com",
+			UserName:      "Test User",
+			RunDate:       runDate.Format(time.RFC3339),
+			SpreadsheetID: "test-sheet-id",
+			Logs:          []ProcessingLog{},
 		}
 
 		html, err := service.RenderHTMLEmail(notification, runDate)
@@ -222,6 +224,37 @@ func TestRenderHTMLEmail(t *testing.T) {
 		assert.Contains(t, html, "#2a5b3e") // Academy Green
 		assert.Contains(t, html, "#333333") // Primary text color
 		assert.Contains(t, html, "#f3f4f6") // Background color
+	})
+
+	t.Run("missing spreadsheet ID", func(t *testing.T) {
+		service, err := NewNotificationService(nil, logger, "http://localhost:8080", "http://localhost:3000")
+		assert.NoError(t, err)
+
+		runDate := time.Date(2024, 1, 20, 10, 0, 0, 0, time.UTC)
+		notification := &NotificationJob{
+			UserID:        123,
+			UserEmail:     "test@example.com",
+			UserName:      "Test User",
+			RunDate:       runDate.Format(time.RFC3339),
+			SpreadsheetID: "", // Empty spreadsheet ID
+			Logs: []ProcessingLog{
+				{
+					Date:           "2024-01-15",
+					Status:         "success",
+					SummaryMessage: "1 activity logged",
+				},
+			},
+		}
+
+		html, err := service.RenderHTMLEmail(notification, runDate)
+		assert.NoError(t, err)
+		
+		// Should still render but with empty spreadsheet URL
+		assert.Contains(t, html, "View Dashboard")
+		assert.Contains(t, html, "View Spreadsheet")
+		assert.Contains(t, html, "http://localhost:3000") // Frontend URL
+		// When no spreadsheet ID is provided, the href should be empty
+		assert.Regexp(t, `href=""\s+style="[^"]*">View Spreadsheet`, html)
 	})
 }
 

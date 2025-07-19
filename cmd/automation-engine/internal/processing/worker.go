@@ -988,11 +988,12 @@ func (w *Worker) prepareNotificationData(config *automation.ProcessingConfig, da
 
 	// Create notification job data
 	notificationData := map[string]interface{}{
-		"user_id":    config.UserID,
-		"user_email": config.Email,
-		"user_name":  config.Email, // TODO: Get user's full name from database
-		"run_date":   runDate.Format(time.RFC3339),
-		"logs":       logs,
+		"user_id":       config.UserID,
+		"user_email":    config.Email,
+		"user_name":     config.Email, // TODO: Get user's full name from database
+		"run_date":      runDate.Format(time.RFC3339),
+		"logs":          logs,
+		"spreadsheet_id": config.SpreadsheetID,
 	}
 
 	// Debug: Log the notification data
