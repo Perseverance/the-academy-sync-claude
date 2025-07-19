@@ -154,14 +154,15 @@ func main() {
 	log.Info("Core services initialized successfully",
 		"oauth_configured", cfg.StravaClientID != "" && cfg.GoogleClientID != "")
 
-	// Initialize Redis queue client if configured
+	// Initialize Redis queue clients if configured
 	var queueClient *queue.Client
+	var notificationQueueClient *queue.Client
 	if cfg.RedisURL != "" {
-		log.Info("Redis configured - initializing queue client",
+		log.Info("Redis configured - initializing queue clients",
 			"redis_url", cfg.RedisURL,
 			"max_workers", cfg.MaxWorkers)
 
-		// Initialize queue client
+		// Initialize main jobs queue client
 		var err error
 		queueClient, err = queue.NewClient(cfg.RedisURL, "jobs_queue", log)
 		if err != nil {
@@ -169,6 +170,14 @@ func main() {
 			os.Exit(1)
 		}
 		defer queueClient.Close()
+
+		// Initialize notification queue client
+		notificationQueueClient, err = queue.NewClient(cfg.RedisURL, "notification_queue", log)
+		if err != nil {
+			log.Critical("Failed to initialize notification queue client", "error", err)
+			os.Exit(1)
+		}
+		defer notificationQueueClient.Close()
 
 		// Validate MaxWorkers before starting pool
 		if cfg.MaxWorkers <= 0 {
@@ -188,12 +197,13 @@ func main() {
 		}
 	}
 
-	// Initialize processing worker with queue client (if available)
+	// Initialize processing worker with queue clients (if available)
 	worker := processing.NewWorker(
 		configService,
 		tokenPersister,
 		activityLogRepo,
-		queueClient, // Pass queue client (nil if Redis not configured)
+		queueClient, // Pass jobs queue client (nil if Redis not configured)
+		notificationQueueClient, // Pass notification queue client
 		cfg.StravaClientID,
 		cfg.StravaClientSecret,
 		cfg.GoogleClientID,

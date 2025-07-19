@@ -80,6 +80,14 @@ func (m *MockQueueClient) ReleaseUserProcessingLock(ctx context.Context, userID 
 	return args.Error(0)
 }
 
+func (m *MockQueueClient) EnqueueJob(ctx context.Context, jobType queue.JobType, userID int, data map[string]interface{}) (*queue.Job, error) {
+	args := m.Called(ctx, jobType, userID, data)
+	if job := args.Get(0); job != nil {
+		return job.(*queue.Job), args.Error(1)
+	}
+	return nil, args.Error(1)
+}
+
 // Test ProcessUserWithData with configuration error
 func TestProcessUserWithData_ConfigError(t *testing.T) {
 	// Create mocks
@@ -102,7 +110,8 @@ func TestProcessUserWithData_ConfigError(t *testing.T) {
 		configService,
 		mockTokenPersister,
 		mockActivityLogRepo,
-		mockQueueClient,
+		mockQueueClient, // jobsQueueClient
+		nil, // notification queue client
 		"strava-client-id",
 		"strava-client-secret",
 		"google-client-id",
@@ -176,7 +185,8 @@ func TestProcessUserWithData_AutomationDisabled(t *testing.T) {
 		configService,
 		mockTokenPersister,
 		mockActivityLogRepo,
-		mockQueueClient,
+		mockQueueClient, // jobsQueueClient
+		nil, // notification queue client
 		"strava-client-id",
 		"strava-client-secret",
 		"google-client-id",
@@ -219,7 +229,8 @@ func TestProcessUserWithData_LockAcquisitionFailure(t *testing.T) {
 		configService,
 		mockTokenPersister,
 		mockActivityLogRepo,
-		mockQueueClient,
+		mockQueueClient, // jobsQueueClient
+		nil, // notification queue client
 		"strava-client-id",
 		"strava-client-secret",
 		"google-client-id",
@@ -260,7 +271,8 @@ func TestProcessUserWithData_AlreadyProcessing(t *testing.T) {
 		configService,
 		mockTokenPersister,
 		mockActivityLogRepo,
-		mockQueueClient,
+		mockQueueClient, // jobsQueueClient
+		nil, // notification queue client
 		"strava-client-id",
 		"strava-client-secret",
 		"google-client-id",
@@ -338,6 +350,7 @@ func TestProcessUserWithData_ScheduledTrigger(t *testing.T) {
 		mockTokenPersister,
 		mockActivityLogRepo,
 		mockQueueClient,
+		nil, // notification queue client
 		"strava-client-id",
 		"strava-client-secret",
 		"google-client-id",
@@ -410,7 +423,8 @@ func TestProcessUserWithData_NoQueueClient(t *testing.T) {
 		configService,
 		mockTokenPersister,
 		mockActivityLogRepo,
-		nil, // No queue client
+		nil, // No jobs queue client
+		nil, // notification queue client
 		"strava-client-id",
 		"strava-client-secret",
 		"google-client-id",

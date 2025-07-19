@@ -32,14 +32,14 @@ resource "google_sql_database_instance" "main" {
       point_in_time_recovery_enabled = var.db_point_in_time_recovery_enabled
     }
     ip_configuration {
-      ipv4_enabled    = false  # Disable public IP for security - use Cloud SQL Proxy or IAP tunneling instead
-      private_network = google_compute_network.main.id
+      ipv4_enabled                                  = false # Disable public IP for security - use Cloud SQL Proxy or IAP tunneling instead
+      private_network                               = google_compute_network.main.id
       enable_private_path_for_google_cloud_services = true
-      
+
       # Authorized networks are not applicable when ipv4_enabled is false
       # If public access is needed, use Cloud SQL Proxy or IAP tunneling
     }
-    
+
     # Database flags
     database_flags {
       name  = "cloudsql.iam_authentication"
@@ -47,7 +47,7 @@ resource "google_sql_database_instance" "main" {
     }
   }
   deletion_protection = var.db_deletion_protection
-  depends_on          = [
+  depends_on = [
     google_project_service.sqladmin,
     google_service_networking_connection.private_vpc_connection
   ]
@@ -64,10 +64,10 @@ resource "google_sql_user" "default" {
   project  = var.project_id
   instance = google_sql_database_instance.main.name
   password = random_password.db_password.result
-  
+
   # This ensures the database is deleted before the user
   depends_on = [google_sql_database.default]
-  
+
   lifecycle {
     # Create the user before the database
     create_before_destroy = true

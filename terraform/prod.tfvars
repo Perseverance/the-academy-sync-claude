@@ -37,21 +37,21 @@ automation_engine_image_url    = "gcr.io/the-academy-sync-sdlc-test/automation-e
 notification_service_image_url = "gcr.io/the-academy-sync-sdlc-test/notification-service:placeholder"
 
 # Service configurations for production (performance-optimized)
-backend_api_cpu            = "2"
-backend_api_memory         = "1Gi"
-backend_api_min_instances  = 1  # Always have at least one instance running
-backend_api_max_instances  = 20
+backend_api_cpu           = "2"
+backend_api_memory        = "1Gi"
+backend_api_min_instances = 1 # Always have at least one instance running
+backend_api_max_instances = 20
 
-automation_engine_cpu            = "4"
-automation_engine_memory         = "2Gi"
-automation_engine_min_instances  = 1  # Always have at least one instance running
-automation_engine_max_instances  = 10
-automation_engine_max_workers    = 50
+automation_engine_cpu           = "4"
+automation_engine_memory        = "2Gi"
+automation_engine_min_instances = 1 # Always have at least one instance running
+automation_engine_max_instances = 10
+automation_engine_max_workers   = 50
 
-notification_service_cpu            = "1"
-notification_service_memory         = "512Mi"
-notification_service_min_instances  = 1  # Always have at least one instance running
-notification_service_max_instances  = 5
+notification_service_cpu           = "1"
+notification_service_memory        = "512Mi"
+notification_service_min_instances = 1 # Always have at least one instance running
+notification_service_max_instances = 5
 
 # VPC Connector for production (larger configuration)
 vpc_connector_machine_type  = "e2-standard-4"

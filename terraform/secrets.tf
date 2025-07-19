@@ -4,11 +4,11 @@
 resource "google_secret_manager_secret" "database_url" {
   secret_id = "database-url"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -16,11 +16,11 @@ resource "google_secret_manager_secret" "database_url" {
 resource "google_secret_manager_secret" "redis_url" {
   secret_id = "redis-url"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -28,11 +28,11 @@ resource "google_secret_manager_secret" "redis_url" {
 resource "google_secret_manager_secret" "jwt_secret" {
   secret_id = "jwt-secret"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -40,11 +40,11 @@ resource "google_secret_manager_secret" "jwt_secret" {
 resource "google_secret_manager_secret" "encryption_secret" {
   secret_id = "encryption-secret"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -52,11 +52,11 @@ resource "google_secret_manager_secret" "encryption_secret" {
 resource "google_secret_manager_secret" "google_client_id" {
   secret_id = "google-client-id"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -64,11 +64,11 @@ resource "google_secret_manager_secret" "google_client_id" {
 resource "google_secret_manager_secret" "google_client_secret" {
   secret_id = "google-client-secret"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -76,11 +76,11 @@ resource "google_secret_manager_secret" "google_client_secret" {
 resource "google_secret_manager_secret" "strava_client_id" {
   secret_id = "strava-client-id"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -88,11 +88,11 @@ resource "google_secret_manager_secret" "strava_client_id" {
 resource "google_secret_manager_secret" "strava_client_secret" {
   secret_id = "strava-client-secret"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -100,11 +100,11 @@ resource "google_secret_manager_secret" "strava_client_secret" {
 resource "google_secret_manager_secret" "base_url" {
   secret_id = "base-url"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -112,11 +112,11 @@ resource "google_secret_manager_secret" "base_url" {
 resource "google_secret_manager_secret" "frontend_url" {
   secret_id = "frontend-url"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -124,11 +124,11 @@ resource "google_secret_manager_secret" "frontend_url" {
 resource "google_secret_manager_secret" "sendgrid_api_key" {
   secret_id = "sendgrid-api-key"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -136,11 +136,11 @@ resource "google_secret_manager_secret" "sendgrid_api_key" {
 resource "google_secret_manager_secret" "from_email" {
   secret_id = "from-email"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -148,11 +148,11 @@ resource "google_secret_manager_secret" "from_email" {
 resource "google_secret_manager_secret" "redis_auth" {
   secret_id = "redis-auth"
   project   = var.project_id
-  
+
   replication {
     auto {}
   }
-  
+
   depends_on = [google_project_service.secretmanager]
 }
 
@@ -160,7 +160,7 @@ resource "google_secret_manager_secret" "redis_auth" {
 resource "google_secret_manager_secret_version" "database_url" {
   secret      = google_secret_manager_secret.database_url.id
   secret_data = "placeholder"
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -169,7 +169,7 @@ resource "google_secret_manager_secret_version" "database_url" {
 resource "google_secret_manager_secret_version" "redis_url" {
   secret      = google_secret_manager_secret.redis_url.id
   secret_data = "placeholder"
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -185,7 +185,7 @@ resource "random_password" "jwt_secret" {
 resource "google_secret_manager_secret_version" "jwt_secret" {
   secret      = google_secret_manager_secret.jwt_secret.id
   secret_data = base64encode(random_password.jwt_secret.result)
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -201,7 +201,7 @@ resource "random_password" "encryption_secret" {
 resource "google_secret_manager_secret_version" "encryption_secret" {
   secret      = google_secret_manager_secret.encryption_secret.id
   secret_data = base64encode(random_password.encryption_secret.result)
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -210,7 +210,7 @@ resource "google_secret_manager_secret_version" "encryption_secret" {
 resource "google_secret_manager_secret_version" "google_client_id" {
   secret      = google_secret_manager_secret.google_client_id.id
   secret_data = "placeholder"
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -219,7 +219,7 @@ resource "google_secret_manager_secret_version" "google_client_id" {
 resource "google_secret_manager_secret_version" "google_client_secret" {
   secret      = google_secret_manager_secret.google_client_secret.id
   secret_data = "placeholder"
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -228,7 +228,7 @@ resource "google_secret_manager_secret_version" "google_client_secret" {
 resource "google_secret_manager_secret_version" "strava_client_id" {
   secret      = google_secret_manager_secret.strava_client_id.id
   secret_data = "placeholder"
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -237,7 +237,7 @@ resource "google_secret_manager_secret_version" "strava_client_id" {
 resource "google_secret_manager_secret_version" "strava_client_secret" {
   secret      = google_secret_manager_secret.strava_client_secret.id
   secret_data = "placeholder"
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -246,7 +246,7 @@ resource "google_secret_manager_secret_version" "strava_client_secret" {
 resource "google_secret_manager_secret_version" "base_url" {
   secret      = google_secret_manager_secret.base_url.id
   secret_data = "placeholder"
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -255,7 +255,7 @@ resource "google_secret_manager_secret_version" "base_url" {
 resource "google_secret_manager_secret_version" "frontend_url" {
   secret      = google_secret_manager_secret.frontend_url.id
   secret_data = "placeholder"
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -264,7 +264,7 @@ resource "google_secret_manager_secret_version" "frontend_url" {
 resource "google_secret_manager_secret_version" "sendgrid_api_key" {
   secret      = google_secret_manager_secret.sendgrid_api_key.id
   secret_data = var.sendgrid_api_key
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -273,7 +273,7 @@ resource "google_secret_manager_secret_version" "sendgrid_api_key" {
 resource "google_secret_manager_secret_version" "from_email" {
   secret      = google_secret_manager_secret.from_email.id
   secret_data = "placeholder"
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }
@@ -283,7 +283,7 @@ resource "google_secret_manager_secret_version" "from_email" {
 resource "google_secret_manager_secret_version" "redis_auth" {
   secret      = google_secret_manager_secret.redis_auth.id
   secret_data = google_redis_instance.main.auth_string
-  
+
   lifecycle {
     ignore_changes = [secret_data]
   }

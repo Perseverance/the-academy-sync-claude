@@ -38,6 +38,9 @@ build-errors.log
 .vscode/
 .claude/
 
+# OS generated files
+.DS_Store
+
 # Terraform
 terraform/.terraform/
 *.tfstate
