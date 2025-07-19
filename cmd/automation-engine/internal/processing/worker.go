@@ -890,13 +890,31 @@ func (w *Worker) prepareNotificationData(config *automation.ProcessingConfig, da
 			continue
 		}
 
+		// Debug: Log the day result being processed
+		w.logger.Debug("Processing day result for notification",
+			"date", dayResult.Date.Format("2006-01-02"),
+			"processed", dayResult.Processed,
+			"skipped_reason", dayResult.SkippedReason,
+			"activities_found", dayResult.ActivitiesFound)
+
 		// Skip days that were already processed (marked as bold in spreadsheet)
 		if dayResult.SkippedReason == SkipReasonAlreadyProcessed {
+			w.logger.Debug("Skipping already processed day",
+				"date", dayResult.Date.Format("2006-01-02"))
 			continue
 		}
 
-		// Skip days with no training plan and no activities
-		if dayResult.SkippedReason == SkipReasonNoTrainingPlan && dayResult.ActivitiesFound == 0 {
+		// Skip days marked as "No activities and no scheduled run"
+		if dayResult.SkippedReason == SkipReasonNoActivities {
+			w.logger.Debug("Skipping day with no activities and no scheduled run",
+				"date", dayResult.Date.Format("2006-01-02"))
+			continue
+		}
+
+		// Skip rest days with no activities (successful rest)
+		if dayResult.SkippedReason == SkipReasonRestDayNoActivity {
+			w.logger.Debug("Skipping successful rest day",
+				"date", dayResult.Date.Format("2006-01-02"))
 			continue
 		}
 
@@ -976,6 +994,12 @@ func (w *Worker) prepareNotificationData(config *automation.ProcessingConfig, da
 		"run_date":   runDate.Format(time.RFC3339),
 		"logs":       logs,
 	}
+
+	// Debug: Log the notification data
+	w.logger.Debug("Prepared notification data",
+		"user_id", config.UserID,
+		"log_count", len(logs),
+		"logs", logs)
 
 	return notificationData
 }

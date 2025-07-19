@@ -23,7 +23,7 @@ func TestPrepareNotificationData(t *testing.T) {
 		Email:  "test@example.com",
 	}
 
-	t.Run("all uneventful rest days", func(t *testing.T) {
+	t.Run("filter out successful rest days", func(t *testing.T) {
 		// Create day results with only rest days
 		dayResults := []*DayProcessingResult{
 			{
@@ -43,7 +43,7 @@ func TestPrepareNotificationData(t *testing.T) {
 		}
 
 		result := worker.prepareNotificationData(config, dayResults, location)
-		assert.Nil(t, result, "Should return nil for all uneventful rest days")
+		assert.Nil(t, result, "Should return nil when only successful rest days")
 	})
 
 	t.Run("mixed results with activities", func(t *testing.T) {
@@ -62,6 +62,12 @@ func TestPrepareNotificationData(t *testing.T) {
 				PlanEntry:      &TrainingPlanEntry{RPE: 1},
 				SkippedReason:  SkipReasonRestDayNoActivity,
 			},
+			{
+				Date:           time.Date(2024, 1, 17, 0, 0, 0, 0, location),
+				Processed:      true,
+				ActivitiesFound: 0,
+				PlanEntry:      &TrainingPlanEntry{ActivityType: "Бягане", RPE: 5},
+			},
 		}
 
 		result := worker.prepareNotificationData(config, dayResults, location)
@@ -71,7 +77,7 @@ func TestPrepareNotificationData(t *testing.T) {
 		assert.Equal(t, "test@example.com", result["user_name"]) // Using email as name temporarily
 
 		logs := result["logs"].([]map[string]interface{})
-		assert.Len(t, logs, 2)
+		assert.Len(t, logs, 2, "Should exclude rest days")
 
 		// Check first log (activity)
 		assert.Equal(t, "2024-01-15", logs[0]["date"])
@@ -79,10 +85,10 @@ func TestPrepareNotificationData(t *testing.T) {
 		assert.Contains(t, logs[0]["summary_message"], "1 activity logged")
 		assert.Contains(t, logs[0]["summary_message"], "5.0km")
 
-		// Check second log (rest day)
-		assert.Equal(t, "2024-01-16", logs[1]["date"])
+		// Check second log (missed workout)
+		assert.Equal(t, "2024-01-17", logs[1]["date"])
 		assert.Equal(t, "success", logs[1]["status"])
-		assert.Equal(t, SkipReasonRestDayNoActivity.String(), logs[1]["summary_message"])
+		assert.Equal(t, "No activities found", logs[1]["summary_message"])
 	})
 
 	t.Run("failed processing", func(t *testing.T) {
@@ -151,26 +157,34 @@ func TestPrepareNotificationData(t *testing.T) {
 		assert.Contains(t, logs[0]["summary_message"], "1 activity logged")
 	})
 
-	t.Run("filter out days with no training plan and no activities", func(t *testing.T) {
+	t.Run("filter out days with no activities and no scheduled run", func(t *testing.T) {
 		dayResults := []*DayProcessingResult{
 			{
 				Date:           time.Date(2024, 1, 15, 0, 0, 0, 0, location),
 				Processed:      false,
-				SkippedReason:  SkipReasonNoTrainingPlan,
+				SkippedReason:  SkipReasonNoActivities, // No scheduled run, no activities
 				ActivitiesFound: 0,
 			},
 			{
-				Date:           time.Date(2024, 1, 16, 0, 0, 0, 0, location),
-				Processed:      false,
-				SkippedReason:  SkipReasonNoTrainingPlan,
-				ActivitiesFound: 1, // Has activities despite no training plan
+				Date:            time.Date(2024, 1, 16, 0, 0, 0, 0, location),
+				Processed:       true,
+				ActivitiesFound: 0, // Scheduled run but no activities (missed workout)
+				PlanEntry:       &TrainingPlanEntry{ActivityType: "Бягане", RPE: 5},
 			},
 			{
 				Date:            time.Date(2024, 1, 17, 0, 0, 0, 0, location),
 				Processed:       true,
-				ActivitiesFound: 1,
+				ActivitiesFound: 1, // Unscheduled activity
 				TotalDistance:   5000,
 				TotalTime:       1800,
+			},
+			{
+				Date:            time.Date(2024, 1, 18, 0, 0, 0, 0, location),
+				Processed:       true,
+				ActivitiesFound: 1, // Scheduled run with activity
+				TotalDistance:   10000,
+				TotalTime:       3600,
+				PlanEntry:       &TrainingPlanEntry{ActivityType: "Бягане", RPE: 6},
 			},
 		}
 
@@ -178,9 +192,10 @@ func TestPrepareNotificationData(t *testing.T) {
 		assert.NotNil(t, result, "Should return notification data")
 		
 		logs := result["logs"].([]map[string]interface{})
-		assert.Len(t, logs, 2, "Should include days with activities or training plan")
-		assert.Equal(t, "2024-01-16", logs[0]["date"], "Should include day with activities but no training plan")
-		assert.Equal(t, "2024-01-17", logs[1]["date"], "Should include processed day")
+		assert.Len(t, logs, 3, "Should include all days except those with no activities and no scheduled run")
+		assert.Equal(t, "2024-01-16", logs[0]["date"], "Should include missed workout")
+		assert.Equal(t, "2024-01-17", logs[1]["date"], "Should include unscheduled activity")
+		assert.Equal(t, "2024-01-18", logs[2]["date"], "Should include completed workout")
 	})
 }
 
