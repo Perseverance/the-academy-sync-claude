@@ -150,6 +150,38 @@ func TestPrepareNotificationData(t *testing.T) {
 		assert.Equal(t, "2024-01-16", logs[0]["date"])
 		assert.Contains(t, logs[0]["summary_message"], "1 activity logged")
 	})
+
+	t.Run("filter out days with no training plan and no activities", func(t *testing.T) {
+		dayResults := []*DayProcessingResult{
+			{
+				Date:           time.Date(2024, 1, 15, 0, 0, 0, 0, location),
+				Processed:      false,
+				SkippedReason:  SkipReasonNoTrainingPlan,
+				ActivitiesFound: 0,
+			},
+			{
+				Date:           time.Date(2024, 1, 16, 0, 0, 0, 0, location),
+				Processed:      false,
+				SkippedReason:  SkipReasonNoTrainingPlan,
+				ActivitiesFound: 1, // Has activities despite no training plan
+			},
+			{
+				Date:            time.Date(2024, 1, 17, 0, 0, 0, 0, location),
+				Processed:       true,
+				ActivitiesFound: 1,
+				TotalDistance:   5000,
+				TotalTime:       1800,
+			},
+		}
+
+		result := worker.prepareNotificationData(config, dayResults, location)
+		assert.NotNil(t, result, "Should return notification data")
+		
+		logs := result["logs"].([]map[string]interface{})
+		assert.Len(t, logs, 2, "Should include days with activities or training plan")
+		assert.Equal(t, "2024-01-16", logs[0]["date"], "Should include day with activities but no training plan")
+		assert.Equal(t, "2024-01-17", logs[1]["date"], "Should include processed day")
+	})
 }
 
 // Test createSummaryMessage

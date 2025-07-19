@@ -895,6 +895,11 @@ func (w *Worker) prepareNotificationData(config *automation.ProcessingConfig, da
 			continue
 		}
 
+		// Skip days with no training plan and no activities
+		if dayResult.SkippedReason == SkipReasonNoTrainingPlan && dayResult.ActivitiesFound == 0 {
+			continue
+		}
+
 		// Track if we have any newly processed days
 		if dayResult.Processed || dayResult.Error != nil {
 			hasNewlyProcessedDays = true
