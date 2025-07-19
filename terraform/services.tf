@@ -10,7 +10,7 @@ resource "google_cloud_run_service" "backend_api" {
     spec {
       containers {
         image = "gcr.io/${var.project_id}/backend-api:${var.environment}"
-        
+
         resources {
           limits = {
             memory = "512Mi"
@@ -19,12 +19,12 @@ resource "google_cloud_run_service" "backend_api" {
         }
 
         env {
-          name = "APP_ENV"
+          name  = "APP_ENV"
           value = var.environment
         }
 
         env {
-          name = "GCP_PROJECT_ID"
+          name  = "GCP_PROJECT_ID"
           value = var.project_id
         }
 
@@ -130,12 +130,12 @@ resource "google_cloud_run_service" "backend_api" {
         }
 
         env {
-          name = "SMTP_HOST"
+          name  = "SMTP_HOST"
           value = "smtp.sendgrid.net"
         }
 
         env {
-          name = "SMTP_PORT"
+          name  = "SMTP_PORT"
           value = "587"
         }
       }
@@ -145,11 +145,11 @@ resource "google_cloud_run_service" "backend_api" {
 
     metadata {
       annotations = {
-        "autoscaling.knative.dev/maxScale"      = "100"
-        "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.main.connection_name
+        "autoscaling.knative.dev/maxScale"        = "100"
+        "run.googleapis.com/cloudsql-instances"   = google_sql_database_instance.main.connection_name
         "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.main.id
-        "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
-        "run.googleapis.com/deletion-protection" = "true"
+        "run.googleapis.com/vpc-access-egress"    = "private-ranges-only"
+        "run.googleapis.com/deletion-protection"  = "true"
       }
     }
   }
@@ -184,7 +184,7 @@ resource "google_cloud_run_service" "automation_engine" {
     spec {
       containers {
         image = "gcr.io/${var.project_id}/automation-engine:${var.environment}"
-        
+
         resources {
           limits = {
             memory = "1Gi"
@@ -193,17 +193,17 @@ resource "google_cloud_run_service" "automation_engine" {
         }
 
         env {
-          name = "APP_ENV"
+          name  = "APP_ENV"
           value = var.environment
         }
 
         env {
-          name = "GCP_PROJECT_ID"
+          name  = "GCP_PROJECT_ID"
           value = var.project_id
         }
 
         env {
-          name = "MAX_WORKERS"
+          name  = "MAX_WORKERS"
           value = "20"
         }
 
@@ -304,11 +304,12 @@ resource "google_cloud_run_service" "automation_engine" {
 
     metadata {
       annotations = {
-        "autoscaling.knative.dev/maxScale"      = "10"
-        "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.main.connection_name
+        "autoscaling.knative.dev/minScale"        = "1"
+        "autoscaling.knative.dev/maxScale"        = "10"
+        "run.googleapis.com/cloudsql-instances"   = google_sql_database_instance.main.connection_name
         "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.main.id
-        "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
-        "run.googleapis.com/deletion-protection" = "true"
+        "run.googleapis.com/vpc-access-egress"    = "private-ranges-only"
+        "run.googleapis.com/deletion-protection"  = "true"
       }
     }
   }
@@ -341,7 +342,7 @@ resource "google_cloud_run_service" "notification_service" {
     spec {
       containers {
         image = "gcr.io/${var.project_id}/notification-service:${var.environment}"
-        
+
         resources {
           limits = {
             memory = "512Mi"
@@ -350,12 +351,12 @@ resource "google_cloud_run_service" "notification_service" {
         }
 
         env {
-          name = "APP_ENV"
+          name  = "APP_ENV"
           value = var.environment
         }
 
         env {
-          name = "GCP_PROJECT_ID"
+          name  = "GCP_PROJECT_ID"
           value = var.project_id
         }
 
@@ -436,11 +437,12 @@ resource "google_cloud_run_service" "notification_service" {
 
     metadata {
       annotations = {
-        "autoscaling.knative.dev/maxScale"      = "5"
-        "run.googleapis.com/cloudsql-instances" = google_sql_database_instance.main.connection_name
+        "autoscaling.knative.dev/minScale"        = "1"
+        "autoscaling.knative.dev/maxScale"        = "5"
+        "run.googleapis.com/cloudsql-instances"   = google_sql_database_instance.main.connection_name
         "run.googleapis.com/vpc-access-connector" = google_vpc_access_connector.main.id
-        "run.googleapis.com/vpc-access-egress"     = "private-ranges-only"
-        "run.googleapis.com/deletion-protection" = "true"
+        "run.googleapis.com/vpc-access-egress"    = "private-ranges-only"
+        "run.googleapis.com/deletion-protection"  = "true"
       }
     }
   }
@@ -514,7 +516,7 @@ resource "google_secret_manager_secret_iam_member" "backend_api_secrets" {
     "base-url",
     "frontend-url",
   ])
-  
+
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.backend_api_sa.email}"
@@ -533,7 +535,7 @@ resource "google_secret_manager_secret_iam_member" "automation_engine_secrets" {
     "strava-client-id",
     "strava-client-secret",
   ])
-  
+
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.automation_engine_sa.email}"
@@ -550,7 +552,7 @@ resource "google_secret_manager_secret_iam_member" "notification_service_secrets
     "sendgrid-api-key",
     "from-email",
   ])
-  
+
   secret_id = each.value
   role      = "roles/secretmanager.secretAccessor"
   member    = "serviceAccount:${google_service_account.notification_service_sa.email}"
