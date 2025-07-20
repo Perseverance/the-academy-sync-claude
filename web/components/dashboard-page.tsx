@@ -4,6 +4,7 @@ import { useAppState } from "@/context/app-state-provider"
 import { ConnectionCard } from "@/components/connection-card"
 import { SpreadsheetCard } from "@/components/spreadsheet-card"
 import { ManualSyncCard } from "@/components/manual-sync-card"
+import { SettingsCard } from "@/components/settings-card"
 import { ActivityLog } from "@/components/activity-log"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { GoogleLogo } from "@/components/icons/google-logo"
@@ -116,6 +117,9 @@ export function DashboardPage() {
 
             {/* Manual Sync Card - Spans 1 column */}
             <ManualSyncCard status={state.manualSyncStatus} onSync={actions.triggerManualSync} />
+
+            {/* Settings Card - Spans 1 column */}
+            <SettingsCard />
 
             {/* Activity Log - Spans full width on its row or multiple columns */}
             <div className="md:col-span-2 lg:col-span-3">

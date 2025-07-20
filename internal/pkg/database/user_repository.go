@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
@@ -659,4 +660,31 @@ func (r *UserRepository) GetUsersInProcessingWindow(ctx context.Context) ([]int,
 	}
 
 	return userIDs, nil
+}
+
+// UpdateUserSettings updates the user's settings (automation_enabled and email_notifications_enabled)
+func (ur *UserRepository) UpdateUserSettings(ctx context.Context, userID int, automationEnabled, emailNotificationsEnabled bool) error {
+	query := `
+		UPDATE users 
+		SET 
+			automation_enabled = $2,
+			email_notifications_enabled = $3,
+			updated_at = NOW()
+		WHERE id = $1`
+	
+	result, err := ur.db.Exec(query, userID, automationEnabled, emailNotificationsEnabled)
+	if err != nil {
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return fmt.Errorf("user with ID %d not found", userID)
+	}
+	
+	return nil
 }
