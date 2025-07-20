@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # manage-secrets.sh - Manage Google Secret Manager secrets for The Academy Sync
-# Usage: ./manage-secrets.sh [create|view|update] [staging|prod]
+# Usage: ./manage-secrets.sh [create|view|update] [staging|prod] [secret-name]
 
 set -e
 
@@ -36,7 +36,7 @@ print_info() {
 
 # Function to display usage
 usage() {
-    echo "Usage: $0 [create|view|update] [staging|prod]"
+    echo "Usage: $0 [create|view|update] [staging|prod] [secret-name]"
     echo ""
     echo "Commands:"
     echo "  create  - Create new secrets from .env file"
@@ -46,16 +46,24 @@ usage() {
     echo "Environments:"
     echo "  staging - Use .env.staging file"
     echo "  prod    - Use .env.prod file"
+    echo ""
+    echo "Optional:"
+    echo "  secret-name - Specific secret to update (e.g., encryption-secret, jwt-secret)"
+    echo "                Available secrets: google-client-id, google-client-secret,"
+    echo "                strava-client-id, strava-client-secret, jwt-secret,"
+    echo "                encryption-secret, sendgrid-api-key, from-email,"
+    echo "                database-url, redis-url, base-url, frontend-url"
     exit 1
 }
 
 # Check arguments
-if [ $# -ne 2 ]; then
+if [ $# -lt 2 ] || [ $# -gt 3 ]; then
     usage
 fi
 
 COMMAND=$1
 ENVIRONMENT=$2
+SPECIFIC_SECRET=$3
 
 # Validate environment
 if [ "$ENVIRONMENT" != "staging" ] && [ "$ENVIRONMENT" != "prod" ]; then
@@ -65,10 +73,16 @@ fi
 
 # Check if env file exists
 ENV_FILE="$PROJECT_ROOT/.env.$ENVIRONMENT"
-if [ "$COMMAND" != "view" ] && [ ! -f "$ENV_FILE" ]; then
-    print_error "Environment file not found: $ENV_FILE"
-    echo "Please create $ENV_FILE based on .env.$ENVIRONMENT.example"
-    exit 1
+if [ "$COMMAND" != "view" ]; then
+    # For create/update, only check env file if not updating a specific secret
+    # or if updating a secret that requires the env file
+    if [ -z "$SPECIFIC_SECRET" ] || [[ "$SPECIFIC_SECRET" =~ ^(google-client-id|google-client-secret|strava-client-id|strava-client-secret|jwt-secret|encryption-secret|sendgrid-api-key|from-email)$ ]]; then
+        if [ ! -f "$ENV_FILE" ]; then
+            print_error "Environment file not found: $ENV_FILE"
+            echo "Please create $ENV_FILE based on .env.$ENVIRONMENT.example"
+            exit 1
+        fi
+    fi
 fi
 
 # Function to create or update a secret
@@ -278,9 +292,118 @@ construct_frontend_url() {
     echo "$FRONTEND_URL"
 }
 
+# Function to update a specific secret
+update_specific_secret() {
+    local SECRET_NAME="$1"
+    local ENV="$2"
+    
+    case "$SECRET_NAME" in
+        google-client-id|google-client-secret|strava-client-id|strava-client-secret|jwt-secret|encryption-secret|sendgrid-api-key|from-email)
+            # These secrets come from the env file
+            local ENV_KEY=""
+            case "$SECRET_NAME" in
+                google-client-id) ENV_KEY="GOOGLE_CLIENT_ID" ;;
+                google-client-secret) ENV_KEY="GOOGLE_CLIENT_SECRET" ;;
+                strava-client-id) ENV_KEY="STRAVA_CLIENT_ID" ;;
+                strava-client-secret) ENV_KEY="STRAVA_CLIENT_SECRET" ;;
+                jwt-secret) ENV_KEY="JWT_SECRET" ;;
+                encryption-secret) ENV_KEY="ENCRYPTION_SECRET" ;;
+                sendgrid-api-key) ENV_KEY="SENDGRID_API_KEY" ;;
+                from-email) ENV_KEY="FROM_EMAIL" ;;
+            esac
+            
+            # Extract value from env file
+            local VALUE=$(grep "^${ENV_KEY}=" "$ENV_FILE" | cut -d'=' -f2- | xargs)
+            
+            if [ -z "$VALUE" ]; then
+                print_error "Could not find $ENV_KEY in $ENV_FILE"
+                return 1
+            fi
+            
+            # Remove quotes if present
+            VALUE="${VALUE%\"}"
+            VALUE="${VALUE#\"}"
+            VALUE="${VALUE%\'}"
+            VALUE="${VALUE#\'}"
+            
+            # Handle special cases for generated secrets
+            if [ "$SECRET_NAME" == "jwt-secret" ] && ([[ "$VALUE" == *"change-this"* ]] || [[ "$VALUE" == "your-"* ]]); then
+                print_warning "Generating secure JWT secret..."
+                VALUE=$(openssl rand -base64 32)
+                print_success "Generated JWT secret"
+            elif [ "$SECRET_NAME" == "encryption-secret" ] && ([[ "$VALUE" == *"change-this"* ]] || [[ "$VALUE" == "your-"* ]]); then
+                print_warning "Generating secure encryption secret..."
+                VALUE=$(openssl rand -base64 48)
+                print_success "Generated encryption secret"
+            fi
+            
+            manage_secret "$SECRET_NAME" "$VALUE" "update"
+            ;;
+            
+        database-url)
+            print_info "Constructing database URL..."
+            DB_URL=$(construct_database_url "$ENV")
+            if [ -n "$DB_URL" ]; then
+                manage_secret "database-url" "$DB_URL" "update"
+            else
+                print_error "Failed to construct database URL"
+                return 1
+            fi
+            ;;
+            
+        redis-url)
+            print_info "Constructing Redis URL..."
+            REDIS_URL=$(construct_redis_url "$ENV")
+            if [ -n "$REDIS_URL" ]; then
+                manage_secret "redis-url" "$REDIS_URL" "update"
+            else
+                print_error "Failed to construct Redis URL"
+                return 1
+            fi
+            ;;
+            
+        base-url)
+            print_info "Constructing BASE_URL from Cloud Run..."
+            BASE_URL=$(construct_base_url "$ENV")
+            if [ -n "$BASE_URL" ]; then
+                manage_secret "base-url" "$BASE_URL" "update"
+            else
+                print_error "Failed to construct BASE_URL"
+                return 1
+            fi
+            ;;
+            
+        frontend-url)
+            print_info "Constructing FRONTEND_URL from Terraform..."
+            FRONTEND_URL=$(construct_frontend_url "$ENV")
+            if [ -n "$FRONTEND_URL" ]; then
+                manage_secret "frontend-url" "$FRONTEND_URL" "update"
+            else
+                print_error "Failed to construct FRONTEND_URL"
+                return 1
+            fi
+            ;;
+            
+        *)
+            print_error "Unknown secret: $SECRET_NAME"
+            echo "Valid secrets: google-client-id, google-client-secret, strava-client-id, strava-client-secret,"
+            echo "               jwt-secret, encryption-secret, sendgrid-api-key, from-email,"
+            echo "               database-url, redis-url, base-url, frontend-url"
+            return 1
+            ;;
+    esac
+}
+
 # Main logic
 case "$COMMAND" in
     create|update)
+        # If a specific secret is requested, handle it
+        if [ -n "$SPECIFIC_SECRET" ]; then
+            print_info "Updating specific secret: $SPECIFIC_SECRET for $ENVIRONMENT environment..." >&2
+            update_specific_secret "$SPECIFIC_SECRET" "$ENVIRONMENT"
+            exit $?
+        fi
+        
         print_info "Processing secrets for $ENVIRONMENT environment..." >&2
         echo "" >&2
         
