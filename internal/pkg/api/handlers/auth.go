@@ -289,7 +289,7 @@ func (h *AuthHandler) GoogleCallback(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Redirect to frontend dashboard
-	dashboardURL := h.frontendURL + "/dashboard"
+	dashboardURL := h.frontendURL + "/dashboard/"
 	h.logger.Info("OAuth callback successful, redirecting to dashboard",
 		"user_id", user.ID,
 		"dashboard_url", dashboardURL,

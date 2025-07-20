@@ -174,7 +174,7 @@ func (h *StravaHandler) StravaCallback(w http.ResponseWriter, r *http.Request) {
 			"client_ip", clientIP)
 
 		// Redirect to dashboard (frontend can handle error states through UI)
-		dashboardURL := h.frontendURL + "/dashboard"
+		dashboardURL := h.frontendURL + "/dashboard/"
 		h.logger.Debug("Redirecting to dashboard after Strava access denied",
 			"user_id", userID,
 			"redirect_url", dashboardURL)
@@ -254,7 +254,7 @@ func (h *StravaHandler) StravaCallback(w http.ResponseWriter, r *http.Request) {
 		"athlete_id", athleteInfo.ID)
 
 	// Redirect to frontend dashboard (clean URL - frontend will detect connection automatically)
-	dashboardURL := h.frontendURL + "/dashboard"
+	dashboardURL := h.frontendURL + "/dashboard/"
 	h.logger.Info("Strava OAuth callback successful, redirecting to dashboard",
 		"user_id", userID,
 		"athlete_id", athleteInfo.ID,
