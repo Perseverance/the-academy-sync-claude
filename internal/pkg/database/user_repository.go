@@ -3,7 +3,6 @@ package database
 import (
 	"context"
 	"database/sql"
-	"fmt"
 	"time"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/auth"
@@ -672,7 +671,7 @@ func (ur *UserRepository) UpdateUserSettings(ctx context.Context, userID int, au
 			updated_at = NOW()
 		WHERE id = $1`
 	
-	result, err := ur.db.Exec(query, userID, automationEnabled, emailNotificationsEnabled)
+	result, err := ur.db.ExecContext(ctx, query, userID, automationEnabled, emailNotificationsEnabled)
 	if err != nil {
 		return err
 	}
@@ -683,7 +682,7 @@ func (ur *UserRepository) UpdateUserSettings(ctx context.Context, userID int, au
 	}
 	
 	if rowsAffected == 0 {
-		return fmt.Errorf("user with ID %d not found", userID)
+		return sql.ErrNoRows
 	}
 	
 	return nil

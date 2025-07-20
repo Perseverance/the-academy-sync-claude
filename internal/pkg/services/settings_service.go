@@ -8,6 +8,9 @@ import (
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 )
 
+// Note: ErrStravaConnectionRequired and ErrSpreadsheetRequired are already defined in sync_service.go
+// We reuse them here for consistency
+
 // SettingsService handles user settings operations
 type SettingsService struct {
 	userRepo *database.UserRepository
@@ -36,13 +39,13 @@ func (s *SettingsService) UpdateUserSettings(ctx context.Context, userID int, au
 		// Check if user has Strava connection
 		if len(user.StravaRefreshToken) == 0 {
 			s.logger.Info("User tried to enable automation without Strava connection", "user_id", userID)
-			return fmt.Errorf("Strava connection required to enable automation")
+			return ErrStravaConnectionRequired
 		}
 
 		// Check if user has spreadsheet configured
 		if user.SpreadsheetID == nil || *user.SpreadsheetID == "" {
 			s.logger.Info("User tried to enable automation without spreadsheet", "user_id", userID)
-			return fmt.Errorf("Google Sheets spreadsheet required to enable automation")
+			return ErrSpreadsheetRequired
 		}
 
 		// Timezone is already enforced as NOT NULL with default 'UTC' in database

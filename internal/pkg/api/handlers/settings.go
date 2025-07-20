@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/api/middleware"
@@ -56,19 +57,19 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 
 	// Update settings with validation
 	if err := h.settingsService.UpdateUserSettings(r.Context(), userID, req.AutomationEnabled, req.EmailNotificationsEnabled); err != nil {
-		// Check if it's a validation error
-		switch err.Error() {
-		case "Strava connection required to enable automation":
+		// Check if it's a validation error using error type assertions
+		if errors.Is(err, services.ErrStravaConnectionRequired) {
 			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		case "Google Sheets spreadsheet required to enable automation":
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		default:
-			h.logger.Error("Failed to update user settings", "error", err, "user_id", userID)
-			http.Error(w, "Failed to update settings", http.StatusInternalServerError)
 			return
 		}
+		if errors.Is(err, services.ErrSpreadsheetRequired) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		
+		h.logger.Error("Failed to update user settings", "error", err, "user_id", userID)
+		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
+		return
 	}
 
 	// Fetch updated user data to return

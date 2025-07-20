@@ -399,9 +399,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     try {
       const updatedUser = await settingsService.updateSettings(settings)
       setState((s) => ({ ...s, user: updatedUser }))
-      
-      // Update sync status based on automation setting
-      updateServiceStatuses(updatedUser)
     } catch (error: any) {
       console.error('Failed to update settings:', error)
       throw error
