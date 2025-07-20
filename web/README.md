@@ -146,7 +146,15 @@ pnpm build
 
 ### Environment Variables
 
-The application uses the following environment variables:
+#### Local Development
+
+For local development, copy `.env.example` to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Configure the following variables:
 
 ```bash
 # Required for Strava OAuth integration
@@ -155,15 +163,28 @@ NEXT_PUBLIC_STRAVA_CLIENT_ID=your_strava_client_id
 # Required for Google OAuth (public client ID only)
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_client_id
 
-# API endpoints (configured automatically in development)
+# API endpoints (defaults to localhost:8080)
 NEXT_PUBLIC_API_URL=http://localhost:8080
 ```
 
-Copy `.env.example` to `.env.local` and configure the required values:
+#### Staging/Production Deployment
+
+For deployments, create environment-specific files:
+
+- **Staging**: Copy `.env.staging.example` to `.env.staging`
+- **Production**: Copy `.env.prod.example` to `.env.prod`
+
+These files allow you to manage all environment variables for each deployment:
 
 ```bash
-cp .env.example .env.local
+# Example .env.staging
+NEXT_PUBLIC_STRAVA_CLIENT_ID=your_staging_strava_client_id
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_staging_google_client_id
+NEXT_PUBLIC_API_URL=https://api.staging.theacademysync.run
+# Add any other staging-specific variables here
 ```
+
+The deployment script (`scripts/deploy-frontend.sh`) will automatically use the appropriate environment file during build.
 
 ### Vercel Deployment
 

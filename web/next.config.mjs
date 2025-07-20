@@ -11,7 +11,7 @@ const nextConfig = {
   },
   // Use 'standalone' for Docker/server deployments, 'export' for static hosting
   output: process.env.BUILD_STANDALONE === 'true' ? 'standalone' : 'export',
-  // Generate directory structure for clean URLs
+  // Required for GCS static hosting to properly serve routes
   trailingSlash: true,
 }
 
