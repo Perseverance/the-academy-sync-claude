@@ -152,6 +152,7 @@ func main() {
 	// Initialize services
 	sheetsService := services.NewSheetsService(userRepository, log)
 	configService := services.NewConfigService(userRepository, sheetsService, log)
+	settingsService := services.NewSettingsService(userRepository, log)
 
 	// Initialize sync service (only if Redis is available)
 	var syncService *services.SyncService
@@ -195,6 +196,12 @@ func main() {
 	configHandler := handlers.NewConfigHandler(
 		configService,
 		log.WithContext("component", "config_handler"),
+	)
+
+	settingsHandler := handlers.NewSettingsHandler(
+		settingsService,
+		userRepository,
+		log.WithContext("component", "settings_handler"),
 	)
 
 	// Initialize sync handler (only if sync service is available)
@@ -286,6 +293,9 @@ func main() {
 			r.Delete("/spreadsheet", configHandler.ClearSpreadsheet) // Clear spreadsheet configuration
 			r.Post("/timezone", configHandler.SetTimezone)           // Set user timezone
 		})
+
+		// Settings routes
+		r.Put("/settings", settingsHandler.UpdateSettings) // Update user settings (automation, notifications)
 
 		// Sync routes (only if sync service is available)
 		if syncHandler != nil {

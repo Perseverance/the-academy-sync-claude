@@ -8,6 +8,7 @@ import { authService, type User } from "@/services/auth"
 import { stravaService } from "@/services/strava"
 import { configService } from "@/services/config"
 import { syncService, SyncError } from "@/services/SyncService"
+import { settingsService } from "@/services/settings"
 import { useToast } from "@/hooks/use-toast"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
@@ -38,6 +39,7 @@ interface AppActions {
   changeSpreadsheet: () => void
   triggerManualSync: () => Promise<void>
   setGoogleStatus: (status: ServiceStatus) => void // For external updates if needed
+  updateUserSettings: (settings: { automation_enabled: boolean; email_notifications_enabled: boolean }) => Promise<void>
 }
 
 const AppStateContext = createContext<
@@ -393,6 +395,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, googleStatus: status }))
   }
 
+  const updateUserSettings = async (settings: { automation_enabled: boolean; email_notifications_enabled: boolean }) => {
+    try {
+      const updatedUser = await settingsService.updateSettings(settings)
+      setState((s) => ({ ...s, user: updatedUser }))
+    } catch (error: any) {
+      console.error('Failed to update settings:', error)
+      throw error
+    }
+  }
+
 
   // Remove the loading state after initial load
   useEffect(() => {
@@ -412,6 +424,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     changeSpreadsheet,
     triggerManualSync,
     setGoogleStatus,
+    updateUserSettings,
   }
 
   // Update timezone when window regains focus (in case user changed system timezone)

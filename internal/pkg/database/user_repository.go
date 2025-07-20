@@ -660,3 +660,30 @@ func (r *UserRepository) GetUsersInProcessingWindow(ctx context.Context) ([]int,
 
 	return userIDs, nil
 }
+
+// UpdateUserSettings updates the user's settings (automation_enabled and email_notifications_enabled)
+func (ur *UserRepository) UpdateUserSettings(ctx context.Context, userID int, automationEnabled, emailNotificationsEnabled bool) error {
+	query := `
+		UPDATE users 
+		SET 
+			automation_enabled = $2,
+			email_notifications_enabled = $3,
+			updated_at = NOW()
+		WHERE id = $1`
+	
+	result, err := ur.db.ExecContext(ctx, query, userID, automationEnabled, emailNotificationsEnabled)
+	if err != nil {
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	
+	return nil
+}
