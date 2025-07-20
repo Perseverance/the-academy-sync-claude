@@ -149,13 +149,20 @@ EOF
 # Display the API URL being used for verification
 print_info "Building with API URL: $BACKEND_API_URL"
 
+# Debug: Verify environment variables are set correctly
+print_info "Environment variables for build:"
+echo "  NEXT_PUBLIC_API_URL=$BACKEND_API_URL"
+echo "  NEXT_PUBLIC_GOOGLE_CLIENT_ID=$GOOGLE_CLIENT_ID"
+echo "  NEXT_PUBLIC_STRAVA_CLIENT_ID=$STRAVA_CLIENT_ID"
+
 # Ensure we're building for static export (not standalone)
 unset BUILD_STANDALONE
 
 # Use custom build script that handles API routes
 if [ -f "build-static.sh" ]; then
     print_info "Using custom build script for static export..."
-    if ./build-static.sh; then
+    # Pass environment variables directly to the build script
+    if NEXT_PUBLIC_API_URL="$BACKEND_API_URL" NEXT_PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" NEXT_PUBLIC_STRAVA_CLIENT_ID="$STRAVA_CLIENT_ID" ./build-static.sh; then
         print_success "React application built successfully"
     else
         print_error "Failed to build React application"
@@ -163,7 +170,8 @@ if [ -f "build-static.sh" ]; then
         exit 1
     fi
 else
-    if npm run build; then
+    # Pass environment variables directly to npm run build
+    if NEXT_PUBLIC_API_URL="$BACKEND_API_URL" NEXT_PUBLIC_GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID" NEXT_PUBLIC_STRAVA_CLIENT_ID="$STRAVA_CLIENT_ID" npm run build; then
         print_success "React application built successfully"
     else
         print_error "Failed to build React application"
