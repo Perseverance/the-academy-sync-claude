@@ -259,8 +259,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
     
     try {
-      // Store the current activity logs count before sync
-      const initialActivityCount = state.activityLogs.length
+      // Store the current activity logs before sync
+      const initialActivityLogs = state.activityLogs
+      const initialFirstLogId = initialActivityLogs.length > 0 ? initialActivityLogs[0].id : null
       
       // Call the actual sync API
       const response = await syncService.triggerManualSync()
@@ -286,18 +287,28 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
           const user = await authService.getCurrentUser()
           
           if (user && user.recent_activity_logs) {
-            const newActivityCount = user.recent_activity_logs.length
+            // Check if we have new logs by comparing the first log ID
+            // (logs are in reverse chronological order - newest first)
+            const currentFirstLogId = user.recent_activity_logs.length > 0 ? user.recent_activity_logs[0].id : null
             
             // Check if we found new activity logs
-            if (newActivityCount > initialActivityCount) {
+            if (currentFirstLogId !== initialFirstLogId && currentFirstLogId !== null) {
               
               // Calculate total activities from the new logs
               let totalActivitiesProcessed = 0
               // Get only the new logs that were added since sync started
               // The array is in reverse chronological order (newest first)
-              // So we need to get the first N logs where N = newActivityCount - initialActivityCount
-              const numNewLogs = newActivityCount - initialActivityCount
-              const newLogs = user.recent_activity_logs.slice(0, numNewLogs)
+              const newLogs: LogEntry[] = []
+              
+              // Find all logs that are newer than the initial first log
+              for (const log of user.recent_activity_logs) {
+                if (initialFirstLogId === null || log.id !== initialFirstLogId) {
+                  newLogs.push(log)
+                } else {
+                  // We've reached the old logs, stop here
+                  break
+                }
+              }
               
               
               for (const log of newLogs) {

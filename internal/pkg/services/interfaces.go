@@ -12,6 +12,8 @@ import (
 type UserRepository interface {
 	GetUserByID(ctx context.Context, userID int) (*database.User, error)
 	GetUsersInProcessingWindow(ctx context.Context) ([]int, error)
+	SetGoogleReauthRequired(ctx context.Context, userID int, required bool) error
+	SetStravaReauthRequired(ctx context.Context, userID int, required bool) error
 }
 
 // QueueClient interface for queue operations

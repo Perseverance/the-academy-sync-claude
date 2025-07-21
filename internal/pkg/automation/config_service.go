@@ -14,6 +14,8 @@ type UserRepository interface {
 	GetUserByID(ctx context.Context, userID int) (*database.User, error)
 	GetProcessingConfigForUser(ctx context.Context, userID int) (*database.ProcessingTokens, error)
 	DecryptToken(encryptedToken []byte) (string, error)
+	SetGoogleReauthRequired(ctx context.Context, userID int, required bool) error
+	SetStravaReauthRequired(ctx context.Context, userID int, required bool) error
 }
 
 // ConfigService coordinates user configuration retrieval for automation processing
@@ -271,4 +273,14 @@ func (s *ConfigService) ValidateUserCanBeProcessed(ctx context.Context, userID i
 		"automation_enabled", user.AutomationEnabled)
 
 	return nil
+}
+
+// SetGoogleReauthRequired sets the Google reauth required flag for a user
+func (s *ConfigService) SetGoogleReauthRequired(ctx context.Context, userID int, required bool) error {
+	return s.userRepository.SetGoogleReauthRequired(ctx, userID, required)
+}
+
+// SetStravaReauthRequired sets the Strava reauth required flag for a user
+func (s *ConfigService) SetStravaReauthRequired(ctx context.Context, userID int, required bool) error {
+	return s.userRepository.SetStravaReauthRequired(ctx, userID, required)
 }

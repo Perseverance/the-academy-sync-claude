@@ -98,8 +98,33 @@ func (w *Worker) ProcessUser(ctx context.Context, userID int, jobType string) *W
 
 // ProcessUserWithData processes automation for a single user with optional job data
 // This method allows passing additional job data that may contain trigger_type for scheduled runs
-func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType string, jobData map[string]interface{}) *WorkerProcessingResult {
+func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType string, jobData map[string]interface{}) (result *WorkerProcessingResult) {
 	startTime := time.Now()
+
+	// Set up panic recovery to ensure one user's panic doesn't affect others
+	defer func() {
+		if r := recover(); r != nil {
+			processingDuration := time.Since(startTime)
+			w.logger.Critical("PANIC: Unexpected panic during user processing",
+				"user_id", userID,
+				"job_type", jobType,
+				"panic_value", r,
+				"processing_duration_ms", processingDuration.Milliseconds(),
+				"recovery_action", "User processing aborted, continuing with other users")
+			
+			// Return error result for this user
+			result = &WorkerProcessingResult{
+				UserID:         userID,
+				Success:        false,
+				ProcessingTime: processingDuration,
+				Error:          fmt.Sprintf("Processing panic: %v", r),
+				ErrorType:      "PANIC_ERROR",
+			}
+			
+			// Persist panic to activity log
+			w.persistProcessingResult(ctx, userID, jobType, result, nil, 0)
+		}
+	}()
 
 	// Acquire distributed lock for user processing
 	if w.jobsQueueClient != nil {
@@ -158,7 +183,7 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 			"has_google_client_secret": w.googleClientSecret != "",
 		})
 
-	result := &WorkerProcessingResult{
+	result = &WorkerProcessingResult{
 		UserID:         userID,
 		Success:        false,
 		ProcessingTime: 0,
@@ -326,6 +351,14 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 			result.Error = "Google Sheets access requires re-authorization"
 			result.ErrorType = "GOOGLE_REAUTH_REQUIRED"
 			result.RequiresReauth = true
+			
+			// Set Google reauth required flag in database
+			if err := w.configService.SetGoogleReauthRequired(ctx, userID, true); err != nil {
+				w.logger.Error("Failed to set Google reauth required flag",
+					"error", err,
+					"user_id", userID)
+			}
+			
 			// Persist reauth requirement to activity log
 			w.persistProcessingResult(ctx, userID, jobType, result, nil, 0)
 			return result
@@ -432,6 +465,35 @@ func (w *Worker) ProcessUserWithData(ctx context.Context, userID int, jobType st
 		// but focus on workout days for optimization
 		stravaActivitiesCache, err = processingService.FetchStravaActivitiesForDates(ctx, location, unprocessedWorkoutDays, allUnprocessedDays)
 		if err != nil {
+			// Check if this requires Strava re-authorization
+			if strava.IsReauthRequired(err) {
+				w.logger.Warn("🔐 Strava access requires user re-authorization",
+					"user_id", userID,
+					"error", err,
+					"error_analysis", map[string]interface{}{
+						"error_type":           fmt.Sprintf("%T", err),
+						"requires_reauth":      true,
+						"strava_token_expired": !config.HasValidStravaToken(),
+					},
+					"action_required", "User must re-authorize Strava access")
+				
+				result.ProcessingTime = time.Since(startTime)
+				result.Error = "Strava access requires re-authorization"
+				result.ErrorType = "STRAVA_REAUTH_REQUIRED"
+				result.RequiresReauth = true
+				
+				// Set Strava reauth required flag in database
+				if err := w.configService.SetStravaReauthRequired(ctx, userID, true); err != nil {
+					w.logger.Error("Failed to set Strava reauth required flag",
+						"error", err,
+						"user_id", userID)
+				}
+				
+				// Persist reauth requirement to activity log
+				w.persistProcessingResult(ctx, userID, jobType, result, location, 0)
+				return result
+			}
+			
 			w.logger.Error("Failed to fetch Strava activities",
 				"error", err,
 				"user_id", userID,
@@ -737,29 +799,52 @@ func (w *Worker) ProcessUsers(ctx context.Context, userIDs []int, jobType string
 	results := make([]*WorkerProcessingResult, len(userIDs))
 
 	for i, userID := range userIDs {
-		w.logger.Debug("Processing user in batch",
-			"user_id", userID,
-			"user_index", i+1,
-			"total_users", len(userIDs))
+		// Wrap each user processing in a function with panic recovery
+		func(index int, uid int) {
+			defer func() {
+				if r := recover(); r != nil {
+					w.logger.Critical("PANIC in batch processing: Recovered from panic for user",
+						"user_id", uid,
+						"user_index", index+1,
+						"total_users", len(userIDs),
+						"panic_value", r,
+						"recovery_action", "Continuing with remaining users")
+					
+					// Set error result for this user
+					results[index] = &WorkerProcessingResult{
+						UserID:         uid,
+						Success:        false,
+						ProcessingTime: time.Duration(0),
+						Error:          fmt.Sprintf("Processing panic: %v", r),
+						ErrorType:      "PANIC_ERROR",
+					}
+				}
+			}()
+			
+			w.logger.Debug("Processing user in batch",
+				"user_id", uid,
+				"user_index", index+1,
+				"total_users", len(userIDs))
 
-		results[i] = w.ProcessUser(ctx, userID, jobType)
+			results[index] = w.ProcessUser(ctx, uid, jobType)
 
-		// Log batch progress
-		if results[i].Success {
-			w.logger.Debug("User processing completed successfully in batch",
-				"user_id", userID,
-				"user_index", i+1,
-				"total_users", len(userIDs),
-				"activities_processed", results[i].ActivitiesCount)
-		} else {
-			w.logger.Warn("User processing failed in batch",
-				"user_id", userID,
-				"user_index", i+1,
-				"total_users", len(userIDs),
-				"error", results[i].Error,
-				"error_type", results[i].ErrorType,
-				"requires_reauth", results[i].RequiresReauth)
-		}
+			// Log batch progress
+			if results[index].Success {
+				w.logger.Debug("User processing completed successfully in batch",
+					"user_id", uid,
+					"user_index", index+1,
+					"total_users", len(userIDs),
+					"activities_processed", results[index].ActivitiesCount)
+			} else {
+				w.logger.Warn("User processing failed in batch",
+					"user_id", uid,
+					"user_index", index+1,
+					"total_users", len(userIDs),
+					"error", results[index].Error,
+					"error_type", results[index].ErrorType,
+					"requires_reauth", results[index].RequiresReauth)
+			}
+		}(i, userID)
 	}
 
 	// Calculate batch summary

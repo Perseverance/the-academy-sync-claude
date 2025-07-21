@@ -40,6 +40,16 @@ func (m *MockUserRepository) DecryptToken(encryptedToken []byte) (string, error)
 	return args.String(0), args.Error(1)
 }
 
+func (m *MockUserRepository) SetGoogleReauthRequired(ctx context.Context, userID int, required bool) error {
+	args := m.Called(ctx, userID, required)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) SetStravaReauthRequired(ctx context.Context, userID int, required bool) error {
+	args := m.Called(ctx, userID, required)
+	return args.Error(0)
+}
+
 // MockTokenPersister for testing
 type MockTokenPersister struct {
 	mock.Mock
