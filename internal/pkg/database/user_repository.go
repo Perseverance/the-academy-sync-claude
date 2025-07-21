@@ -687,3 +687,51 @@ func (ur *UserRepository) UpdateUserSettings(ctx context.Context, userID int, au
 	
 	return nil
 }
+
+// SetGoogleReauthRequired sets the google_reauth_required flag for a user
+func (ur *UserRepository) SetGoogleReauthRequired(ctx context.Context, userID int, required bool) error {
+	query := `
+		UPDATE users 
+		SET google_reauth_required = $2, updated_at = NOW()
+		WHERE id = $1`
+	
+	result, err := ur.db.ExecContext(ctx, query, userID, required)
+	if err != nil {
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	
+	return nil
+}
+
+// SetStravaReauthRequired sets the strava_reauth_required flag for a user
+func (ur *UserRepository) SetStravaReauthRequired(ctx context.Context, userID int, required bool) error {
+	query := `
+		UPDATE users 
+		SET strava_reauth_required = $2, updated_at = NOW()
+		WHERE id = $1`
+	
+	result, err := ur.db.ExecContext(ctx, query, userID, required)
+	if err != nil {
+		return err
+	}
+	
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+	
+	return nil
+}
