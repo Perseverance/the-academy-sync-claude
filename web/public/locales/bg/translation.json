@@ -1,0 +1,205 @@
+{
+  "metadata": {
+    "title": "СинхронизаторЪт на АкадемияТА",
+    "description": "Автоматизирай попълването на програмата през Страва"
+  },
+  "landing": {
+    "title": "Инструмент за синхронизация на Академията",
+    "subtitle": "Свържете вашите акаунти в Strava и Google, за да автоматично записвате дейностите си в Google таблица.",
+    "signInButton": "Вход с Google",
+    "features": {
+      "strava": {
+        "title": "Свързване със Strava",
+        "description": "Сигурно свързване със Strava за извличане на дейности."
+      },
+      "googleSheets": {
+        "title": "Синхронизация с Google Sheets",
+        "description": "Автоматично актуализиране на вашата определена Google таблица."
+      },
+      "automation": {
+        "title": "Ежедневна автоматизация",
+        "description": "Настройте веднъж, записвайте бягания автоматично."
+      }
+    }
+  },
+  "signIn": {
+    "title": "Автоматизирай попълването на програмата през Страва",
+    "description": "Бягай леко (преходно?) - Попълвай леко. Свържи си Strava-та и Google, и тренировките ще се попълват автоматично.",
+    "signInButton": "Влез с Google"
+  },
+  "dashboard": {
+    "title": "Автоматизатор",
+    "header": "Конфигурация на автоматизаторЪт",
+    "userMenu": {
+      "settings": "Настройки",
+      "logout": "Изход"
+    },
+    "services": {
+      "google": "Google",
+      "strava": "Strava"
+    }
+  },
+  "connectionCard": {
+    "status": {
+      "notConnected": "Не е свързан",
+      "active": "Активен",
+      "reauthRequired": "Статус: Необходима е повторна оторизация!"
+    },
+    "actions": {
+      "connect": "Свързване с {{serviceName}}",
+      "connectStrava": "Свързване със Strava",
+      "disconnect": "Прекъсване на връзката",
+      "reauthorize": "Повторна оторизация на {{serviceName}}"
+    },
+    "error": {
+      "unknownStatus": "Неизвестен статус"
+    }
+  },
+  "spreadsheetCard": {
+    "title": "Програмата",
+    "status": "Активна",
+    "placeholder": "https://docs.google.com/spreadsheets/d/...",
+    "label": "Линк към Google таблицата ти",
+    "actions": {
+      "save": "Запазване",
+      "saving": "Запазва се...",
+      "change": "Промяна на таблица"
+    },
+    "messages": {
+      "connectStravaFirst": "Моля, първо свържете вашия акаунт в Strava, за да активирате конфигурацията на таблицата."
+    },
+    "toast": {
+      "emptyUrl": {
+        "title": "Празен URL",
+        "description": "Моля, въведете URL адрес на Google таблица."
+      },
+      "invalidUrl": {
+        "title": "Невалиден URL",
+        "description": "Моля, въведете валиден URL адрес на Google таблица."
+      },
+      "success": {
+        "title": "Успех",
+        "description": "Конфигурацията на програмата е запазена успешно!"
+      },
+      "configError": {
+        "title": "Грешка в конфигурацията"
+      },
+      "error": {
+        "title": "Грешка",
+        "description": "Неуспешно запазване на конфигурацията на таблицата. Моля, опитай отново."
+      }
+    }
+  },
+  "manualSync": {
+    "title": "Ръчна синхронизация",
+    "actions": {
+      "sync": "Синхронизирай сега",
+      "syncing": "Синхронизира се..."
+    },
+    "tooltip": "Завършете свързването със Strava и конфигурацията на таблицата, за да активирате ръчната синхронизация."
+  },
+  "settings": {
+    "title": "Настройки",
+    "description": "Управлявайте вашите предпочитания за автоматизация и известия",
+    "automation": {
+      "label": "Ежедневна автоматизация",
+      "enabled": "Автоматично синхронизиране на Страва с твоята таблица",
+      "disabled": "Свържете Strava и Google Sheets, за да активирате автоматизацията"
+    },
+    "notifications": {
+      "title": "Настройки за автоматизацията",
+      "subtitle": "Управлявай твоите предпочитания за автоматизация и известия",
+      "label": "Имейл известия",
+      "description": "Получавай имейли относно всяка синхронизация"
+    },
+    "language": {
+      "title": "Настройки на езика",
+      "description": "Изберете предпочитания език за интерфейса и имейлите",
+      "label": "Език",
+      "options": {
+        "bulgarian": "Български",
+        "english": "English"
+      }
+    },
+    "languages": {
+      "bg": "Български",
+      "en": "English"
+    },
+    "toast": {
+      "cannotEnableAutomation": {
+        "title": "Не може да се активира автоматизацията",
+        "description": "Моля, първо свържете Strava и Google Sheets"
+      },
+      "automationEnabled": "Автоматизацията е активирана",
+      "automationDisabled": "Автоматизацията е деактивирана",
+      "notificationsEnabled": "Имейл известията са активирани",
+      "notificationsDisabled": "Имейл известията са деактивирани",
+      "languageUpdated": "Езикът е актуализиран",
+      "failedToUpdate": {
+        "title": "Неуспешно актуализиране на настройките",
+        "description": "Моля, опитайте отново"
+      }
+    }
+  },
+  "activityLog": {
+    "title": "Последни синхронизации",
+    "noActivity": "Няма намерена дейност на автоматизацията за последните 30 дни.",
+    "status": {
+      "success": "Успех",
+      "failure": "Неуспех",
+      "successWithWarning": "Успех с предупреждение"
+    },
+    "messages": {
+      "processingFailed": "Обработката се провали",
+      "processingSkipped": "Обработката е пропусната",
+      "noActivitiesFound": "Няма намерени тренировки",
+      "activityFound": "1 намерена тренировка",
+      "activitiesFound": "{{count}} намерени тренировки",
+      "noTrainingPlan": "Няма план за тренировка за този ден",
+      "alreadyProcessed": "Денят вече е обработен",
+      "noActivities": "Няма тренировки и няма планирано бягане",
+      "restDayNoActivity": "Почивен ден, няма дейност",
+      "noScheduledTraining": "Няма планирана тренировка за този ден",
+      "activityLogged": "1 записана тренировка ({{distance}}км за {{duration}})",
+      "activitiesLogged": "{{count}} записани тренировки (общо: {{distance}}км за {{duration}})"
+    }
+  },
+  "sync": {
+    "toast": {
+      "started": {
+        "title": "Синхронизацията започна",
+        "description": "Ръчната синхронизация е задействана успешно и сега се обработва."
+      },
+      "completed": {
+        "title": "Синхронизацията завърши",
+        "withActivities": "Успешно синхронизирани {{activityCount}} активности в {{logCount}} записа.",
+        "noActivities": "Синхронизацията завърши с {{logCount}} записа, но не бяха намерени нови активности."
+      },
+      "failed": {
+        "title": "Синхронизацията се провали"
+      },
+      "error": "Неуспешно задействане на синхронизация. Моля, проверете връзката си и опитайте отново."
+    }
+  },
+  "errors": {
+    "syncService": {
+      "connectionFailed": "Неуспешно свързване със услугата за синхронизация. Моля, проверете връзката си и опитайте отново.",
+      "statusFailed": "Неуспешно получаване на статус на синхронизация. Моля, проверете връзката си и опитайте отново.",
+      "unexpected": "Възникна неочаквана грешка"
+    },
+    "auth": {
+      "getUrlFailed": "Неуспешно получаване на URL за удостоверяване: {{status}}",
+      "initFailed": "Неуспешно инициализиране на Google удостоверяване",
+      "userInfoFailed": "Неуспешно получаване на информация за потребителя: {{status}}"
+    },
+    "strava": {
+      "getUrlFailed": "Неуспешно получаване на URL за Strava удостоверяване: {{status}}",
+      "initFailed": "Неуспешно инициализиране на връзка със Strava",
+      "disconnectFailed": "Неуспешно прекъсване на връзката със Strava: {{status}}",
+      "disconnectError": "Неуспешно прекъсване на акаунт в Strava"
+    },
+    "settings": {
+      "updateFailed": "Неуспешно актуализиране на потребителските настройки"
+    }
+  }
+}

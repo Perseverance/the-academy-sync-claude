@@ -109,6 +109,7 @@ func (s *ConfigService) GetProcessingConfigForUser(ctx context.Context, userID i
 		// User preferences
 		EmailNotificationsEnabled: user.EmailNotificationsEnabled,
 		AutomationEnabled:         user.AutomationEnabled,
+		LanguagePreference:        user.LanguagePreference,
 	}
 
 	// Handle spreadsheet ID (can be nil)

@@ -1034,6 +1034,11 @@ func (w *Worker) prepareNotificationData(config *automation.ProcessingConfig, da
 			"activities_found": dayResult.ActivitiesFound,
 		}
 
+		// Include metadata for frontend localization
+		if dayResult.Metadata != nil {
+			log["metadata"] = dayResult.Metadata
+		}
+
 		if dayResult.Error != nil {
 			log["error"] = dayResult.Error.Error()
 		}
@@ -1073,12 +1078,13 @@ func (w *Worker) prepareNotificationData(config *automation.ProcessingConfig, da
 
 	// Create notification job data
 	notificationData := map[string]interface{}{
-		"user_id":       config.UserID,
-		"user_email":    config.Email,
-		"user_name":     config.Email, // TODO: Get user's full name from database
-		"run_date":      runDate.Format(time.RFC3339),
-		"logs":          logs,
-		"spreadsheet_id": config.SpreadsheetID,
+		"user_id":             config.UserID,
+		"user_email":          config.Email,
+		"user_name":           config.Email, // TODO: Get user's full name from database
+		"run_date":            runDate.Format(time.RFC3339),
+		"logs":                logs,
+		"spreadsheet_id":      config.SpreadsheetID,
+		"language_preference": config.LanguagePreference,
 	}
 
 	// Debug: Log the notification data
@@ -1092,14 +1098,33 @@ func (w *Worker) prepareNotificationData(config *automation.ProcessingConfig, da
 
 // createSummaryMessage creates a summary message for a day's processing result
 func (w *Worker) createSummaryMessage(dayResult *DayProcessingResult) string {
+	// Set up metadata map if it doesn't exist
+	if dayResult.Metadata == nil {
+		dayResult.Metadata = make(map[string]interface{})
+	}
+	
 	if dayResult.Error != nil {
+		dayResult.Metadata["messageType"] = "error"
+		dayResult.Metadata["errorMessage"] = dayResult.Error.Error()
 		return fmt.Sprintf("Failed to process: %v", dayResult.Error)
 	}
 
 	if !dayResult.Processed {
 		if dayResult.SkippedReason != SkipReasonNone {
+			// Map skip reasons to message types
+			switch dayResult.SkippedReason {
+			case SkipReasonNoTrainingPlan:
+				dayResult.Metadata["messageType"] = "noTrainingPlan"
+			case SkipReasonAlreadyProcessed:
+				dayResult.Metadata["messageType"] = "alreadyProcessed"
+			case SkipReasonNoActivities:
+				dayResult.Metadata["messageType"] = "noActivities"
+			case SkipReasonRestDayNoActivity:
+				dayResult.Metadata["messageType"] = "restDayNoActivity"
+			}
 			return dayResult.SkippedReason.String()
 		}
+		dayResult.Metadata["messageType"] = "noScheduledTraining"
 		return "No scheduled training for this day"
 	}
 
@@ -1107,21 +1132,35 @@ func (w *Worker) createSummaryMessage(dayResult *DayProcessingResult) string {
 	if dayResult.PlanEntry != nil && dayResult.PlanEntry.RPE == 1 && dayResult.ActivitiesFound == 0 {
 		// This is a special case - we need to set the skip reason for consistency
 		dayResult.SkippedReason = SkipReasonRestDayNoActivity
+		dayResult.Metadata["messageType"] = "restDayNoActivity"
 		return dayResult.SkippedReason.String()
 	}
 
-	// Create activity summary
+	// Create activity summary with metadata
 	if dayResult.ActivitiesFound == 0 {
+		dayResult.Metadata["messageType"] = "noActivitiesFound"
 		return "No activities found"
 	} else if dayResult.ActivitiesFound == 1 {
 		// Format: "1 activity logged (X.Xkm in HH:MM:SS)"
 		distance := dayResult.TotalDistance / 1000.0 // Convert to km
 		duration := time.Duration(dayResult.TotalTime) * time.Second
+		
+		dayResult.Metadata["messageType"] = "activityLogged"
+		dayResult.Metadata["activityCount"] = 1
+		dayResult.Metadata["distance"] = distance
+		dayResult.Metadata["duration"] = formatDuration(duration)
+		
 		return fmt.Sprintf("1 activity logged (%.1fkm in %s)", distance, formatDuration(duration))
 	} else {
 		// Format: "X activities logged (total: X.Xkm in HH:MM:SS)"
 		distance := dayResult.TotalDistance / 1000.0 // Convert to km
 		duration := time.Duration(dayResult.TotalTime) * time.Second
+		
+		dayResult.Metadata["messageType"] = "activitiesLogged"
+		dayResult.Metadata["activityCount"] = dayResult.ActivitiesFound
+		dayResult.Metadata["distance"] = distance
+		dayResult.Metadata["duration"] = formatDuration(duration)
+		
 		return fmt.Sprintf("%d activities logged (total: %.1fkm in %s)", 
 			dayResult.ActivitiesFound, distance, formatDuration(duration))
 	}

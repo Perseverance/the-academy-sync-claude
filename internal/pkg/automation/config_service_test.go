@@ -43,6 +43,16 @@ func (m *MockUserRepository) DecryptToken(encryptedToken []byte) (string, error)
 	return string(encryptedToken), nil
 }
 
+func (m *MockUserRepository) SetGoogleReauthRequired(ctx context.Context, userID int, required bool) error {
+	// For testing, just return nil
+	return nil
+}
+
+func (m *MockUserRepository) SetStravaReauthRequired(ctx context.Context, userID int, required bool) error {
+	// For testing, just return nil
+	return nil
+}
+
 func (m *MockUserRepository) AddUser(userID int, user *database.User) {
 	m.users[userID] = user
 }
@@ -78,6 +88,7 @@ func TestConfigService_GetProcessingConfigForUser(t *testing.T) {
 			ID:                        1,
 			EmailNotificationsEnabled: true,
 			AutomationEnabled:         true,
+			LanguagePreference:        "bg",
 		}
 
 		tokens := &database.ProcessingTokens{

@@ -25,6 +25,7 @@ type User struct {
 	Timezone                  string     `json:"timezone" db:"timezone"`
 	EmailNotificationsEnabled bool       `json:"email_notifications_enabled" db:"email_notifications_enabled"`
 	AutomationEnabled         bool       `json:"automation_enabled" db:"automation_enabled"`
+	LanguagePreference        string     `json:"language_preference" db:"language_preference"`
 	CreatedAt                 time.Time  `json:"created_at" db:"created_at"`
 	UpdatedAt                 time.Time  `json:"updated_at" db:"updated_at"`
 	LastLoginAt               *time.Time `json:"last_login_at" db:"last_login_at"`
@@ -85,6 +86,7 @@ type PublicUser struct {
 	Timezone                  string  `json:"timezone"`
 	EmailNotificationsEnabled bool    `json:"email_notifications_enabled"`
 	AutomationEnabled         bool    `json:"automation_enabled"`
+	LanguagePreference        string  `json:"language_preference"`
 	HasStravaConnection       bool    `json:"has_strava_connection"`
 	HasSheetsConnection       bool    `json:"has_sheets_connection"`
 }
@@ -103,6 +105,7 @@ func (u *User) ToPublicUser() *PublicUser {
 		Timezone:                  u.Timezone,
 		EmailNotificationsEnabled: u.EmailNotificationsEnabled,
 		AutomationEnabled:         u.AutomationEnabled,
+		LanguagePreference:        u.LanguagePreference,
 		HasStravaConnection:       len(u.StravaAccessToken) > 0,
 		HasSheetsConnection:       u.SpreadsheetID != nil && *u.SpreadsheetID != "",
 	}
@@ -134,10 +137,11 @@ type ActivityLog struct {
 
 // ActivityLogSummary represents a simplified activity log for the dashboard UI
 type ActivityLogSummary struct {
-	ID      string `json:"id"`
-	Date    string `json:"date"`
-	Status  string `json:"status"` // "Success", "Failure", "SuccessWithWarning"
-	Summary string `json:"summary"`
+	ID       string                 `json:"id"`
+	Date     string                 `json:"date"`
+	Status   string                 `json:"status"` // "Success", "Failure", "SuccessWithWarning"
+	Summary  string                 `json:"summary"`
+	Metadata map[string]interface{} `json:"metadata,omitempty"` // For localization data
 }
 
 // ToSummary converts an ActivityLog to ActivityLogSummary for UI display
@@ -154,46 +158,69 @@ func (a *ActivityLog) ToSummary() ActivityLogSummary {
 	summary := a.generateSummary()
 
 	return ActivityLogSummary{
-		ID:      fmt.Sprintf("log-%d", a.ID),
-		Date:    a.CreatedAt.Format(time.RFC3339),
-		Status:  uiStatus,
-		Summary: summary,
+		ID:       fmt.Sprintf("log-%d", a.ID),
+		Date:     a.CreatedAt.Format(time.RFC3339),
+		Status:   uiStatus,
+		Summary:  summary,
+		Metadata: a.Metadata,
 	}
 }
 
 // generateSummary creates a human-readable summary of the processing result
+// This now returns a structured summary that can be localized on the frontend
 func (a *ActivityLog) generateSummary() string {
-	if a.Status == "failed" && a.ErrorMessage != nil {
-		return *a.ErrorMessage
+	// Store structured data in metadata for frontend localization
+	if a.Metadata == nil {
+		a.Metadata = make(map[string]interface{})
 	}
 
-	if a.Status == "skipped" {
+	// Store message type and parameters for frontend to construct localized message
+	switch a.Status {
+	case "failed":
+		if a.ErrorMessage != nil {
+			a.Metadata["messageType"] = "error"
+			a.Metadata["errorMessage"] = *a.ErrorMessage
+			return *a.ErrorMessage // Keep original error message as fallback
+		}
+		a.Metadata["messageType"] = "failed"
+		return "Processing failed"
+
+	case "skipped":
+		a.Metadata["messageType"] = "skipped"
 		if len(a.WarningMessages) > 0 {
-			return a.WarningMessages[0]
+			a.Metadata["reason"] = a.WarningMessages[0]
+			return a.WarningMessages[0] // Keep original message as fallback
 		}
 		return "Processing skipped"
-	}
 
-	// Success case
-	summary := fmt.Sprintf("Processed %s: ", a.ProcessingDate.Format("2006-01-02"))
-	
-	if a.ActivitiesFound == 0 {
-		summary += "No activities found"
-	} else if a.ActivitiesFound == 1 {
-		summary += "1 activity found"
-	} else {
-		summary += fmt.Sprintf("%d activities found", a.ActivitiesFound)
-	}
+	default: // success case
+		a.Metadata["messageType"] = "processed"
+		a.Metadata["date"] = a.ProcessingDate.Format("2006-01-02")
+		a.Metadata["activitiesFound"] = a.ActivitiesFound
+		a.Metadata["activitiesProcessed"] = a.ActivitiesProcessed
+		a.Metadata["spreadsheetUpdated"] = a.SpreadsheetUpdated
 
-	if a.ActivitiesProcessed > 0 {
-		summary += fmt.Sprintf(", %d processed", a.ActivitiesProcessed)
-	}
+		// Keep generating English summary as fallback for older logs
+		summary := fmt.Sprintf("Processed %s: ", a.ProcessingDate.Format("2006-01-02"))
+		
+		if a.ActivitiesFound == 0 {
+			summary += "No activities found"
+		} else if a.ActivitiesFound == 1 {
+			summary += "1 activity found"
+		} else {
+			summary += fmt.Sprintf("%d activities found", a.ActivitiesFound)
+		}
 
-	if a.SpreadsheetUpdated {
-		summary += ", spreadsheet updated"
-	}
+		if a.ActivitiesProcessed > 0 {
+			summary += fmt.Sprintf(", %d processed", a.ActivitiesProcessed)
+		}
 
-	return summary
+		if a.SpreadsheetUpdated {
+			summary += ", spreadsheet updated"
+		}
+
+		return summary
+	}
 }
 
 // DashboardUserResponse represents user data with dashboard-specific additions

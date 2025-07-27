@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/sendgrid"
 	"github.com/stretchr/testify/assert"
@@ -164,11 +165,12 @@ func TestConstructEmailBody(t *testing.T) {
 			},
 		}
 
-		body := service.ConstructEmailBody(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		body := service.ConstructEmailBody(notification, runDate, localizer)
 
 		assert.Contains(t, body, "Daily Sync Summary for January 20, 2024:")
-		assert.Contains(t, body, "✅ Mon, Jan 15: 1 activity logged (5.0km in 00:30:00)")
-		assert.Contains(t, body, "✅ Tue, Jan 16: Rest day, no activity")
+		assert.Contains(t, body, "✅ Jan 15: 1 activity logged (5.0km in 00:30:00)")
+		assert.Contains(t, body, "✅ Jan 16: Rest day, no activity")
 		assert.Contains(t, body, "The Academy Sync - Automated Training Log")
 	})
 
@@ -188,9 +190,10 @@ func TestConstructEmailBody(t *testing.T) {
 			},
 		}
 
-		body := service.ConstructEmailBody(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		body := service.ConstructEmailBody(notification, runDate, localizer)
 
-		assert.Contains(t, body, "❌ Mon, Jan 15: Failed to process")
+		assert.Contains(t, body, "❌ Jan 15: Failed to process")
 		assert.Contains(t, body, "Error: API rate limit exceeded")
 	})
 
@@ -224,12 +227,13 @@ func TestConstructEmailBody(t *testing.T) {
 			},
 		}
 
-		body := service.ConstructEmailBody(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		body := service.ConstructEmailBody(notification, runDate, localizer)
 
-		assert.Contains(t, body, "✅ Mon, Jan 15: 2 activities logged")
-		assert.Contains(t, body, "⚠️ Tue, Jan 16: Partial sync completed")
-		assert.Contains(t, body, "❌ Wed, Jan 17: Sync failed")
-		assert.Contains(t, body, "⏭️ Thu, Jan 18: Already processed")
+		assert.Contains(t, body, "✅ Jan 15: 2 activities logged")
+		assert.Contains(t, body, "⚠️ Jan 16: Partial sync completed")
+		assert.Contains(t, body, "❌ Jan 17: Sync failed")
+		assert.Contains(t, body, "⏭️ Jan 18: Already processed")
 	})
 
 	t.Run("invalid date format", func(t *testing.T) {
@@ -247,7 +251,8 @@ func TestConstructEmailBody(t *testing.T) {
 			},
 		}
 
-		body := service.ConstructEmailBody(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		body := service.ConstructEmailBody(notification, runDate, localizer)
 
 		// Should use original date string when parsing fails
 		assert.Contains(t, body, "✅ invalid-date: Test message")

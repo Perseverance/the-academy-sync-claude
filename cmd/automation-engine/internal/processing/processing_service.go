@@ -107,6 +107,7 @@ type DayProcessingResult struct {
 	Error             error
 	IsNewlyProcessed  bool // true if this day wasn't bold before
 	HasChanges        bool // true if any values changed
+	Metadata          map[string]interface{} // For localization data
 }
 
 // TrainingPlanCache maps date strings (YYYY-MM-DD) to training plan entries

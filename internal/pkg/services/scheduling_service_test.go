@@ -34,6 +34,16 @@ func (m *MockUserRepository) GetUserByID(ctx context.Context, userID int) (*data
 	return args.Get(0).(*database.User), args.Error(1)
 }
 
+func (m *MockUserRepository) SetGoogleReauthRequired(ctx context.Context, userID int, required bool) error {
+	args := m.Called(ctx, userID, required)
+	return args.Error(0)
+}
+
+func (m *MockUserRepository) SetStravaReauthRequired(ctx context.Context, userID int, required bool) error {
+	args := m.Called(ctx, userID, required)
+	return args.Error(0)
+}
+
 // Mock QueueClient
 type MockQueueClient struct {
 	mock.Mock

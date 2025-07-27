@@ -11,6 +11,15 @@ import (
 // Note: ErrStravaConnectionRequired and ErrSpreadsheetRequired are already defined in sync_service.go
 // We reuse them here for consistency
 
+// ErrInvalidLanguagePreference is returned when an unsupported language code is provided
+var ErrInvalidLanguagePreference = fmt.Errorf("invalid language preference: must be 'bg' or 'en'")
+
+// supportedLanguages defines the list of supported language codes
+var supportedLanguages = map[string]bool{
+	"bg": true, // Bulgarian
+	"en": true, // English
+}
+
 // SettingsService handles user settings operations
 type SettingsService struct {
 	userRepo *database.UserRepository
@@ -26,7 +35,16 @@ func NewSettingsService(userRepo *database.UserRepository, logger *logger.Logger
 }
 
 // UpdateUserSettings updates the user's settings with validation
-func (s *SettingsService) UpdateUserSettings(ctx context.Context, userID int, automationEnabled, emailNotificationsEnabled bool) error {
+func (s *SettingsService) UpdateUserSettings(ctx context.Context, userID int, automationEnabled, emailNotificationsEnabled bool, languagePreference string) error {
+	// Validate language preference if provided
+	if languagePreference != "" && !supportedLanguages[languagePreference] {
+		s.logger.Warn("Invalid language preference provided", 
+			"user_id", userID, 
+			"language_preference", languagePreference,
+			"supported_languages", []string{"bg", "en"})
+		return ErrInvalidLanguagePreference
+	}
+
 	// If trying to enable automation, validate requirements
 	if automationEnabled {
 		// Fetch user to check requirements
@@ -57,20 +75,22 @@ func (s *SettingsService) UpdateUserSettings(ctx context.Context, userID int, au
 	}
 
 	// Update the settings
-	err := s.userRepo.UpdateUserSettings(ctx, userID, automationEnabled, emailNotificationsEnabled)
+	err := s.userRepo.UpdateUserSettings(ctx, userID, automationEnabled, emailNotificationsEnabled, languagePreference)
 	if err != nil {
 		s.logger.Error("Failed to update user settings", 
 			"error", err, 
 			"user_id", userID,
 			"automation_enabled", automationEnabled,
-			"email_notifications_enabled", emailNotificationsEnabled)
+			"email_notifications_enabled", emailNotificationsEnabled,
+			"language_preference", languagePreference)
 		return fmt.Errorf("failed to update settings: %w", err)
 	}
 
 	s.logger.Info("Successfully updated user settings",
 		"user_id", userID,
 		"automation_enabled", automationEnabled,
-		"email_notifications_enabled", emailNotificationsEnabled)
+		"email_notifications_enabled", emailNotificationsEnabled,
+		"language_preference", languagePreference)
 
 	return nil
 }

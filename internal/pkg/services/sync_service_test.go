@@ -59,6 +59,14 @@ func (m *mockUserRepository) GetUsersInProcessingWindow(ctx context.Context) ([]
 	return nil, nil
 }
 
+func (m *mockUserRepository) SetGoogleReauthRequired(ctx context.Context, userID int, required bool) error {
+	return nil
+}
+
+func (m *mockUserRepository) SetStravaReauthRequired(ctx context.Context, userID int, required bool) error {
+	return nil
+}
+
 func setupSyncServiceTest(t *testing.T) (*miniredis.Miniredis, *queue.Client, *SyncService, *mockUserRepository) {
 	// Setup Redis
 	mr, err := miniredis.Run()

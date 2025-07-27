@@ -4,7 +4,8 @@ import { useAppState } from "@/context/app-state-provider"
 import { ConnectionCard } from "@/components/connection-card"
 import { SpreadsheetCard } from "@/components/spreadsheet-card"
 import { ManualSyncCard } from "@/components/manual-sync-card"
-import { SettingsCard } from "@/components/settings-card"
+import { NotificationSettingsCard } from "@/components/notification-settings-card"
+import { LanguageSettingsCard } from "@/components/language-settings-card"
 import { ActivityLog } from "@/components/activity-log"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { GoogleLogo } from "@/components/icons/google-logo"
@@ -21,9 +22,11 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Button } from "@/components/ui/button" // shadcn button for dropdown trigger
 import { AcademyLogo } from "./icons/academy-logo"
+import { useTranslation } from "react-i18next"
 
 export function DashboardPage() {
   const { state, actions } = useAppState()
+  const { t } = useTranslation()
 
   if (!state.user) {
     // This should be handled by AppStateProvider redirect, but as a fallback
@@ -37,7 +40,7 @@ export function DashboardPage() {
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <AcademyLogo className="h-8 w-8" />
-            <h1 className="text-2xl font-brand text-primary">Configuration</h1>
+            <h1 className="text-2xl font-brand text-primary">{t('dashboard.title')}</h1>
           </div>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
@@ -58,12 +61,12 @@ export function DashboardPage() {
               <DropdownMenuSeparator />
               <DropdownMenuItem disabled>
                 <Settings className="mr-2 h-4 w-4" />
-                <span>Settings</span>
+                <span>{t('dashboard.userMenu.settings')}</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
               <DropdownMenuItem onClick={actions.signOut}>
                 <LogOut className="mr-2 h-4 w-4" />
-                <span>Log out</span>
+                <span>{t('dashboard.userMenu.logout')}</span>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -73,11 +76,11 @@ export function DashboardPage() {
       {/* Main Content */}
       <main className="flex-1 bg-background p-4 sm:p-6 lg:p-8">
         <div className="max-w-5xl mx-auto">
-          <h2 className="text-3xl font-brand font-bold text-primary mb-6">Configuration Dashboard</h2>
+          <h2 className="text-3xl font-brand font-bold text-primary mb-6">{t('dashboard.header')}</h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {/* Google Connection Card */}
             <ConnectionCard
-              serviceName="Google Account"
+              serviceName={t('dashboard.services.google')}
               serviceIcon={<GoogleLogo className="h-8 w-8 text-primary" />} // Google logo can use primary color or its own
               status={state.googleStatus}
               userName={state.user.name}
@@ -96,7 +99,7 @@ export function DashboardPage() {
 
             {/* Strava Connection Card */}
             <ConnectionCard
-              serviceName="Strava"
+              serviceName={t('dashboard.services.strava')}
               serviceIcon={<StravaLogo className="h-8 w-8" />} // Use StravaLogo component
               status={state.stravaStatus}
               userName={state.stravaUserName}
@@ -118,8 +121,11 @@ export function DashboardPage() {
             {/* Manual Sync Card - Spans 1 column */}
             <ManualSyncCard status={state.manualSyncStatus} onSync={actions.triggerManualSync} />
 
-            {/* Settings Card - Spans 1 column */}
-            <SettingsCard />
+            {/* Notification Settings Card - Spans 1 column */}
+            <NotificationSettingsCard />
+
+            {/* Language Settings Card - Spans 1 column */}
+            <LanguageSettingsCard />
 
             {/* Activity Log - Spans full width on its row or multiple columns */}
             <div className="md:col-span-2 lg:col-span-3">

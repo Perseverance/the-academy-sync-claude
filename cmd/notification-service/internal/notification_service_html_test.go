@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nicksnyder/go-i18n/v2/i18n"
 	"github.com/Perseverance/the-academy-sync-claude/internal/pkg/logger"
 	"github.com/stretchr/testify/assert"
 )
@@ -48,7 +49,8 @@ func TestRenderHTMLEmail(t *testing.T) {
 			},
 		}
 
-		html, err := service.RenderHTMLEmail(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		html, err := service.RenderHTMLEmail(notification, runDate, localizer)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, html)
 
@@ -58,19 +60,19 @@ func TestRenderHTMLEmail(t *testing.T) {
 
 		// Check for processed days
 		assert.Contains(t, html, "✅")
-		assert.Contains(t, html, "Mon, Jan 15")
+		assert.Contains(t, html, "Jan 15")
 		assert.Contains(t, html, "1 activity logged (5.0km in 00:30:00)")
 
 		assert.Contains(t, html, "⚠️")
-		assert.Contains(t, html, "Tue, Jan 16")
+		assert.Contains(t, html, "Jan 16")
 		assert.Contains(t, html, "Partial sync completed")
 
 		assert.Contains(t, html, "❌")
-		assert.Contains(t, html, "Wed, Jan 17")
+		assert.Contains(t, html, "Jan 17")
 		assert.Contains(t, html, "Sync failed")
 
 		assert.Contains(t, html, "⏭️")
-		assert.Contains(t, html, "Thu, Jan 18")
+		assert.Contains(t, html, "Jan 18")
 		assert.Contains(t, html, "Already processed")
 
 		// Check for footer links
@@ -98,7 +100,8 @@ func TestRenderHTMLEmail(t *testing.T) {
 			Logs:          []ProcessingLog{},
 		}
 
-		html, err := service.RenderHTMLEmail(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		html, err := service.RenderHTMLEmail(notification, runDate, localizer)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, html)
 		
@@ -131,7 +134,8 @@ func TestRenderHTMLEmail(t *testing.T) {
 			},
 		}
 
-		html, err := service.RenderHTMLEmail(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		html, err := service.RenderHTMLEmail(notification, runDate, localizer)
 		assert.NoError(t, err)
 		assert.NotEmpty(t, html)
 		
@@ -159,7 +163,8 @@ func TestRenderHTMLEmail(t *testing.T) {
 			},
 		}
 
-		html, err := service.RenderHTMLEmail(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		html, err := service.RenderHTMLEmail(notification, runDate, localizer)
 		assert.NoError(t, err)
 		
 		// Check that HTML is properly escaped
@@ -186,7 +191,8 @@ func TestRenderHTMLEmail(t *testing.T) {
 			},
 		}
 
-		html, err := service.RenderHTMLEmail(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		html, err := service.RenderHTMLEmail(notification, runDate, localizer)
 		assert.NoError(t, err)
 		
 		// Check for table-based layout elements
@@ -217,7 +223,8 @@ func TestRenderHTMLEmail(t *testing.T) {
 			},
 		}
 
-		html, err := service.RenderHTMLEmail(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		html, err := service.RenderHTMLEmail(notification, runDate, localizer)
 		assert.NoError(t, err)
 		
 		// Check for style guide colors
@@ -246,7 +253,8 @@ func TestRenderHTMLEmail(t *testing.T) {
 			},
 		}
 
-		html, err := service.RenderHTMLEmail(notification, runDate)
+		localizer := i18n.NewLocalizer(service.i18nBundle, "en")
+		html, err := service.RenderHTMLEmail(notification, runDate, localizer)
 		assert.NoError(t, err)
 		
 		// Should still render but with empty spreadsheet URL
