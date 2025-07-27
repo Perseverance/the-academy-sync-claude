@@ -68,6 +68,10 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
+		if errors.Is(err, services.ErrInvalidLanguagePreference) {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
 		
 		h.logger.Error("Failed to update user settings", "error", err, "user_id", userID)
 		http.Error(w, "Failed to update settings", http.StatusInternalServerError)
