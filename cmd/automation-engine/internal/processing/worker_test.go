@@ -75,6 +75,14 @@ func (m *MockActivityLogRepo) CreateActivityLog(ctx context.Context, log *databa
 	return args.Error(0)
 }
 
+func (m *MockActivityLogRepo) GetSuccessfulLogForDate(ctx context.Context, userID int, processingDate time.Time, processingType string) (*database.ActivityLog, error) {
+	args := m.Called(ctx, userID, processingDate, processingType)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*database.ActivityLog), args.Error(1)
+}
+
 // MockQueueClient for testing
 type MockQueueClient struct {
 	mock.Mock
