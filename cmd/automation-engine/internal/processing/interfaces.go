@@ -29,4 +29,5 @@ type SheetsClient interface {
 // ActivityLogRepository defines the interface for activity log persistence
 type ActivityLogRepository interface {
 	CreateActivityLog(ctx context.Context, log *database.ActivityLog) error
+	GetSuccessfulLogForDate(ctx context.Context, userID int, processingDate time.Time, processingType string) (*database.ActivityLog, error)
 }

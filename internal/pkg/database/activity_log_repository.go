@@ -397,3 +397,97 @@ func (r *ActivityLogRepository) GetRecentLogsByDateRange(ctx context.Context, us
 
 	return logs, nil
 }
+
+// GetSuccessfulLogForDate retrieves a successful activity log for a specific date with zero activities
+func (r *ActivityLogRepository) GetSuccessfulLogForDate(ctx context.Context, userID int, processingDate time.Time, processingType string) (*ActivityLog, error) {
+	query := `
+		SELECT 
+			id,
+			user_id,
+			processing_date,
+			processing_type,
+			processing_scope,
+			status,
+			activities_found,
+			activities_processed,
+			total_distance_meters,
+			total_duration_seconds,
+			spreadsheet_row,
+			spreadsheet_updated,
+			description_generated,
+			error_message,
+			warning_messages,
+			processing_started_at,
+			processing_completed_at,
+			processing_duration_ms,
+			metadata,
+			created_at
+		FROM activity_logs
+		WHERE user_id = $1 
+		  AND processing_date = $2
+		  AND processing_type = $3
+		  AND status = 'success'
+		  AND activities_found = 0
+		ORDER BY created_at DESC
+		LIMIT 1`
+
+	var log ActivityLog
+	var metadataJSON sql.NullString
+	var warningMessages pq.StringArray
+
+	err := r.db.QueryRowContext(ctx, query, userID, processingDate, processingType).Scan(
+		&log.ID,
+		&log.UserID,
+		&log.ProcessingDate,
+		&log.ProcessingType,
+		&log.ProcessingScope,
+		&log.Status,
+		&log.ActivitiesFound,
+		&log.ActivitiesProcessed,
+		&log.TotalDistanceMeters,
+		&log.TotalDurationSeconds,
+		&log.SpreadsheetRow,
+		&log.SpreadsheetUpdated,
+		&log.DescriptionGenerated,
+		&log.ErrorMessage,
+		&warningMessages,
+		&log.ProcessingStartedAt,
+		&log.ProcessingCompletedAt,
+		&log.ProcessingDurationMs,
+		&metadataJSON,
+		&log.CreatedAt,
+	)
+
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		r.logger.Error("Failed to get successful log for date", 
+			"error", err, 
+			"user_id", userID,
+			"processing_date", processingDate,
+			"processing_type", processingType)
+		return nil, fmt.Errorf("failed to get successful log for date: %w", err)
+	}
+
+	// Convert warning messages
+	log.WarningMessages = []string(warningMessages)
+
+	// Unmarshal metadata if present
+	if metadataJSON.Valid && len(metadataJSON.String) > 0 {
+		var metadata map[string]interface{}
+		if err := json.Unmarshal([]byte(metadataJSON.String), &metadata); err != nil {
+			r.logger.Warn("Failed to unmarshal metadata", "error", err, "log_id", log.ID)
+		} else {
+			log.Metadata = metadata
+		}
+	}
+
+	r.logger.Debug("Found existing successful log for date",
+		"user_id", userID,
+		"processing_date", processingDate,
+		"processing_type", processingType,
+		"log_id", log.ID)
+
+	return &log, nil
+}

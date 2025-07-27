@@ -923,6 +923,32 @@ func (w *Worker) persistProcessingResult(ctx context.Context, userID int, jobTyp
 		processingType = "daily"
 	}
 
+	// Check if we should skip creating a log entry
+	// Skip if: successful processing with zero activities found and an existing log exists for today
+	if status == "success" && result.TotalActivitiesFound == 0 {
+		// Use a separate context for the database check
+		checkCtx, checkCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer checkCancel()
+		
+		existingLog, err := w.activityLogRepo.GetSuccessfulLogForDate(checkCtx, userID, processingDateOnly, processingType)
+		if err != nil {
+			w.logger.Warn("Failed to check for existing activity log, will create new log",
+				"error", err,
+				"user_id", userID,
+				"processing_date", processingDateOnly,
+				"processing_type", processingType)
+		} else if existingLog != nil {
+			// Found existing successful log with zero activities for today, skip creating duplicate
+			w.logger.Debug("Skipping activity log creation - already have successful zero-activity log for today",
+				"user_id", userID,
+				"processing_date", processingDateOnly,
+				"processing_type", processingType,
+				"existing_log_id", existingLog.ID,
+				"existing_log_created_at", existingLog.CreatedAt)
+			return
+		}
+	}
+
 	// Create activity log entry with full schema
 	logEntry := &database.ActivityLog{
 		UserID:               userID,
