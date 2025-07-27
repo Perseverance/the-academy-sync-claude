@@ -18,6 +18,7 @@ export interface User {
   timezone: string
   email_notifications_enabled: boolean
   automation_enabled: boolean
+  language_preference: string
   has_strava_connection: boolean
   has_sheets_connection: boolean
   recent_activity_logs: ActivityLog[]

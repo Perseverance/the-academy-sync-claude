@@ -1,6 +1,7 @@
 export interface UpdateSettingsRequest {
   automation_enabled: boolean
   email_notifications_enabled: boolean
+  language_preference?: string
 }
 
 class SettingsService {

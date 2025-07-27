@@ -29,8 +29,9 @@ type ProcessingConfig struct {
 	Timezone      string `json:"timezone"`
 
 	// User preferences
-	EmailNotificationsEnabled bool `json:"email_notifications_enabled"`
-	AutomationEnabled         bool `json:"automation_enabled"`
+	EmailNotificationsEnabled bool   `json:"email_notifications_enabled"`
+	AutomationEnabled         bool   `json:"automation_enabled"`
+	LanguagePreference        string `json:"language_preference"`
 }
 
 // ValidationError represents a configuration validation failure

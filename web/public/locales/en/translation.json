@@ -1,0 +1,205 @@
+{
+  "metadata": {
+    "title": "Strava Log Automator - Configuration",
+    "description": "Configure your automated Strava running log to Google Sheets."
+  },
+  "landing": {
+    "title": "The Academy Sync Tool",
+    "subtitle": "Connect your Strava and Google accounts to automatically log your activities to a Google Spreadsheet.",
+    "signInButton": "Sign in with Google",
+    "features": {
+      "strava": {
+        "title": "Connect Strava",
+        "description": "Securely link Strava to fetch activities."
+      },
+      "googleSheets": {
+        "title": "Google Sheets Sync",
+        "description": "Auto-update your designated Google Spreadsheet."
+      },
+      "automation": {
+        "title": "Daily Automation",
+        "description": "Set it once, log runs automatically."
+      }
+    }
+  },
+  "signIn": {
+    "title": "Automate Your Strava Running Log",
+    "description": "Connect your Strava and Google accounts to automatically sync your running activities to a Google Spreadsheet. Focus on your training, not manual data entry.",
+    "signInButton": "Sign in with Google"
+  },
+  "dashboard": {
+    "title": "Configuration",
+    "header": "Configuration Dashboard",
+    "userMenu": {
+      "settings": "Settings",
+      "logout": "Log out"
+    },
+    "services": {
+      "google": "Google Account",
+      "strava": "Strava"
+    }
+  },
+  "connectionCard": {
+    "status": {
+      "notConnected": "Not connected",
+      "active": "Active",
+      "reauthRequired": "Status: Re-authorization Needed!"
+    },
+    "actions": {
+      "connect": "Connect {{serviceName}}",
+      "connectStrava": "Connect with Strava",
+      "disconnect": "Disconnect",
+      "reauthorize": "Re-authorize {{serviceName}}"
+    },
+    "error": {
+      "unknownStatus": "Unknown status"
+    }
+  },
+  "spreadsheetCard": {
+    "title": "Spreadsheet Configuration",
+    "status": "Active",
+    "placeholder": "https://docs.google.com/spreadsheets/d/...",
+    "label": "Full Google Spreadsheet URL",
+    "actions": {
+      "save": "Save",
+      "saving": "Saving...",
+      "change": "Change Spreadsheet"
+    },
+    "messages": {
+      "connectStravaFirst": "Please connect your Strava account first to enable spreadsheet configuration."
+    },
+    "toast": {
+      "emptyUrl": {
+        "title": "Empty URL",
+        "description": "Please enter a Google Spreadsheet URL."
+      },
+      "invalidUrl": {
+        "title": "Invalid URL",
+        "description": "Please enter a valid Google Spreadsheet URL."
+      },
+      "success": {
+        "title": "Success",
+        "description": "Spreadsheet configuration saved successfully!"
+      },
+      "configError": {
+        "title": "Configuration Error"
+      },
+      "error": {
+        "title": "Error",
+        "description": "Failed to save spreadsheet configuration. Please try again."
+      }
+    }
+  },
+  "manualSync": {
+    "title": "On-Demand Sync",
+    "actions": {
+      "sync": "Sync Now",
+      "syncing": "Syncing..."
+    },
+    "tooltip": "Complete Strava connection and Spreadsheet configuration to enable manual sync."
+  },
+  "settings": {
+    "title": "Settings",
+    "description": "Manage your automation and notification preferences",
+    "automation": {
+      "label": "Daily Automation",
+      "enabled": "Automatically sync activities to your spreadsheet daily",
+      "disabled": "Connect Strava and Google Sheets to enable automation"
+    },
+    "notifications": {
+      "title": "Notification Settings",
+      "subtitle": "Manage your automation and notification preferences",
+      "label": "Email Notifications",
+      "description": "Receive email updates about sync status"
+    },
+    "language": {
+      "title": "Language Settings",
+      "description": "Choose your preferred language for the interface and email notifications",
+      "label": "System Language",
+      "options": {
+        "bulgarian": "Български",
+        "english": "English"
+      }
+    },
+    "languages": {
+      "bg": "Български",
+      "en": "English"
+    },
+    "toast": {
+      "cannotEnableAutomation": {
+        "title": "Cannot enable automation",
+        "description": "Please connect both Strava and Google Sheets first"
+      },
+      "automationEnabled": "Automation enabled",
+      "automationDisabled": "Automation disabled",
+      "notificationsEnabled": "Email notifications enabled",
+      "notificationsDisabled": "Email notifications disabled",
+      "languageUpdated": "Language updated",
+      "failedToUpdate": {
+        "title": "Failed to update settings",
+        "description": "Please try again"
+      }
+    }
+  },
+  "activityLog": {
+    "title": "Recent Automation Activity",
+    "noActivity": "No automation activity found for the last 30 days.",
+    "status": {
+      "success": "Success",
+      "failure": "Failure",
+      "successWithWarning": "Success With Warning"
+    },
+    "messages": {
+      "processingFailed": "Processing failed",
+      "processingSkipped": "Processing skipped",
+      "noActivitiesFound": "No activities found",
+      "activityFound": "1 activity found",
+      "activitiesFound": "{{count}} activities found",
+      "noTrainingPlan": "No training plan entry for this day",
+      "alreadyProcessed": "Day already processed (bold text found)",
+      "noActivities": "No activities and no scheduled run",
+      "restDayNoActivity": "Rest day, no activity",
+      "noScheduledTraining": "No scheduled training for this day",
+      "activityLogged": "1 activity logged ({{distance}}km in {{duration}})",
+      "activitiesLogged": "{{count}} activities logged (total: {{distance}}km in {{duration}})"
+    }
+  },
+  "sync": {
+    "toast": {
+      "started": {
+        "title": "Sync Started",
+        "description": "Manual sync has been triggered successfully and is now processing."
+      },
+      "completed": {
+        "title": "Sync Completed",
+        "withActivities": "Successfully synced {{activityCount}} activities in {{logCount}} logs.",
+        "noActivities": "Sync completed with {{logCount}} logs, but no new activities were found."
+      },
+      "failed": {
+        "title": "Sync Failed"
+      },
+      "error": "Failed to trigger sync. Please check your connection and try again."
+    }
+  },
+  "errors": {
+    "syncService": {
+      "connectionFailed": "Failed to connect to sync service. Please check your connection and try again.",
+      "statusFailed": "Failed to get sync status. Please check your connection and try again.",
+      "unexpected": "An unexpected error occurred"
+    },
+    "auth": {
+      "getUrlFailed": "Failed to get auth URL: {{status}}",
+      "initFailed": "Failed to initiate Google authentication",
+      "userInfoFailed": "Failed to get user info: {{status}}"
+    },
+    "strava": {
+      "getUrlFailed": "Failed to get Strava auth URL: {{status}}",
+      "initFailed": "Failed to initiate Strava connection",
+      "disconnectFailed": "Failed to disconnect Strava: {{status}}",
+      "disconnectError": "Failed to disconnect Strava account"
+    },
+    "settings": {
+      "updateFailed": "Failed to update user settings"
+    }
+  }
+}

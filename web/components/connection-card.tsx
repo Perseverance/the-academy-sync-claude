@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { AlertTriangle, CheckCircle, LinkIcon, LogOut, RefreshCw } from "lucide-react"
 import type { ServiceStatus } from "@/context/app-state-provider"
 import { getCachedAvatarUrl } from "@/lib/avatar-utils"
+import { useTranslation } from "react-i18next"
 
 interface ConnectionCardProps {
   serviceName: string
@@ -33,6 +34,8 @@ export function ConnectionCard({
   isGoogle = false,
   isStrava = false,
 }: ConnectionCardProps) {
+  const { t } = useTranslation()
+  
   const renderContent = () => {
     switch (status) {
       case "NotConnected":
@@ -41,25 +44,25 @@ export function ConnectionCard({
             <div className="flex items-center space-x-3 mb-3">
               {serviceIcon}
               <Badge className="bg-orange-100 text-orange-800 border-orange-200">
-                Not connected
+                {t('connectionCard.status.notConnected')}
               </Badge>
             </div>
             {isStrava ? (
               <button 
                 onClick={onConnect} 
                 className="flex justify-start items-center hover:opacity-90 transition-opacity focus:outline-none focus:ring-2 focus:ring-orange-500 focus:ring-offset-2 rounded-md"
-                aria-label="Connect with Strava"
+                aria-label={t('connectionCard.actions.connectStrava')}
               >
                 <img 
                   src="/icons/btn_strava_connect_with_orange.svg" 
-                  alt="Connect with Strava"
+                  alt={t('connectionCard.actions.connectStrava')}
                   className="h-9 w-auto"
                 />
               </button>
             ) : (
               <button onClick={onConnect} className="btn-primary-main w-full">
                 <LinkIcon className="h-4 w-4" />
-                Connect {serviceName}
+                {t('connectionCard.actions.connect', { serviceName })}
               </button>
             )}
           </>
@@ -75,14 +78,14 @@ export function ConnectionCard({
               <div>
                 <p className="text-sm font-semibold text-foreground">{userName || serviceName}</p>
                 <Badge className="bg-success/20 text-success border-success/30">
-                  <CheckCircle className="h-3 w-3 mr-1" /> Active
+                  <CheckCircle className="h-3 w-3 mr-1" /> {t('connectionCard.status.active')}
                 </Badge>
               </div>
             </div>
             {!isGoogle && ( // Typically don't disconnect Google session from here, sign out instead
               <button onClick={onDisconnect} className="btn-destructive-main w-full text-sm py-1.5 px-3">
                 <LogOut className="h-4 w-4" />
-                Disconnect
+                {t('connectionCard.actions.disconnect')}
               </button>
             )}
           </>
@@ -92,16 +95,16 @@ export function ConnectionCard({
           <>
             <div className="flex items-center space-x-3 mb-3 text-warning-foreground bg-warning/10 p-3 rounded-md border border-warning/30">
               <AlertTriangle className="h-6 w-6 text-warning" />
-              <p className="text-sm font-semibold">Status: Re-authorization Needed!</p>
+              <p className="text-sm font-semibold">{t('connectionCard.status.reauthRequired')}</p>
             </div>
             <button onClick={onReauthorize} className="btn-primary-main w-full">
               <RefreshCw className="h-4 w-4" />
-              Re-authorize {serviceName}
+              {t('connectionCard.actions.reauthorize', { serviceName })}
             </button>
           </>
         )
       default:
-        return <p>Unknown status</p>
+        return <p>{t('connectionCard.error.unknownStatus')}</p>
     }
   }
 

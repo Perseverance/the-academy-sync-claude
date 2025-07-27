@@ -6,6 +6,16 @@ type TemplateData struct {
     ProcessedDays  []ProcessedDay
     DashboardURL   string   // URL to the frontend application
     SpreadsheetURL string   // URL to the Google Sheets spreadsheet
+    // Localized strings
+    Title           string   // Email title/header
+    Intro           string   // Intro text
+    StatusHeader    string   // Table header for status column
+    DateHeader      string   // Table header for date column
+    SummaryHeader   string   // Table header for summary column
+    FooterLine1     string   // Footer first line
+    FooterLine2     string   // Footer second line
+    DashboardLink   string   // Dashboard link text
+    SpreadsheetLink string   // Spreadsheet link text
 }
 
 type ProcessedDay struct {
@@ -19,7 +29,7 @@ type ProcessedDay struct {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Academy Sync Daily Summary</title>
+    <title>{{.Title}}</title>
     <style>
         /* Reset styles for email clients */
         body, table, td, a { -webkit-text-size-adjust: 100%; -ms-text-size-adjust: 100%; }
@@ -196,7 +206,7 @@ type ProcessedDay struct {
                     <!-- Header -->
                     <tr>
                         <td class="header">
-                            <h1>Academy Sync Daily Summary</h1>
+                            <h1>{{.Title}}</h1>
                             <p>{{.RunDate}}</p>
                         </td>
                     </tr>
@@ -205,16 +215,16 @@ type ProcessedDay struct {
                     <tr>
                         <td class="content">
                             <p class="content-intro">
-                                Here's a summary of your training log synchronization:
+                                {{.Intro}}
                             </p>
                             
                             <!-- Summary Table -->
                             <table class="summary-table" role="presentation" cellspacing="0" cellpadding="0" border="0" width="100%">
                                 <thead>
                                     <tr>
-                                        <th class="status-cell">Status</th>
-                                        <th class="date-cell">Date</th>
-                                        <th class="message-cell">Summary</th>
+                                        <th class="status-cell">{{.StatusHeader}}</th>
+                                        <th class="date-cell">{{.DateHeader}}</th>
+                                        <th class="message-cell">{{.SummaryHeader}}</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -234,12 +244,12 @@ type ProcessedDay struct {
                     <tr>
                         <td class="footer">
                             <p>
-                                <strong>The Academy Sync</strong><br>
-                                Automated Training Log Synchronization
+                                <strong>{{.FooterLine1}}</strong><br>
+                                {{.FooterLine2}}
                             </p>
                             <p class="footer-links">
-                                <a href="{{.DashboardURL}}">View Dashboard</a> | 
-                                <a href="{{.SpreadsheetURL}}">View Spreadsheet</a>
+                                <a href="{{.DashboardURL}}">{{.DashboardLink}}</a> | 
+                                <a href="{{.SpreadsheetURL}}">{{.SpreadsheetLink}}</a>
                             </p>
                         </td>
                     </tr>

@@ -29,8 +29,9 @@ func NewSettingsHandler(settingsService *services.SettingsService, userRepositor
 
 // UpdateSettingsRequest represents the request body for updating settings
 type UpdateSettingsRequest struct {
-	AutomationEnabled         bool `json:"automation_enabled"`
-	EmailNotificationsEnabled bool `json:"email_notifications_enabled"`
+	AutomationEnabled         bool   `json:"automation_enabled"`
+	EmailNotificationsEnabled bool   `json:"email_notifications_enabled"`
+	LanguagePreference        string `json:"language_preference"`
 }
 
 // UpdateSettings handles PUT /api/settings
@@ -53,10 +54,11 @@ func (h *SettingsHandler) UpdateSettings(w http.ResponseWriter, r *http.Request)
 	h.logger.Info("Updating user settings",
 		"user_id", userID,
 		"automation_enabled", req.AutomationEnabled,
-		"email_notifications_enabled", req.EmailNotificationsEnabled)
+		"email_notifications_enabled", req.EmailNotificationsEnabled,
+		"language_preference", req.LanguagePreference)
 
 	// Update settings with validation
-	if err := h.settingsService.UpdateUserSettings(r.Context(), userID, req.AutomationEnabled, req.EmailNotificationsEnabled); err != nil {
+	if err := h.settingsService.UpdateUserSettings(r.Context(), userID, req.AutomationEnabled, req.EmailNotificationsEnabled, req.LanguagePreference); err != nil {
 		// Check if it's a validation error using error type assertions
 		if errors.Is(err, services.ErrStravaConnectionRequired) {
 			http.Error(w, err.Error(), http.StatusBadRequest)

@@ -4,6 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { RefreshCw, Loader2, Info } from "lucide-react"
 import type { SyncStatus } from "@/context/app-state-provider"
+import { useTranslation } from "react-i18next"
 
 interface ManualSyncCardProps {
   status: SyncStatus
@@ -11,13 +12,14 @@ interface ManualSyncCardProps {
 }
 
 export function ManualSyncCard({ status, onSync }: ManualSyncCardProps) {
+  const { t } = useTranslation()
   const isDisabled = status === "Disabled"
   const isProcessing = status === "Processing"
 
-  const buttonText = isProcessing ? "Syncing..." : "Sync Now"
+  const buttonText = isProcessing ? t('manualSync.actions.syncing') : t('manualSync.actions.sync')
   const ButtonIcon = isProcessing ? Loader2 : RefreshCw
 
-  const disabledTooltipText = "Complete Strava connection and Spreadsheet configuration to enable manual sync."
+  const disabledTooltipText = t('manualSync.tooltip')
 
   const renderButton = () => (
     <button onClick={onSync} disabled={isDisabled || isProcessing} className="btn-primary-main w-full">
@@ -31,7 +33,7 @@ export function ManualSyncCard({ status, onSync }: ManualSyncCardProps) {
       <CardHeader>
         <CardTitle className="text-xl flex items-center gap-2">
           <RefreshCw className="h-6 w-6" />
-          On-Demand Sync
+          {t('manualSync.title')}
         </CardTitle>
       </CardHeader>
       <CardContent>

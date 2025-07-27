@@ -9,6 +9,7 @@ import type { SpreadsheetConfigStatus } from "@/context/app-state-provider"
 import { useToast } from "@/hooks/use-toast"
 import { configService, ConfigApiError } from "@/services/config"
 import { Badge } from "@/components/ui/badge"
+import { useTranslation } from "react-i18next"
 
 interface SpreadsheetCardProps {
   status: SpreadsheetConfigStatus
@@ -21,13 +22,14 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
   const [urlInput, setUrlInput] = useState(configuredUrl || "")
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
+  const { t } = useTranslation()
 
   const handleSave = async () => {
     // Basic client-side validation
     if (!urlInput.trim()) {
       toast({
-        title: "Empty URL",
-        description: "Please enter a Google Spreadsheet URL.",
+        title: t('spreadsheetCard.toast.emptyUrl.title'),
+        description: t('spreadsheetCard.toast.emptyUrl.description'),
         variant: "destructive",
       })
       return
@@ -35,8 +37,8 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
 
     if (!urlInput.startsWith("https://docs.google.com/spreadsheets/d/")) {
       toast({
-        title: "Invalid URL",
-        description: "Please enter a valid Google Spreadsheet URL.",
+        title: t('spreadsheetCard.toast.invalidUrl.title'),
+        description: t('spreadsheetCard.toast.invalidUrl.description'),
         variant: "destructive",
       })
       return
@@ -46,8 +48,8 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
     try {
       await onSave(urlInput)
       toast({
-        title: "Success",
-        description: "Spreadsheet configuration saved successfully!",
+        title: t('spreadsheetCard.toast.success.title'),
+        description: t('spreadsheetCard.toast.success.description'),
       })
     } catch (error) {
       console.error("Error saving spreadsheet:", error)
@@ -55,14 +57,14 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
       // Handle ConfigApiError with user-friendly messages
       if (error instanceof ConfigApiError) {
         toast({
-          title: "Configuration Error",
+          title: t('spreadsheetCard.toast.configError.title'),
           description: error.getUserFriendlyMessage(),
           variant: "destructive",
         })
       } else {
         toast({
-          title: "Error",
-          description: "Failed to save spreadsheet configuration. Please try again.",
+          title: t('spreadsheetCard.toast.error.title'),
+          description: t('spreadsheetCard.toast.error.description'),
           variant: "destructive",
         })
       }
@@ -79,10 +81,10 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
       <CardHeader>
         <CardTitle className="text-xl flex items-center gap-2">
           <FileSpreadsheet className="h-6 w-6" />
-          Spreadsheet Configuration
+          {t('spreadsheetCard.title')}
           {isConfigured && (
             <Badge className="bg-success/20 text-success border-success/30 ml-auto">
-              <CheckCircle className="h-3 w-3 mr-1" /> Active
+              <CheckCircle className="h-3 w-3 mr-1" /> {t('spreadsheetCard.status')}
             </Badge>
           )}
         </CardTitle>
@@ -104,20 +106,20 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
         {isDisabled && (
           <div className="flex items-center space-x-2 text-muted-foreground bg-muted/50 p-3 rounded-md border border-dashed">
             <Info className="h-5 w-5" />
-            <p className="text-sm">Please connect your Strava account first to enable spreadsheet configuration.</p>
+            <p className="text-sm">{t('spreadsheetCard.messages.connectStravaFirst')}</p>
           </div>
         )}
 
         {!isConfigured && !isDisabled && (
           <div>
             <Label htmlFor="spreadsheet-url" className="text-sm font-semibold text-foreground/90">
-              Full Google Spreadsheet URL
+              {t('spreadsheetCard.label')}
             </Label>
             <div className="flex items-center space-x-2 mt-1">
               <Input
                 id="spreadsheet-url"
                 type="url"
-                placeholder="https://docs.google.com/spreadsheets/d/..."
+                placeholder={t('spreadsheetCard.placeholder')}
                 value={urlInput}
                 onChange={(e) => setUrlInput(e.target.value)}
                 disabled={isDisabled}
@@ -133,7 +135,7 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
                 ) : (
                   <Save className="h-4 w-4" />
                 )}
-                {isLoading ? "Saving..." : "Save"}
+                {isLoading ? t('spreadsheetCard.actions.saving') : t('spreadsheetCard.actions.save')}
               </button>
             </div>
           </div>
@@ -142,7 +144,7 @@ export function SpreadsheetCard({ status, configuredUrl, onSave, onChange }: Spr
         {isConfigured && (
           <button onClick={onChange} className="btn-secondary-main w-full text-sm py-1.5 px-3">
             <Edit3 className="h-4 w-4" />
-            Change Spreadsheet
+            {t('spreadsheetCard.actions.change')}
           </button>
         )}
       </CardContent>

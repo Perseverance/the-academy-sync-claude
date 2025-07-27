@@ -10,6 +10,8 @@ import { configService } from "@/services/config"
 import { syncService, SyncError } from "@/services/SyncService"
 import { settingsService } from "@/services/settings"
 import { useToast } from "@/hooks/use-toast"
+import i18n from "@/src/i18n"
+import { useTranslation } from "react-i18next"
 
 export type ServiceStatus = "Connected" | "NotConnected" | "ReauthorizationNeeded"
 export type SpreadsheetConfigStatus = "Configured" | "NotConfigured" | "Disabled"
@@ -39,7 +41,7 @@ interface AppActions {
   changeSpreadsheet: () => void
   triggerManualSync: () => Promise<void>
   setGoogleStatus: (status: ServiceStatus) => void // For external updates if needed
-  updateUserSettings: (settings: { automation_enabled: boolean; email_notifications_enabled: boolean }) => Promise<void>
+  updateUserSettings: (settings: { automation_enabled: boolean; email_notifications_enabled: boolean; language_preference?: string }) => Promise<void>
 }
 
 const AppStateContext = createContext<
@@ -57,6 +59,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const isMountedRef = useRef(true)
   const pollingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const { toast } = useToast()
+  const { t } = useTranslation()
 
   const [state, setState] = useState<AppState>({
     user: null,
@@ -99,6 +102,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         if (user) {
           const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
           configService.updateUserTimezone(browserTimezone)
+          
+          // Update i18n language based on user preference
+          if (user.language_preference && user.language_preference !== i18n.language) {
+            i18n.changeLanguage(user.language_preference)
+          }
         }
       } catch (error) {
         console.error('Error checking auth status:', error)
@@ -270,8 +278,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       
       // Show success toast notification
       toast({
-        title: "Sync Started",
-        description: "Manual sync has been triggered successfully and is now processing.",
+        title: t('sync.toast.started.title'),
+        description: t('sync.toast.started.description'),
       })
       
       // Start polling for new activity logs
@@ -338,14 +346,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
               }
               
               // Show success notification with accurate activity count
-              const logText = newLogs.length === 1 ? 'log' : 'logs'
-              const activityText = totalActivitiesProcessed === 1 ? 'activity' : 'activities'
-              
               toast({
-                title: "Sync Completed",
+                title: t('sync.toast.completed.title'),
                 description: totalActivitiesProcessed > 0 
-                  ? `Successfully synced ${totalActivitiesProcessed} ${activityText} in ${newLogs.length} ${logText}.`
-                  : `Sync completed with ${newLogs.length} ${logText}, but no new activities were found.`,
+                  ? t('sync.toast.completed.withActivities', { 
+                      activityCount: totalActivitiesProcessed, 
+                      logCount: newLogs.length
+                    })
+                  : t('sync.toast.completed.noActivities', { 
+                      logCount: newLogs.length
+                    }),
               })
               
               return // Stop polling
@@ -387,7 +397,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       // Show error toast
       // TODO: Create a general error toast utility function to standardize error display
       toast({
-        title: "Sync Failed",
+        title: t('sync.toast.failed.title'),
         description: errorMessage,
         variant: "destructive",
       })
@@ -406,7 +416,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setState((s) => ({ ...s, googleStatus: status }))
   }
 
-  const updateUserSettings = async (settings: { automation_enabled: boolean; email_notifications_enabled: boolean }) => {
+  const updateUserSettings = async (settings: { automation_enabled: boolean; email_notifications_enabled: boolean; language_preference?: string }) => {
     try {
       const updatedUser = await settingsService.updateSettings(settings)
       setState((s) => ({ ...s, user: updatedUser }))

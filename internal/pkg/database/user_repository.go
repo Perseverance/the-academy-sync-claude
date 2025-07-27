@@ -95,6 +95,7 @@ func (r *UserRepository) CreateUser(ctx context.Context, req *CreateUserRequest)
 		Timezone:                  "UTC", // Default timezone
 		EmailNotificationsEnabled: true,  // Default enabled
 		AutomationEnabled:         false, // Default disabled
+		LanguagePreference:        "bg",  // Default Bulgarian
 		CreatedAt:                 createdAt,
 		UpdatedAt:                 updatedAt,
 		LastLoginAt:               &now,
@@ -111,7 +112,7 @@ func (r *UserRepository) GetUserByGoogleID(ctx context.Context, googleID string)
 			   strava_access_token, strava_refresh_token, strava_token_expiry, strava_athlete_id,
 			   strava_athlete_name, strava_profile_picture_url,
 			   spreadsheet_id, timezone, email_notifications_enabled, automation_enabled,
-			   created_at, updated_at, last_login_at
+			   language_preference, created_at, updated_at, last_login_at
 		FROM users WHERE google_id = $1
 	`
 
@@ -122,7 +123,7 @@ func (r *UserRepository) GetUserByGoogleID(ctx context.Context, googleID string)
 		&user.StravaAccessToken, &user.StravaRefreshToken, &user.StravaTokenExpiry, &user.StravaAthleteID,
 		&user.StravaAthleteName, &user.StravaProfilePictureURL,
 		&user.SpreadsheetID, &user.Timezone, &user.EmailNotificationsEnabled, &user.AutomationEnabled,
-		&user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
+		&user.LanguagePreference, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
 	)
 
 	if err != nil {
@@ -143,7 +144,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id int) (*User, error)
 			   strava_access_token, strava_refresh_token, strava_token_expiry, strava_athlete_id,
 			   strava_athlete_name, strava_profile_picture_url,
 			   spreadsheet_id, timezone, email_notifications_enabled, automation_enabled,
-			   created_at, updated_at, last_login_at
+			   language_preference, created_at, updated_at, last_login_at
 		FROM users WHERE id = $1
 	`
 
@@ -154,7 +155,7 @@ func (r *UserRepository) GetUserByID(ctx context.Context, id int) (*User, error)
 		&user.StravaAccessToken, &user.StravaRefreshToken, &user.StravaTokenExpiry, &user.StravaAthleteID,
 		&user.StravaAthleteName, &user.StravaProfilePictureURL,
 		&user.SpreadsheetID, &user.Timezone, &user.EmailNotificationsEnabled, &user.AutomationEnabled,
-		&user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
+		&user.LanguagePreference, &user.CreatedAt, &user.UpdatedAt, &user.LastLoginAt,
 	)
 
 	if err != nil {
@@ -661,17 +662,18 @@ func (r *UserRepository) GetUsersInProcessingWindow(ctx context.Context) ([]int,
 	return userIDs, nil
 }
 
-// UpdateUserSettings updates the user's settings (automation_enabled and email_notifications_enabled)
-func (ur *UserRepository) UpdateUserSettings(ctx context.Context, userID int, automationEnabled, emailNotificationsEnabled bool) error {
+// UpdateUserSettings updates the user's settings (automation_enabled, email_notifications_enabled, and language_preference)
+func (ur *UserRepository) UpdateUserSettings(ctx context.Context, userID int, automationEnabled, emailNotificationsEnabled bool, languagePreference string) error {
 	query := `
 		UPDATE users 
 		SET 
 			automation_enabled = $2,
 			email_notifications_enabled = $3,
+			language_preference = $4,
 			updated_at = NOW()
 		WHERE id = $1`
 	
-	result, err := ur.db.ExecContext(ctx, query, userID, automationEnabled, emailNotificationsEnabled)
+	result, err := ur.db.ExecContext(ctx, query, userID, automationEnabled, emailNotificationsEnabled, languagePreference)
 	if err != nil {
 		return err
 	}

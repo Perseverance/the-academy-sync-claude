@@ -3,14 +3,16 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Label } from "@/components/ui/label"
 import { Switch } from "@/components/ui/switch"
-import { Settings, Mail, Bot } from "lucide-react"
+import { Bell, Mail, Bot } from "lucide-react"
 import { useAppState } from "@/context/app-state-provider"
 import { useState } from "react"
 import { toast } from "sonner"
+import { useTranslation } from "react-i18next"
 
-export function SettingsCard() {
+export function NotificationSettingsCard() {
   const { state, actions } = useAppState()
   const [isUpdating, setIsUpdating] = useState(false)
+  const { t } = useTranslation()
 
   if (!state.user) return null
 
@@ -18,8 +20,8 @@ export function SettingsCard() {
 
   const handleAutomationToggle = async (checked: boolean) => {
     if (!canEnableAutomation && checked) {
-      toast.error("Cannot enable automation", {
-        description: "Please connect both Strava and Google Sheets first"
+      toast.error(t('settings.toast.cannotEnableAutomation.title'), {
+        description: t('settings.toast.cannotEnableAutomation.description')
       })
       return
     }
@@ -30,10 +32,10 @@ export function SettingsCard() {
         automation_enabled: checked,
         email_notifications_enabled: state.user.email_notifications_enabled
       })
-      toast.success(checked ? "Automation enabled" : "Automation disabled")
+      toast.success(checked ? t('settings.toast.automationEnabled') : t('settings.toast.automationDisabled'))
     } catch (error: any) {
-      toast.error("Failed to update settings", {
-        description: error.message || "Please try again"
+      toast.error(t('settings.toast.failedToUpdate.title'), {
+        description: error.message || t('settings.toast.failedToUpdate.description')
       })
     } finally {
       setIsUpdating(false)
@@ -47,10 +49,10 @@ export function SettingsCard() {
         automation_enabled: state.user.automation_enabled,
         email_notifications_enabled: checked
       })
-      toast.success(checked ? "Email notifications enabled" : "Email notifications disabled")
+      toast.success(checked ? t('settings.toast.notificationsEnabled') : t('settings.toast.notificationsDisabled'))
     } catch (error: any) {
-      toast.error("Failed to update settings", {
-        description: error.message || "Please try again"
+      toast.error(t('settings.toast.failedToUpdate.title'), {
+        description: error.message || t('settings.toast.failedToUpdate.description')
       })
     } finally {
       setIsUpdating(false)
@@ -58,15 +60,19 @@ export function SettingsCard() {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Settings className="h-5 w-5" />
-          Settings
-        </CardTitle>
-        <CardDescription>
-          Manage your automation and notification preferences
-        </CardDescription>
+    <Card className="border-border/50 shadow-lg shadow-background/5">
+      <CardHeader className="space-y-1.5">
+        <div className="flex items-center gap-3">
+          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+            <Bell className="h-5 w-5 text-primary" />
+          </div>
+          <div>
+            <CardTitle className="text-xl">{t('settings.notifications.title')}</CardTitle>
+            <CardDescription className="text-sm">
+              {t('settings.notifications.subtitle')}
+            </CardDescription>
+          </div>
+        </div>
       </CardHeader>
       <CardContent className="space-y-6">
         <div className="flex items-center justify-between space-x-2">
@@ -77,12 +83,12 @@ export function SettingsCard() {
                 htmlFor="automation-toggle" 
                 className={!canEnableAutomation ? "text-muted-foreground" : ""}
               >
-                Daily Automation
+                {t('settings.automation.label')}
               </Label>
               <p className="text-sm text-muted-foreground">
                 {canEnableAutomation 
-                  ? "Automatically sync activities to your spreadsheet daily"
-                  : "Connect Strava and Google Sheets to enable automation"}
+                  ? t('settings.automation.enabled')
+                  : t('settings.automation.disabled')}
               </p>
             </div>
           </div>
@@ -99,10 +105,10 @@ export function SettingsCard() {
             <Mail className="h-5 w-5 text-muted-foreground" />
             <div className="space-y-1">
               <Label htmlFor="email-toggle">
-                Email Notifications
+                {t('settings.notifications.label')}
               </Label>
               <p className="text-sm text-muted-foreground">
-                Receive email updates about sync status
+                {t('settings.notifications.description')}
               </p>
             </div>
           </div>
@@ -113,6 +119,7 @@ export function SettingsCard() {
             disabled={isUpdating}
           />
         </div>
+
       </CardContent>
     </Card>
   )

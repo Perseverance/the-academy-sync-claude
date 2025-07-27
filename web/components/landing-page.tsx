@@ -8,12 +8,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Activity, BarChart3, Calendar, Loader2 } from "lucide-react"
 import { AcademyLogo } from "./icons/academy-logo"
 import { useAppState } from "@/context/app-state-provider"
+import { useTranslation } from "react-i18next"
 
 export function LandingPage() {
   const { state, actions } = useAppState()
   const { user, isAuthLoading: isLoading } = state
   const { signIn } = actions
   const router = useRouter()
+  const { t } = useTranslation()
 
   useEffect(() => {
     if (!isLoading && user) {
@@ -35,9 +37,9 @@ export function LandingPage() {
       <div className="max-w-3xl w-full text-center">
         <header className="mb-12 flex flex-col items-center">
           <AcademyLogo className="h-24 w-24 mb-6" fill="hsl(var(--primary))" />
-          <h1 className="text-5xl md:text-6xl font-brand font-bold mb-4 text-primary">The Academy Sync Tool</h1>
+          <h1 className="text-5xl md:text-6xl font-brand font-bold mb-4 text-primary">{t('landing.title')}</h1>
           <p className="text-xl text-foreground/80 mb-8 max-w-xl mx-auto font-body">
-            Connect your Strava and Google accounts to automatically log your activities to a Google Spreadsheet.
+            {t('landing.subtitle')}
           </p>
           <button
             onClick={signIn}
@@ -55,15 +57,15 @@ export function LandingPage() {
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
               </svg>
             )}
-            Sign in with Google
+            {t('landing.signInButton')}
           </button>
         </header>
 
         <div className="grid md:grid-cols-3 gap-6">
           {[
-            { icon: Activity, title: "Connect Strava", desc: "Securely link Strava to fetch activities." },
-            { icon: BarChart3, title: "Google Sheets Sync", desc: "Auto-update your designated Google Spreadsheet." },
-            { icon: Calendar, title: "Daily Automation", desc: "Set it once, log runs automatically." },
+            { icon: Activity, title: t('landing.features.strava.title'), desc: t('landing.features.strava.description') },
+            { icon: BarChart3, title: t('landing.features.googleSheets.title'), desc: t('landing.features.googleSheets.description') },
+            { icon: Calendar, title: t('landing.features.automation.title'), desc: t('landing.features.automation.description') },
           ].map((item, idx) => (
             <Card key={idx} className="bg-card border-border shadow-sm hover:shadow-lg transition-shadow duration-200">
               <CardHeader className="items-center">

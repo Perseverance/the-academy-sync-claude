@@ -5,6 +5,7 @@ import "./globals.css"
 import { AppStateProvider } from "@/context/app-state-provider" // Renamed for clarity
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
+import { I18nProvider } from "@/src/i18n-provider"
 
 const inter = Inter({
   subsets: ["latin", "cyrillic"],
@@ -19,9 +20,10 @@ const exo2 = Exo2({
   variable: "--font-exo2",
 })
 
+// Dynamic metadata will be set by pages
 export const metadata: Metadata = {
-  title: "Strava Log Automator - Configuration",
-  description: "Configure your automated Strava running log to Google Sheets.",
+  // Title is set dynamically by usePageTitle hook
+  description: "Automated training log synchronization for athletes",
   generator: "v0.dev",
   icons: {
     icon: '/favicon.svg',
@@ -40,10 +42,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" suppressHydrationWarning>
       <body className={`${inter.variable} ${exo2.variable} font-body antialiased bg-background text-foreground`}>
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
-          <AppStateProvider>
-            {children}
-            <Toaster />
-          </AppStateProvider>
+          <I18nProvider>
+            <AppStateProvider>
+              {children}
+              <Toaster />
+            </AppStateProvider>
+          </I18nProvider>
         </ThemeProvider>
       </body>
     </html>
