@@ -216,7 +216,7 @@ func UpdateIntervalWorkoutDescription(desc string, laps []strava.Lap) string {
 	parenContent := afterInterval[parenStart+1 : parenEnd]
 
 	// Check what's in the parentheses and build replacement
-	hasDuration := regexp.MustCompile(`\d+:\d+\s*[-–]\s*\d+:\d+\s*мин(?:[,/]|$)`).MatchString(parenContent)
+	hasDuration := regexp.MustCompile(`\d+:\d+\s*[-–]\s*\d+:\d+\s*мин(?:\s*[,/]|$)`).MatchString(parenContent)
 	hasPace := regexp.MustCompile(`[~]?\d+:\d+(?:\s*[-–]\s*\d+:\d+)?\s*мин/км`).MatchString(parenContent)
 
 	var newParenContent string

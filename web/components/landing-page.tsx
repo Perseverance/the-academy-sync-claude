@@ -33,7 +33,7 @@ export function LandingPage() {
   if (user) return null
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+    <div className="flex-1 bg-background flex flex-col items-center justify-center p-4">
       <div className="max-w-3xl w-full text-center">
         <header className="mb-12 flex flex-col items-center">
           <AcademyLogo className="h-24 w-24 mb-6" fill="hsl(var(--primary))" />

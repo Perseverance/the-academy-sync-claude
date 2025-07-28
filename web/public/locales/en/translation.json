@@ -201,5 +201,152 @@
     "settings": {
       "updateFailed": "Failed to update user settings"
     }
+  },
+  "footer": {
+    "copyright": "© {{year}} The Academy. All rights reserved.",
+    "privacy": "Privacy Policy",
+    "terms": "Terms of Service"
+  },
+  "privacy": {
+    "pageTitle": "Privacy Policy - The Academy",
+    "title": "Privacy Policy",
+    "heading": "Privacy Policy",
+    "lastUpdated": "Last updated: December 2024",
+    "introduction": "The Academy (\"we\", \"our\", or \"us\") is committed to protecting your privacy. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our training log synchronization service.",
+    "dataCollection": {
+      "title": "Information We Collect",
+      "description": "We collect information that you provide directly to us and information automatically collected when you use our service:",
+      "items": {
+        "account": "Account information (name, email address, profile picture from Google)",
+        "strava": "Strava activity data (workouts, runs, distances, times, heart rate data)",
+        "google": "Google Sheets access for your training spreadsheet",
+        "usage": "Service usage data and preferences"
+      }
+    },
+    "dataUsage": {
+      "title": "How We Use Your Information",
+      "description": "We use the collected information to:",
+      "items": {
+        "sync": "Synchronize your Strava activities with your Google Sheets training plan",
+        "automation": "Provide automated daily synchronization if enabled",
+        "notifications": "Send email notifications about synchronization results",
+        "improvement": "Improve and maintain our service"
+      }
+    },
+    "dataSecurity": {
+      "title": "Data Security",
+      "description": "We implement appropriate technical and organizational measures to protect your personal information against unauthorized access, alteration, disclosure, or destruction. Your OAuth tokens are encrypted before storage."
+    },
+    "thirdParty": {
+      "title": "Third-Party Services",
+      "description": "Our service integrates with third-party services that have their own privacy policies:",
+      "google": "We access your Google account solely to read and update your specified training spreadsheet.",
+      "strava": "We access your Strava account to retrieve your activity data for synchronization."
+    },
+    "userRights": {
+      "title": "Your Rights",
+      "description": "You have the right to:",
+      "items": {
+        "access": "Access your personal information",
+        "deletion": "Request deletion of your account and associated data",
+        "export": "Export your data",
+        "correction": "Correct inaccurate information"
+      }
+    },
+    "dataRetention": {
+      "title": "Data Retention",
+      "description": "We retain your personal information only for as long as necessary to provide you with our service. Activity logs are retained for 90 days. You can delete your account at any time, which will remove all associated data."
+    },
+    "contact": {
+      "title": "Contact Us",
+      "description": "If you have any questions about this Privacy Policy, please contact us at:"
+    },
+    "changes": {
+      "title": "Changes to This Policy",
+      "description": "We may update this Privacy Policy from time to time. We will notify you of any changes by posting the new Privacy Policy on this page and updating the \"Last updated\" date."
+    }
+  },
+  "terms": {
+    "pageTitle": "Terms of Service - The Academy",
+    "title": "Terms of Service",
+    "heading": "Terms of Service",
+    "lastUpdated": "Last updated: December 2024",
+    "introduction": "Welcome to The Academy. These Terms of Service (\"Terms\") govern your use of our training log synchronization service. By using our service, you agree to be bound by these Terms.",
+    "acceptance": {
+      "title": "Acceptance of Terms",
+      "description": "By accessing or using The Academy, you agree to be bound by these Terms. If you disagree with any part of these terms, you may not access the service."
+    },
+    "serviceDescription": {
+      "title": "Service Description",
+      "description": "The Academy provides a service that:",
+      "items": {
+        "sync": "Synchronizes your Strava activities with your Google Sheets training plan",
+        "automation": "Offers automated daily synchronization",
+        "notifications": "Sends email notifications about synchronization results"
+      }
+    },
+    "userAccounts": {
+      "title": "User Accounts",
+      "description": "To use our service, you must:",
+      "items": {
+        "accuracy": "Provide accurate and complete information",
+        "security": "Maintain the security of your account",
+        "responsibility": "Be responsible for all activities under your account",
+        "authorization": "Have the right to grant us access to your Google and Strava accounts"
+      }
+    },
+    "userResponsibilities": {
+      "title": "User Responsibilities",
+      "description": "You agree to:",
+      "items": {
+        "lawful": "Use the service only for lawful purposes",
+        "accurate": "Provide accurate information",
+        "respectful": "Respect the rights of others",
+        "security": "Not attempt to breach or test the security of the service"
+      }
+    },
+    "thirdPartyServices": {
+      "title": "Third-Party Services",
+      "description": "Our service integrates with:",
+      "items": {
+        "google": "Google (for authentication and Sheets access)",
+        "strava": "Strava (for activity data)",
+        "compliance": "You must comply with their respective terms of service"
+      }
+    },
+    "intellectualProperty": {
+      "title": "Intellectual Property",
+      "description": "The Academy and its original content, features, and functionality are owned by us and are protected by international copyright, trademark, and other intellectual property laws."
+    },
+    "disclaimers": {
+      "title": "Disclaimers",
+      "description": "The service is provided \"as is\" and \"as available\" without any warranties. We disclaim:",
+      "items": {
+        "asIs": "All implied warranties of merchantability",
+        "availability": "Guarantees of service availability",
+        "accuracy": "Responsibility for data accuracy",
+        "fitness": "Fitness for a particular purpose"
+      }
+    },
+    "limitation": {
+      "title": "Limitation of Liability",
+      "description": "To the maximum extent permitted by law, The Academy shall not be liable for any indirect, incidental, special, consequential, or punitive damages resulting from your use or inability to use the service."
+    },
+    "termination": {
+      "title": "Termination",
+      "description": "We may terminate or suspend your account immediately, without prior notice or liability, for any reason, including breach of these Terms. You may delete your account at any time through the service interface."
+    },
+    "governingLaw": {
+      "title": "Governing Law",
+      "description": "These Terms shall be governed by and construed in accordance with the laws of the jurisdiction in which we operate, without regard to its conflict of law provisions."
+    },
+    "changes": {
+      "title": "Changes to Terms",
+      "description": "We reserve the right to modify these Terms at any time. If we make material changes, we will notify you by email or through the service."
+    },
+    "contact": {
+      "title": "Contact Information",
+      "description": "For any questions about these Terms, please contact us at:"
+    }
   }
 }

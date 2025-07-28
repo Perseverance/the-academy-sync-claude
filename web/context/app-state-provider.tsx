@@ -119,9 +119,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!state.isAuthLoading) {
+      const publicRoutes = ["/", "/privacy", "/privacy/", "/terms", "/terms/"]
       if (state.user && pathname === "/") {
         router.push("/dashboard")
-      } else if (!state.user && pathname !== "/") {
+      } else if (!state.user && !publicRoutes.includes(pathname)) {
         router.push("/")
       }
     }
