@@ -6,6 +6,7 @@ import { AppStateProvider } from "@/context/app-state-provider" // Renamed for c
 import { Toaster } from "@/components/ui/toaster"
 import { ThemeProvider } from "@/components/theme-provider"
 import { I18nProvider } from "@/src/i18n-provider"
+import { Footer } from "@/components/footer"
 
 const inter = Inter({
   subsets: ["latin", "cyrillic"],
@@ -44,7 +45,10 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false} disableTransitionOnChange>
           <I18nProvider>
             <AppStateProvider>
-              {children}
+              <div className="flex flex-col min-h-screen">
+                {children}
+                <Footer />
+              </div>
               <Toaster />
             </AppStateProvider>
           </I18nProvider>

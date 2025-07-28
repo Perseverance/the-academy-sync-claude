@@ -34,7 +34,7 @@ export function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col">
+    <div className="flex-1 flex flex-col">
       {/* Header */}
       <header className="bg-card border-b border-border shadow-sm sticky top-0 z-30">
         <div className="container mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
