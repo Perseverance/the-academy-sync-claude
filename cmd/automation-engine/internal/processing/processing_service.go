@@ -1183,7 +1183,7 @@ func (s *ProcessingService) prepareDescriptionUpdate(ctx context.Context, origin
 		if strings.Contains(originalDescription, "темпово бягане (") {
 			// Tempo run
 			return transformation.UpdateTempoRunDescription(originalDescription, laps)
-		} else if matched, _ := regexp.MatchString(`\d+\s*x\s*[\d\w]+`, originalDescription); matched {
+		} else if matched, _ := regexp.MatchString(`\d+\s*[xх]\s*[\d\w]+`, originalDescription); matched {
 			// Interval workout
 			return transformation.UpdateIntervalWorkoutDescription(originalDescription, laps)
 		}
