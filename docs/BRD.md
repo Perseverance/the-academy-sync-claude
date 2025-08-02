@@ -55,7 +55,7 @@ To address these challenges, an automated software system (MVP) is proposed. Thi
 
 The system will execute operational logic orchestrated by the Backend System after initial configuration via the Web UI. The process can be initiated in two ways:
 
-1. **Automated Scheduled Run:** A scheduler runs periodically (e.g., hourly). For every active user, it checks if the current time falls within their configured local processing window (e.g., 3-5 AM). If so, it dispatches an independent processing job for that user. This allows for parallel processing of many users.
+1. **Automated Scheduled Run:** A scheduler runs periodically (e.g., hourly). For every active user, it checks if the current time falls within their configured local processing window (3:00-3:59 AM). If so, it dispatches an independent processing job for that user. This allows for parallel processing of many users.
 2. **On-Demand Manual Run:** A user can trigger an immediate processing job for their account via the Web UI.
 
 Once a processing job for a user is initiated, it is decoupled from the notification system. The job retrieves the user's configuration and tokens, ensures API access, processes data for the relevant days (current, previous, and lookback), updates the Google Sheet, and records the outcomes. Upon completion, it dispatches a "send notification" job, which then generates and sends the summary email.
@@ -177,7 +177,7 @@ graph TD
 
 ### 3.2.3. Core Automation Logic
 
-- **FR-BE-CORE-001 (Scheduling)**: The Backend System MUST automatically initiate processing jobs for all active, configured users based on a configured time window (e.g., 3-5 AM) relative to each user's individual stored timezone. The scheduler should run periodically (e.g., hourly) to check which users fall into their processing window.
+- **FR-BE-CORE-001 (Scheduling)**: The Backend System MUST automatically initiate processing jobs for all active, configured users based on a configured time window (3:00-3:59 AM) relative to each user's individual stored timezone. The scheduler should run periodically (e.g., hourly) to check which users fall into their processing window.
 - **FR-BE-CORE-002 (Token Management)**: The engine MUST manage the lifecycle of short-lived API access tokens by using the long-lived refresh tokens to obtain new ones when needed. It must handle errors during this process, including flagging a user's connection for re-authorization if a refresh token is invalid.
 - **FR-BE-CORE-003 (Processing Scope)**: The engine must support distinct processing scopes: a scheduled run (previous day + 7-day lookback) and a manual run (current day so far + previous day + 7-day lookback).
 - **FR-BE-CORE-004 (Lookback Logic)**: The lookback process MUST check each of the 7 prior days and only process a day if a schedule entry exists and the day is not considered "processed." A day is considered "processed" if either the text in "Описание на тренировката" is bold OR the "Разстояние" column contains '0'.

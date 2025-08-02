@@ -224,7 +224,7 @@ If issues arise:
 ## Notes
 
 - The scheduler runs every hour at the top of the hour (UTC)
-- It will only process users who are in their 3-5 AM local time window
+- It will only process users who are in their 3:00-3:59 AM local time window
 - The placeholder auth middleware will accept the OIDC token from Cloud Scheduler
 - Monitor the first few runs closely to ensure proper operation
 - Consider setting up alerts for scheduler failures in production

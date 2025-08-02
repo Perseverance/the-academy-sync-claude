@@ -794,27 +794,58 @@ func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetI
 		})
 
 		// Column F (index 5): Time
-		requests = append(requests, &sheets.Request{
-			UpdateCells: &sheets.UpdateCellsRequest{
-				Start: &sheets.GridCoordinate{
-					SheetId:     sheetID,
-					RowIndex:    int64(update.Row - 1),
-					ColumnIndex: 5, // Column F
-				},
-				Rows: []*sheets.RowData{
-					{
-						Values: []*sheets.CellData{
-							{
-								UserEnteredValue: &sheets.ExtendedValue{
-									StringValue: &update.TimeValue,
+		// Convert time string to fractional day for proper Google Sheets time format
+		timeFraction, err := convertTimeToFractionalDay(update.TimeValue)
+		if err != nil {
+			c.logger.Warn("Failed to convert time to fractional day, using string format",
+				"time", update.TimeValue,
+				"error", err)
+			// Fallback to string value
+			requests = append(requests, &sheets.Request{
+				UpdateCells: &sheets.UpdateCellsRequest{
+					Start: &sheets.GridCoordinate{
+						SheetId:     sheetID,
+						RowIndex:    int64(update.Row - 1),
+						ColumnIndex: 5, // Column F
+					},
+					Rows: []*sheets.RowData{
+						{
+							Values: []*sheets.CellData{
+								{
+									UserEnteredValue: &sheets.ExtendedValue{
+										StringValue: &update.TimeValue,
+									},
 								},
 							},
 						},
 					},
+					Fields: "userEnteredValue",
 				},
-				Fields: "userEnteredValue",
-			},
-		})
+			})
+		} else {
+			// Use numeric value for proper time formatting
+			requests = append(requests, &sheets.Request{
+				UpdateCells: &sheets.UpdateCellsRequest{
+					Start: &sheets.GridCoordinate{
+						SheetId:     sheetID,
+						RowIndex:    int64(update.Row - 1),
+						ColumnIndex: 5, // Column F
+					},
+					Rows: []*sheets.RowData{
+						{
+							Values: []*sheets.CellData{
+								{
+									UserEnteredValue: &sheets.ExtendedValue{
+										NumberValue: &timeFraction,
+									},
+								},
+							},
+						},
+					},
+					Fields: "userEnteredValue",
+				},
+			})
+		}
 
 		// Column I (index 8): RPE
 		// Note: Google Sheets API accepts numeric values and will format them
@@ -922,4 +953,32 @@ func (c *SheetsClient) BatchUpdateTrainingPlan(ctx context.Context, spreadsheetI
 	}
 
 	return nil
+}
+
+// convertTimeToFractionalDay converts a time string in HH:MM:SS format to a fractional day value.
+// In Google Sheets, time is represented as a fraction of a day:
+// - 1.0 = 24 hours
+// - 0.5 = 12 hours
+// - 0.25 = 6 hours
+// For example, "01:30:00" (1 hour 30 minutes) = 0.0625 (1.5/24)
+func convertTimeToFractionalDay(timeStr string) (float64, error) {
+	// Handle zero time case
+	if timeStr == "00:00:00" || timeStr == "" {
+		return 0.0, nil
+	}
+
+	// Parse HH:MM:SS format
+	var hours, minutes, seconds int
+	_, err := fmt.Sscanf(timeStr, "%d:%d:%d", &hours, &minutes, &seconds)
+	if err != nil {
+		return 0.0, fmt.Errorf("invalid time format: %s", timeStr)
+	}
+
+	// Convert to total seconds
+	totalSeconds := float64(hours*3600 + minutes*60 + seconds)
+
+	// Convert to fraction of day (86400 seconds in a day)
+	fractionalDay := totalSeconds / 86400.0
+
+	return fractionalDay, nil
 }

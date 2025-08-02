@@ -24,7 +24,7 @@ func TestGetUsersInProcessingWindow(t *testing.T) {
 	repo := NewUserRepository(db, encryptor)
 
 	// Define the expected query pattern that matches the actual implementation
-	expectedQuery := `SELECT id\s+FROM users\s+WHERE automation_enabled = true\s+AND strava_refresh_token IS NOT NULL\s+AND LENGTH\(strava_refresh_token\) > 0\s+AND spreadsheet_id IS NOT NULL\s+AND spreadsheet_id != ''\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 5\s+ORDER BY id`
+	expectedQuery := `SELECT id\s+FROM users\s+WHERE automation_enabled = true\s+AND strava_refresh_token IS NOT NULL\s+AND LENGTH\(strava_refresh_token\) > 0\s+AND spreadsheet_id IS NOT NULL\s+AND spreadsheet_id != ''\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 4\s+ORDER BY id`
 
 	tests := []struct {
 		name          string
@@ -116,7 +116,7 @@ func TestGetUsersInProcessingWindow(t *testing.T) {
 
 func TestGetUsersInProcessingWindow_Integration(t *testing.T) {
 	// Define the expected query pattern that matches the actual implementation
-	expectedQuery := `SELECT id\s+FROM users\s+WHERE automation_enabled = true\s+AND strava_refresh_token IS NOT NULL\s+AND LENGTH\(strava_refresh_token\) > 0\s+AND spreadsheet_id IS NOT NULL\s+AND spreadsheet_id != ''\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 5\s+ORDER BY id`
+	expectedQuery := `SELECT id\s+FROM users\s+WHERE automation_enabled = true\s+AND strava_refresh_token IS NOT NULL\s+AND LENGTH\(strava_refresh_token\) > 0\s+AND spreadsheet_id IS NOT NULL\s+AND spreadsheet_id != ''\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 4\s+ORDER BY id`
 
 	// This test demonstrates the timezone calculation logic
 	// It would require a real database connection to test properly
@@ -132,8 +132,8 @@ func TestGetUsersInProcessingWindow_Integration(t *testing.T) {
 		// Test that the query correctly filters by timezone
 		// Add test users with different timezones and verify filtering
 		rows := sqlmock.NewRows([]string{"id"}).
-			AddRow(1). // UTC user (4 AM - in window)
-			AddRow(3)  // Europe/London user (4-5 AM - in window)
+			AddRow(1). // UTC user (3 AM - in window)
+			AddRow(3)  // Europe/London user (3 AM - in window)
 
 		mock.ExpectQuery(expectedQuery).
 			WillReturnRows(rows)
@@ -150,7 +150,7 @@ func TestGetUsersInProcessingWindow_Integration(t *testing.T) {
 
 func TestGetUsersInProcessingWindow_RowScanError(t *testing.T) {
 	// Define the expected query pattern that matches the actual implementation
-	expectedQuery := `SELECT id\s+FROM users\s+WHERE automation_enabled = true\s+AND strava_refresh_token IS NOT NULL\s+AND LENGTH\(strava_refresh_token\) > 0\s+AND spreadsheet_id IS NOT NULL\s+AND spreadsheet_id != ''\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 5\s+ORDER BY id`
+	expectedQuery := `SELECT id\s+FROM users\s+WHERE automation_enabled = true\s+AND strava_refresh_token IS NOT NULL\s+AND LENGTH\(strava_refresh_token\) > 0\s+AND spreadsheet_id IS NOT NULL\s+AND spreadsheet_id != ''\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) >= 3\s+AND EXTRACT\(HOUR FROM \(NOW\(\) AT TIME ZONE timezone\)\) < 4\s+ORDER BY id`
 
 	// Test handling of row scan errors
 	db, mock, err := sqlmock.New()
