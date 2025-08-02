@@ -621,12 +621,12 @@ func (r *UserRepository) UpdateTimezone(ctx context.Context, userID int, timezon
 }
 
 // GetUsersInProcessingWindow retrieves all users who have automation enabled and whose
-// local time is within the processing window (3:00 AM - 5:00 AM).
+// local time is within the processing window (3:00 AM - 3:59 AM).
 // This method performs timezone calculations in the database to find users
 // whose current local time falls within their configured processing window.
 func (r *UserRepository) GetUsersInProcessingWindow(ctx context.Context) ([]int, error) {
 	// SQL query that calculates local time for each user based on their timezone
-	// and checks if it falls within the 3:00-5:00 AM window
+	// and checks if it falls within the 3:00-3:59 AM window
 	query := `
 		SELECT id 
 		FROM users 
@@ -636,7 +636,7 @@ func (r *UserRepository) GetUsersInProcessingWindow(ctx context.Context) ([]int,
 		  AND spreadsheet_id IS NOT NULL
 		  AND spreadsheet_id != ''
 		  AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE timezone)) >= 3
-		  AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE timezone)) < 5
+		  AND EXTRACT(HOUR FROM (NOW() AT TIME ZONE timezone)) < 4
 		ORDER BY id
 	`
 

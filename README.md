@@ -11,7 +11,7 @@ The Academy Sync eliminates the tedious, error-prone, and time-consuming task of
 - **Automated Data Transfer**: Fetches run data from Strava and logs it to Google Sheets according to coach-prescribed formatting rules
 - **Intelligent Processing**: Handles complex workout descriptions, RPE calculations, and data aggregation
 - **7-Day Lookback**: Automatically processes missed entries from the past week
-- **Smart Scheduling**: Processes data based on user's local timezone (3-5 AM window)
+- **Smart Scheduling**: Processes data based on user's local timezone (3:00-3:59 AM window)
 - **Manual Sync**: On-demand processing via web interface
 - **Email Notifications**: Daily summary emails with processing results
 - **Multi-User Ready**: Architected to support multiple users with isolated processing

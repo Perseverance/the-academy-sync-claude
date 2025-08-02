@@ -20,7 +20,7 @@ resource "google_cloud_run_service_iam_member" "scheduler_invoker" {
 # Cloud Scheduler job for hourly automation processing
 resource "google_cloud_scheduler_job" "automation_scheduler" {
   name        = "${var.environment}-automation-scheduler"
-  description = "Hourly job to trigger automated processing for users in their 3-5 AM window"
+  description = "Hourly job to trigger automated processing for users in their 3-4 AM window"
   project     = var.project_id
   region      = var.region
 

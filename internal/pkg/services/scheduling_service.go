@@ -33,7 +33,7 @@ func (s *SchedulingService) ProcessScheduledRun(ctx context.Context) (int, error
 	currentTime := time.Now().UTC()
 	s.logger.Info("Current UTC time", "time", currentTime.Format("2006-01-02 15:04:05 MST"))
 
-	// Get users whose local time is in the processing window (3:00-5:00 AM)
+	// Get users whose local time is in the processing window (3:00-3:59 AM)
 	userIDs, err := s.userRepo.GetUsersInProcessingWindow(ctx)
 	if err != nil {
 		s.logger.Error("Failed to get users in processing window", "error", err)
