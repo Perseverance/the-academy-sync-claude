@@ -232,7 +232,7 @@ func TestProcessSingleDay_NoTrainingPlan(t *testing.T) {
 	cache := make(TrainingPlanCache) // Empty cache
 
 	activitiesCache := make(StravaActivitiesCache)
-	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache)
+	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache, false)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -266,7 +266,7 @@ func TestProcessSingleDay_AlreadyProcessed(t *testing.T) {
 	}
 
 	activitiesCache := make(StravaActivitiesCache)
-	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache)
+	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache, false)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -317,7 +317,7 @@ func TestProcessSingleDay_RestDayWithActivity(t *testing.T) {
 		dateKey: mockStrava.activities,
 	}
 
-	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache)
+	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache, false)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -359,7 +359,7 @@ func TestProcessSingleDay_ScheduledRunNoActivity(t *testing.T) {
 		dateKey: []strava.Activity{},
 	}
 
-	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache)
+	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache, false)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -414,7 +414,7 @@ func TestProcessing_SingleAPICall(t *testing.T) {
 	// Process multiple days using the cache
 	for i := 0; i < 3; i++ {
 		date := startDate.AddDate(0, 0, i)
-		_, _ = service.processSingleDay(context.Background(), config, date, cache, activitiesCache)
+		_, _ = service.processSingleDay(context.Background(), config, date, cache, activitiesCache, false)
 	}
 
 	// Verify no additional API calls were made
@@ -710,7 +710,7 @@ func TestSpreadsheetUpdatePreparation(t *testing.T) {
 		dateKey: mockStrava.activities,
 	}
 
-	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache)
+	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache, false)
 
 	if err != nil {
 		t.Fatalf("Expected no error, got %v", err)
@@ -1304,5 +1304,176 @@ func TestRunScheduledCycle_MixedProcessedDays(t *testing.T) {
 	// Verify batch update was called if there were unprocessed days
 	if result.ProcessedDays > 0 && mockSheets.batchUpdateCalls == 0 {
 		t.Error("Expected batch update to be called for unprocessed days")
+	}
+}
+
+// Test manual sync on current day with no activities doesn't process
+func TestProcessSingleDay_ManualSyncCurrentDayNoActivities(t *testing.T) {
+	location, _ := time.LoadLocation("Europe/Sofia")
+	now := time.Now().In(location)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	
+	// No activities for today
+	mockStrava := &MockStravaClient{
+		activities: []strava.Activity{},
+	}
+	mockSheets := &MockSheetsClient{}
+	
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
+	config := createTestConfig(1, "Europe/Sofia")
+	
+	// Create training plan cache with scheduled run for today
+	cache := TrainingPlanCache{
+		today.Format("2006-01-02"): &TrainingPlanEntry{
+			Date:         today,
+			ActivityType: "Бягане", // Scheduled run
+			Description:  "Easy run",
+			RPE:          5,
+			IsProcessed:  false,
+			Row:          2,
+		},
+	}
+	
+	// Create empty activities cache
+	activitiesCache := StravaActivitiesCache{
+		today.Format("2006-01-02"): []strava.Activity{},
+	}
+	
+	// Test manual sync (isManualSync = true)
+	result, err := service.processSingleDay(context.Background(), config, today, cache, activitiesCache, true)
+	
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	
+	// Verify the day was NOT processed
+	if result.Processed {
+		t.Error("Expected day not to be processed for manual sync with no activities")
+	}
+	
+	if result.SkippedReason != SkipReasonNoActivities {
+		t.Errorf("Expected skip reason to be NoActivities, got: %s", result.SkippedReason.String())
+	}
+	
+	// Verify no spreadsheet update
+	if result.SpreadsheetUpdate != nil {
+		t.Error("Expected no spreadsheet update for skipped day")
+	}
+}
+
+// Test manual sync on current day with activities does process
+func TestProcessSingleDay_ManualSyncCurrentDayWithActivities(t *testing.T) {
+	location, _ := time.LoadLocation("Europe/Sofia")
+	now := time.Now().In(location)
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, location)
+	
+	// Add activity for today
+	mockStrava := &MockStravaClient{
+		activities: []strava.Activity{
+			{
+				ID:         123,
+				Name:       "Morning Run",
+				Type:       "Run",
+				Distance:   5000,
+				MovingTime: 1800,
+				StartDate:  today.Add(8 * time.Hour),
+			},
+		},
+	}
+	mockSheets := &MockSheetsClient{}
+	
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
+	config := createTestConfig(1, "Europe/Sofia")
+	
+	// Create training plan cache with scheduled run for today
+	cache := TrainingPlanCache{
+		today.Format("2006-01-02"): &TrainingPlanEntry{
+			Date:         today,
+			ActivityType: "Бягане",
+			Description:  "Easy run",
+			RPE:          5,
+			IsProcessed:  false,
+			Row:          2,
+		},
+	}
+	
+	// Create activities cache with the activity
+	activitiesCache := StravaActivitiesCache{
+		today.Format("2006-01-02"): mockStrava.activities,
+	}
+	
+	// Test manual sync (isManualSync = true)
+	result, err := service.processSingleDay(context.Background(), config, today, cache, activitiesCache, true)
+	
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	
+	// Verify the day WAS processed
+	if !result.Processed {
+		t.Error("Expected day to be processed for manual sync with activities")
+	}
+	
+	if result.ActivitiesFound != 1 {
+		t.Errorf("Expected 1 activity found, got %d", result.ActivitiesFound)
+	}
+	
+	// Verify spreadsheet update exists
+	if result.SpreadsheetUpdate == nil {
+		t.Error("Expected spreadsheet update for processed day")
+	}
+}
+
+// Test scheduled sync behavior remains unchanged (processes even with no activities)
+func TestProcessSingleDay_ScheduledSyncNoActivities(t *testing.T) {
+	date := parseTestDate("2025-05-01", "Europe/Sofia")
+	
+	// No activities
+	mockStrava := &MockStravaClient{
+		activities: []strava.Activity{},
+	}
+	mockSheets := &MockSheetsClient{}
+	
+	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
+	config := createTestConfig(1, "Europe/Sofia")
+	
+	cache := TrainingPlanCache{
+		date.Format("2006-01-02"): &TrainingPlanEntry{
+			Date:         date,
+			ActivityType: "Бягане", // Scheduled run
+			Description:  "Easy run",
+			RPE:          5,
+			IsProcessed:  false,
+			Row:          2,
+		},
+	}
+	
+	activitiesCache := StravaActivitiesCache{
+		date.Format("2006-01-02"): []strava.Activity{},
+	}
+	
+	// Test scheduled sync (isManualSync = false)
+	result, err := service.processSingleDay(context.Background(), config, date, cache, activitiesCache, false)
+	
+	if err != nil {
+		t.Fatalf("Expected no error, got %v", err)
+	}
+	
+	// Verify the day WAS processed (scheduled run with no activities)
+	if !result.Processed {
+		t.Error("Expected day to be processed for scheduled run even with no activities")
+	}
+	
+	if result.SpreadsheetUpdate == nil {
+		t.Error("Expected spreadsheet update")
+	}
+	
+	// Verify zero values written
+	if result.SpreadsheetUpdate.DistanceValue != "0" {
+		t.Errorf("Expected distance '0', got %s", result.SpreadsheetUpdate.DistanceValue)
+	}
+	
+	if result.SpreadsheetUpdate.TimeValue != "00:00:00" {
+		t.Errorf("Expected time '00:00:00', got %s", result.SpreadsheetUpdate.TimeValue)
 	}
 }

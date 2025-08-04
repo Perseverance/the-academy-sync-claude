@@ -161,7 +161,7 @@ func (s *ProcessingService) ProcessPreviousDay(ctx context.Context, config *auto
 		"date", yesterdayStart.Format("2006-01-02"),
 		"timezone", config.Timezone)
 
-	return s.processSingleDay(ctx, config, yesterdayStart, trainingCache, activitiesCache)
+	return s.processSingleDay(ctx, config, yesterdayStart, trainingCache, activitiesCache, false)
 }
 
 // ProcessTodaySoFar processes the current calendar day up to the present moment (US028)
@@ -190,7 +190,7 @@ func (s *ProcessingService) ProcessTodaySoFar(ctx context.Context, config *autom
 		"current_time", now.Format("15:04:05"),
 		"timezone", config.Timezone)
 
-	return s.processSingleDay(ctx, config, todayStart, trainingCache, activitiesCache)
+	return s.processSingleDay(ctx, config, todayStart, trainingCache, activitiesCache, true)
 }
 
 // ProcessLookbackPeriod processes the 7-day lookback window (US026 & US027)
@@ -222,7 +222,7 @@ func (s *ProcessingService) ProcessLookbackPeriod(ctx context.Context, config *a
 			"date", dayStart.Format("2006-01-02"),
 			"days_ago", daysAgo)
 
-		result, err := s.processSingleDay(ctx, config, dayStart, trainingCache, activitiesCache)
+		result, err := s.processSingleDay(ctx, config, dayStart, trainingCache, activitiesCache, false)
 		if err != nil {
 			s.logger.Error("Failed to process lookback day",
 				"user_id", config.UserID,
@@ -500,7 +500,7 @@ func (s *ProcessingService) RunScheduledCycle(ctx context.Context, config *autom
 
 // processSingleDay contains the core logic for processing one calendar day
 // This is the heart of the automation engine that implements the BRD flowchart logic
-func (s *ProcessingService) processSingleDay(ctx context.Context, config *automation.ProcessingConfig, dayStart time.Time, trainingCache TrainingPlanCache, activitiesCache StravaActivitiesCache) (*DayProcessingResult, error) {
+func (s *ProcessingService) processSingleDay(ctx context.Context, config *automation.ProcessingConfig, dayStart time.Time, trainingCache TrainingPlanCache, activitiesCache StravaActivitiesCache, isManualSync bool) (*DayProcessingResult, error) {
 	result := &DayProcessingResult{
 		Date: dayStart,
 	}
@@ -587,14 +587,36 @@ func (s *ProcessingService) processSingleDay(ctx context.Context, config *automa
 	// Process if either:
 	// - There are activities to record
 	// - There's a scheduled run (even with no activities, we need to mark it as '0')
-	shouldProcess := result.ActivitiesFound > 0 || hasScheduledRun
+	// Special case: For manual sync on current day, only process if activities found
+	var shouldProcess bool
+	
+	// Check if this is a manual sync for the current day
+	location, _ := time.LoadLocation(config.Timezone)
+	currentDayStart := time.Now().In(location)
+	currentDayStart = time.Date(currentDayStart.Year(), currentDayStart.Month(), currentDayStart.Day(), 0, 0, 0, 0, location)
+	isCurrentDay := dayStart.Equal(currentDayStart)
+	
+	if isManualSync && isCurrentDay && result.ActivitiesFound == 0 {
+		// Manual sync on current day with no activities - skip to avoid marking as processed
+		shouldProcess = false
+		s.logger.Info("Manual sync on current day with no activities, skipping to keep unprocessed",
+			"user_id", config.UserID,
+			"date", dayStart.Format("2006-01-02"),
+			"has_scheduled_run", hasScheduledRun)
+	} else {
+		// Standard logic: process if activities found OR scheduled run exists
+		shouldProcess = result.ActivitiesFound > 0 || hasScheduledRun
+	}
 
 	if !shouldProcess {
 		result.Processed = false
 		result.SkippedReason = SkipReasonNoActivities
-		s.logger.Debug("No activities found and no scheduled run, skipping",
+		s.logger.Debug("Skipping day processing",
 			"user_id", config.UserID,
-			"date", dayStart.Format("2006-01-02"))
+			"date", dayStart.Format("2006-01-02"),
+			"reason", "no_activities_or_scheduled_run",
+			"is_manual_sync", isManualSync,
+			"is_current_day", isCurrentDay)
 		return result, nil
 	}
 
