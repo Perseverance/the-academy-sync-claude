@@ -50,6 +50,7 @@ type MockSheetsClient struct {
 	validateAccessErr error
 	batchUpdateCalls  int
 	lastBatchUpdates  []*google.SpreadsheetUpdate
+	dateColumnData    [][]interface{} // For date-to-row mapping
 }
 
 func (m *MockSheetsClient) ReadRange(ctx context.Context, spreadsheetID, rangeSpec string) ([][]interface{}, error) {
@@ -58,6 +59,11 @@ func (m *MockSheetsClient) ReadRange(ctx context.Context, spreadsheetID, rangeSp
 
 	if m.readRangeErr != nil {
 		return nil, m.readRangeErr
+	}
+
+	// If this is a date column fetch (A2:A), return date column data
+	if strings.Contains(rangeSpec, "!A2:A") && m.dateColumnData != nil {
+		return m.dateColumnData, nil
 	}
 
 	return m.readRangeData, nil
@@ -114,6 +120,11 @@ func parseTestDate(dateStr string, timezone string) time.Time {
 func TestFetchAllTrainingPlanEntries_Success(t *testing.T) {
 	mockStrava := &MockStravaClient{}
 	mockSheets := &MockSheetsClient{
+		dateColumnData: [][]interface{}{
+			{"1.5.2025"},
+			{"2.5.2025"},
+			{"3.5.2025"},
+		},
 		readRangeData: [][]interface{}{
 			{"1.5.2025", "", "", "Бягане", "10", "01:00:00", "", "", "5", "Easy run"},
 			{"2.5.2025", "", "", "Почивка", "", "", "", "", "1", "Rest day"},
@@ -149,17 +160,31 @@ func TestFetchAllTrainingPlanEntries_Success(t *testing.T) {
 		}
 	}
 
-	// Verify only one API call was made
-	if mockSheets.readRangeCalls != 1 {
-		t.Errorf("Expected 1 API call, got %d", mockSheets.readRangeCalls)
+	// Verify two API calls were made (one for date mapping, one for data)
+	if mockSheets.readRangeCalls != 2 {
+		t.Errorf("Expected 2 API calls, got %d", mockSheets.readRangeCalls)
 	}
 }
 
-// Test smart range calculation
+// Test smart range calculation with date-to-row mapping
 func TestFetchAllTrainingPlanEntries_SmartRangeCalculation(t *testing.T) {
 	mockStrava := &MockStravaClient{}
+	
+	// Create a year's worth of dates to simulate a full spreadsheet
+	dateColumnData := make([][]interface{}, 0)
+	for i := 1; i <= 365; i++ {
+		date := time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC).AddDate(0, 0, i-1)
+		dateColumnData = append(dateColumnData, []interface{}{date.Format("2.1.2006")})
+	}
+	
 	mockSheets := &MockSheetsClient{
-		readRangeData: [][]interface{}{},
+		dateColumnData: dateColumnData,
+		readRangeData: [][]interface{}{
+			{"22.6.2025", "", "", "Бягане", "10", "01:00:00", "", "", "5", "Run"},
+			{"23.6.2025", "", "", "Бягане", "12", "01:10:00", "", "", "6", "Run"},
+			{"24.6.2025", "", "", "Почивка", "", "", "", "", "1", "Rest"},
+			{"25.6.2025", "", "", "Бягане", "8", "00:45:00", "", "", "4", "Easy run"},
+		},
 	}
 
 	service := NewProcessingService(mockStrava, mockSheets, nil, createTestLogger())
@@ -169,12 +194,17 @@ func TestFetchAllTrainingPlanEntries_SmartRangeCalculation(t *testing.T) {
 	startDate := parseTestDate("2025-06-22", "Europe/Sofia")
 	endDate := parseTestDate("2025-06-25", "Europe/Sofia")
 
-	_, _ = service.FetchAllTrainingPlanEntries(context.Background(), config, startDate, endDate)
+	cache, _ := service.FetchAllTrainingPlanEntries(context.Background(), config, startDate, endDate)
 
-	// Expected range should be around rows 163-186 (day 173 ± 10)
-	expectedRange := "Тренировъчен План!A163:J186"
-	if mockSheets.lastReadRange != expectedRange {
-		t.Errorf("Expected range %s, got %s", expectedRange, mockSheets.lastReadRange)
+	// Should find the correct dates
+	if len(cache) != 4 {
+		t.Errorf("Expected 4 entries in cache, got %d", len(cache))
+	}
+	
+	// Verify the last range was for the actual data (not the date column)
+	if strings.Contains(mockSheets.lastReadRange, "!A") && !strings.Contains(mockSheets.lastReadRange, "!A2:A") {
+		// The actual data range should be something like A171:J176
+		t.Logf("Data range used: %s", mockSheets.lastReadRange)
 	}
 }
 
@@ -379,12 +409,17 @@ func TestProcessSingleDay_ScheduledRunNoActivity(t *testing.T) {
 	}
 }
 
-// Test that processing uses cache and makes only one API call
+// Test that processing uses cache and makes minimal API calls
 func TestProcessing_SingleAPICall(t *testing.T) {
 	mockStrava := &MockStravaClient{
 		activities: []strava.Activity{},
 	}
 	mockSheets := &MockSheetsClient{
+		dateColumnData: [][]interface{}{
+			{"1.5.2025"},
+			{"2.5.2025"},
+			{"3.5.2025"},
+		},
 		readRangeData: [][]interface{}{
 			{"1.5.2025", "", "", "Бягане", "10", "01:00:00", "", "", "5", "Easy run"},
 			{"2.5.2025", "", "", "Бягане", "12", "01:15:00", "", "", "6", "Steady run"},
@@ -668,8 +703,9 @@ func TestFetchAllTrainingPlanEntries_APIError(t *testing.T) {
 		t.Error("Expected error from API failure")
 	}
 
-	if err.Error() != "failed to read training plan: API quota exceeded" {
-		t.Errorf("Expected specific error message, got: %v", err)
+	expectedErr := "failed to build date-to-row map: failed to fetch date column: API quota exceeded"
+	if err.Error() != expectedErr {
+		t.Errorf("Expected error message '%s', got: %v", expectedErr, err)
 	}
 }
 

@@ -732,6 +732,62 @@ func (s *ProcessingService) fetchActivitiesForDay(ctx context.Context, dayStart 
 	return []strava.Activity{}, nil
 }
 
+// buildDateToRowMap fetches all dates from column A and builds a date-to-row mapping
+func (s *ProcessingService) buildDateToRowMap(ctx context.Context, config *automation.ProcessingConfig, location *time.Location) (map[string]int, error) {
+	s.logger.Debug("Building date-to-row map",
+		"user_id", config.UserID,
+		"spreadsheet_id", config.SpreadsheetID)
+	
+	// Fetch all dates from column A (starting from row 2)
+	rangeSpec := "Тренировъчен План!A2:A"
+	rows, err := s.sheetsClient.ReadRange(ctx, config.SpreadsheetID, rangeSpec)
+	if err != nil {
+		s.logger.Error("Failed to fetch date column",
+			"error", err,
+			"user_id", config.UserID,
+			"spreadsheet_id", config.SpreadsheetID)
+		return nil, fmt.Errorf("failed to fetch date column: %w", err)
+	}
+	
+	// Build the map
+	dateToRow := make(map[string]int)
+	for idx, row := range rows {
+		if len(row) > 0 && row[0] != nil {
+			dateStr, ok := row[0].(string)
+			if !ok || dateStr == "" {
+				continue
+			}
+			
+			// Parse date in user's timezone
+			parsedDate, err := time.ParseInLocation("2.1.2006", dateStr, location)
+			if err != nil {
+				s.logger.Warn("Failed to parse date in date-to-row mapping",
+					"date_string", dateStr,
+					"row", idx+2,
+					"error", err)
+				continue
+			}
+			
+			// Store in map with normalized date key (YYYY-MM-DD)
+			dateKey := parsedDate.Format("2006-01-02")
+			rowNumber := idx + 2 // Since we start from row 2
+			dateToRow[dateKey] = rowNumber
+			
+			s.logger.Debug("Mapped date to row",
+				"date_key", dateKey,
+				"row", rowNumber,
+				"original_date", dateStr)
+		}
+	}
+	
+	s.logger.Info("Built date-to-row map",
+		"user_id", config.UserID,
+		"total_dates", len(dateToRow),
+		"rows_scanned", len(rows))
+	
+	return dateToRow, nil
+}
+
 // FetchAllTrainingPlanEntries retrieves all training plan entries from the spreadsheet
 // and returns them as a cache mapped by date string (YYYY-MM-DD)
 func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, config *automation.ProcessingConfig, startDate, endDate time.Time) (TrainingPlanCache, error) {
@@ -749,23 +805,59 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 			"error", err)
 		return nil, fmt.Errorf("invalid timezone %s: %w", config.Timezone, err)
 	}
+	
+	// Build date-to-row map first
+	dateToRow, err := s.buildDateToRowMap(ctx, config, location)
+	if err != nil {
+		return nil, fmt.Errorf("failed to build date-to-row map: %w", err)
+	}
+	
+	// Find the exact row range we need based on our date range
+	minRow := int(^uint(0) >> 1) // Max int
+	maxRow := 0
+	
+	// Iterate through our date range and find corresponding rows
+	for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+		dateKey := d.Format("2006-01-02")
+		if row, ok := dateToRow[dateKey]; ok {
+			if row < minRow {
+				minRow = row
+			}
+			if row > maxRow {
+				maxRow = row
+			}
+		}
+	}
+	
+	// If we found no matching dates, return empty cache
+	if minRow > maxRow {
+		s.logger.Warn("No matching dates found in spreadsheet for date range",
+			"user_id", config.UserID,
+			"start_date", startDate.Format("2006-01-02"),
+			"end_date", endDate.Format("2006-01-02"))
+		return make(TrainingPlanCache), nil
+	}
+	
+	// Add a small buffer for safety
+	minRow = max(2, minRow-2)
+	maxRow = maxRow + 2
 
-	// Calculate the range more intelligently based on the year
-	// Since this is a yearly plan, we can estimate the row range
-	startDayOfYear := startDate.YearDay()
-	endDayOfYear := endDate.YearDay()
+	rangeSpec := fmt.Sprintf("Тренировъчен План!A%d:J%d", minRow, maxRow)
 
-	// Add some buffer for safety (in case plan doesn't start on Jan 1)
-	startRow := max(2, startDayOfYear-10) // Start from at least row 2
-	endRow := min(endDayOfYear+10, 367)   // Max 365 days + buffer
-
-	rangeSpec := fmt.Sprintf("Тренировъчен План!A%d:J%d", startRow, endRow)
-
-	s.logger.Debug("Calculated spreadsheet range",
+	s.logger.Debug("Calculated spreadsheet range using date-to-row mapping",
 		"user_id", config.UserID,
-		"start_row", startRow,
-		"end_row", endRow,
-		"range", rangeSpec)
+		"start_row", minRow,
+		"end_row", maxRow,
+		"range", rangeSpec,
+		"dates_found_in_map", func() int {
+			count := 0
+			for d := startDate; !d.After(endDate); d = d.AddDate(0, 0, 1) {
+				if _, ok := dateToRow[d.Format("2006-01-02")]; ok {
+					count++
+				}
+			}
+			return count
+		}())
 
 	rows, err := s.sheetsClient.ReadRange(ctx, config.SpreadsheetID, rangeSpec)
 	if err != nil {
@@ -782,8 +874,8 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 		"user_id", config.UserID,
 		"rows_count", len(rows),
 		"range", rangeSpec,
-		"start_row", startRow,
-		"end_row", endRow,
+		"start_row", minRow,
+		"end_row", maxRow,
 		"first_row_data", func() string {
 			if len(rows) > 0 && len(rows[0]) > 0 {
 				return fmt.Sprintf("%v", rows[0][0])
@@ -799,7 +891,7 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 
 	// We also need to fetch cell formatting to check for bold text
 	// This requires a separate API call to get formatting info
-	boldStatuses, err := s.fetchBoldStatuses(ctx, config.SpreadsheetID, rangeSpec, startRow, len(rows))
+	boldStatuses, err := s.fetchBoldStatuses(ctx, config.SpreadsheetID, rangeSpec, minRow, len(rows))
 	if err != nil {
 		// Log warning but continue - we can process without bold status
 		s.logger.Warn("Failed to fetch bold statuses, continuing without formatting info",
@@ -812,7 +904,7 @@ func (s *ProcessingService) FetchAllTrainingPlanEntries(ctx context.Context, con
 	cache := make(TrainingPlanCache)
 
 	for rowIndex, row := range rows {
-		actualRow := startRow + rowIndex
+		actualRow := minRow + rowIndex
 		
 		// Log the raw row data
 		s.logger.Debug("Processing spreadsheet row",
