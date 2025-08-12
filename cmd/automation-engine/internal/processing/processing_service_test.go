@@ -202,7 +202,7 @@ func TestFetchAllTrainingPlanEntries_SmartRangeCalculation(t *testing.T) {
 	}
 	
 	// Verify the last range was for the actual data (not the date column)
-	if !strings.Contains(mockSheets.lastReadRange, "!A") || strings.Contains(mockSheets.lastReadRange, "!A2:A") {
+	if strings.Contains(mockSheets.lastReadRange, "!A") && !strings.Contains(mockSheets.lastReadRange, "!A2:A") {
 		// The actual data range should be something like A171:J176
 		t.Logf("Data range used: %s", mockSheets.lastReadRange)
 	}
