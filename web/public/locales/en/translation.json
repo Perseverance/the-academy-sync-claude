@@ -25,7 +25,46 @@
   "signIn": {
     "title": "Automate Your Strava Running Log",
     "description": "Connect your Strava and Google accounts to automatically sync your running activities to a Google Spreadsheet. Focus on your training, not manual data entry.",
-    "signInButton": "Sign in with Google"
+    "signInButton": "Sign in with Google",
+    "howItWorks": {
+      "title": "How It Works",
+      "step1": {
+        "title": "Connect Strava",
+        "description": "Link your Strava account to allow us to read your running activities"
+      },
+      "step2": {
+        "title": "Link Spreadsheet",
+        "description": "Connect your Google Sheets training log where your activities will be recorded"
+      },
+      "step3": {
+        "title": "Automatic Sync",
+        "description": "Your runs sync automatically every morning or manually whenever you want"
+      }
+    },
+    "dataUsage": {
+      "title": "What We Access & Why",
+      "strava": "Read-only access to your Strava running activities (distance, time, pace)",
+      "sheets": "Write access to update your training spreadsheet with activity data",
+      "privacy": "We only store encrypted authentication tokens - no activity data is kept on our servers"
+    },
+    "example": {
+      "title": "What Data We Write to Your Spreadsheet",
+      "date": "Date",
+      "type": "Type",
+      "distance": "Distance (km)",
+      "time": "Time",
+      "description": "Description",
+      "typeExample": "Running",
+      "descriptionExample": "загрявка, 3 x 5 км / 1 км (19:11 мин, 3:49 мин/км), разпускане",
+      "note": "Data is automatically synced from Strava to your spreadsheet"
+    },
+    "screenshots": {
+      "title": "See It In Action",
+      "stravaAlt": "Strava activities",
+      "stravaCaption": "Your running activities in Strava",
+      "sheetsAlt": "Google Sheets training plan",
+      "sheetsCaption": "Automatically populated in your spreadsheet"
+    }
   },
   "dashboard": {
     "title": "Configuration",
